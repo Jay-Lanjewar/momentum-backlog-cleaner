@@ -1,0 +1,2 @@
+-- Momentum Database Initialization
+-- Placeholder for future migrations
