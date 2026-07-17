@@ -32,6 +32,7 @@ app.add_middleware(
         "http://localhost:5173",
         "http://localhost:3000",
         "http://frontend:5173",
+        "https://momentum-backlog-cleaner.vercel.app",
     ],
     allow_credentials=True,
     allow_methods=["*"],
