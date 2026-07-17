@@ -48,6 +48,7 @@ class StudentProfile(Base):
     user_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False, unique=True
     )
+    name: Mapped[str | None] = mapped_column(String(100), nullable=True)
     class_name: Mapped[str | None] = mapped_column(String(50), nullable=True)
     board: Mapped[str | None] = mapped_column(String(50), nullable=True)
     school_timings: Mapped[dict | None] = mapped_column(JSONB, nullable=True)

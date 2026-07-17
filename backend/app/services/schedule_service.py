@@ -95,6 +95,12 @@ def compute_available_windows(
         window_start = _parse_time(preferred_window.get("earliest_start", "00:00"))
         window_end = _parse_time(preferred_window.get("latest_end", "23:59"))
 
+    now = datetime.now()
+    if target_date is None or target_date == now.date():
+        current_minutes = now.hour * 60 + now.minute
+        if window_start < current_minutes + 15:
+            window_start = min(current_minutes + 15, window_end)
+
     available_windows: list[dict] = []
     cursor = window_start
 

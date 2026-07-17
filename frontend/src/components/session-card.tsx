@@ -86,7 +86,7 @@ export function SessionCard({
         <div className="flex-1 space-y-1">
           <div className="flex items-center justify-between">
             <span className="text-sm font-medium">
-              {isCurrent ? "Now Studying" : "Up Next"}
+              {isCurrent ? "Now Studying" : "Coming up"}
             </span>
             <span className="text-xs text-muted-foreground">
               {duration} min

@@ -1,14 +1,11 @@
-import { useState, useCallback, useRef } from "react"
+import { useState, useCallback, useRef, useMemo } from "react"
 import { motion, AnimatePresence } from "framer-motion"
 import { useNavigate } from "react-router-dom"
+import { useQueryClient } from "@tanstack/react-query"
 import {
   Sparkles,
   ArrowRight,
   ArrowLeft,
-  Camera,
-  ImageIcon,
-  FileText,
-  Keyboard,
   GraduationCap,
   Calendar,
   Plus,
@@ -18,6 +15,8 @@ import {
   Sunset,
   Trophy,
   BookOpen,
+  Pencil,
+  CheckCircle2,
 } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
@@ -33,10 +32,10 @@ const COURSE_COLORS = [
 ]
 
 const LOADING_MESSAGES = [
-  "Understanding your backlog...",
+  "Understanding your work...",
   "Organizing subjects...",
-  "Estimating workload...",
-  "Building your first plan...",
+  "Planning your study blocks...",
+  "Building your study plan...",
   "Almost there...",
 ]
 
@@ -101,6 +100,61 @@ function AnimatedDots() {
   )
 }
 
+/* ─── Name Step ─── */
+
+function Step1Name({ onNext, onBack }: { onNext: (name: string) => void; onBack: () => void }) {
+  const [value, setValue] = useState("")
+
+  const trimmed = value.trim()
+  const isValid = trimmed.length > 0 && trimmed.length <= 25
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, scale: 0.95 }}
+      animate={{ opacity: 1, scale: 1 }}
+      exit={{ opacity: 0, scale: 0.95 }}
+      transition={{ duration: 0.4 }}
+      className="space-y-6"
+    >
+      <div className="flex flex-col items-center text-center gap-3">
+        <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-primary/10">
+          <Pencil className="h-7 w-7 text-primary" />
+        </div>
+        <p className="text-lg font-medium leading-snug">What should I call you?</p>
+        <p className="text-sm text-muted-foreground max-w-xs">
+          This makes Momentum feel a little more personal.
+        </p>
+      </div>
+
+      <div className="space-y-1">
+        <input
+          value={value}
+          onChange={(e) => setValue(e.target.value)}
+          onKeyDown={(e) => { if (e.key === "Enter" && isValid) { e.preventDefault(); onNext(trimmed) } }}
+          placeholder="e.g. Priyani"
+          maxLength={25}
+          autoFocus
+          className="w-full h-12 rounded-xl border border-input bg-background px-4 text-base text-center focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring transition-all"
+        />
+        {value.length > 25 && (
+          <p className="text-xs text-destructive text-center">Maximum 25 characters</p>
+        )}
+      </div>
+
+      <div className="flex items-center justify-between">
+        <button onClick={onBack} className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors">
+          <ArrowLeft className="h-4 w-4" />
+          Back
+        </button>
+        <Button onClick={() => isValid && onNext(trimmed)} disabled={!isValid} size="lg" className="gap-2 h-12 px-6 rounded-xl">
+          Continue
+          <ArrowRight className="h-4 w-4" />
+        </Button>
+      </div>
+    </motion.div>
+  )
+}
+
 /* ─── Steps ─── */
 
 function Step1Welcome({ onNext }: { onNext: () => void }) {
@@ -129,6 +183,17 @@ function Step1Welcome({ onNext }: { onNext: () => void }) {
   )
 }
 
+const EXAMPLE_TEXT = `Physics
+Motion
+Gravitation
+
+Maths
+Triangles
+Circles
+
+English
+Chapter 4`
+
 function Step2EntryMethod({
   onNext,
   onBack,
@@ -136,27 +201,80 @@ function Step2EntryMethod({
   onNext: (method: string, text: string) => void
   onBack: () => void
 }) {
-  const [method, setMethod] = useState<string | null>(null)
-  const [manualText, setManualText] = useState("")
-  const [showManual, setShowManual] = useState(false)
+  const [text, setText] = useState(EXAMPLE_TEXT)
+  const [showConfirm, setShowConfirm] = useState(false)
+  const [edited, setEdited] = useState(false)
 
-  const options = [
-    { value: "photo", icon: Camera, label: "Take a photo" },
-    { value: "image", icon: ImageIcon, label: "Upload image" },
-    { value: "pdf", icon: FileText, label: "Upload PDF" },
-    { value: "manual", icon: Keyboard, label: "Type it manually" },
-  ]
-
-  const handleSelect = (v: string) => {
-    setMethod(v)
-    if (v === "manual") {
-      setShowManual(true)
-    } else {
-      setShowManual(true)
-    }
+  const handleChange = (v: string) => {
+    if (!edited) setEdited(true)
+    setText(v)
   }
 
-  const valid = manualText.trim().length > 0
+  const parsed = useMemo(() => parseBacklogInput(text), [text])
+  const hasContent = parsed.some((g) => g.items.length > 0)
+  const totalTopics = parsed.reduce((sum, g) => sum + g.items.length, 0)
+
+  if (showConfirm) {
+    return (
+      <motion.div
+        initial={{ opacity: 0, scale: 0.95 }}
+        animate={{ opacity: 1, scale: 1 }}
+        transition={{ duration: 0.3, ease: "easeOut" }}
+        className="space-y-6"
+      >
+        <div className="flex flex-col items-center text-center gap-3">
+          <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-emerald-100 dark:bg-emerald-900/30">
+            <CheckCircle2 className="h-7 w-7 text-emerald-500" />
+          </div>
+          <p className="text-lg font-medium leading-snug">Here's what I understood</p>
+        </div>
+
+        <div className="space-y-2">
+          {parsed.filter((g) => g.items.length > 0).map((group, i) => (
+            <div
+              key={group.subject}
+              className="flex items-center justify-between rounded-xl border bg-card px-4 py-3"
+            >
+              <div className="flex items-center gap-3">
+                <span
+                  className="h-3 w-3 rounded-full"
+                  style={{ backgroundColor: COURSE_COLORS[i % COURSE_COLORS.length] }}
+                />
+                <span className="text-sm font-medium">{group.subject}</span>
+              </div>
+              <span className="text-xs text-muted-foreground">
+                {group.items.length} topic{group.items.length !== 1 ? "s" : ""}
+              </span>
+            </div>
+          ))}
+        </div>
+
+        {totalTopics === 0 && (
+          <p className="text-sm text-muted-foreground text-center">
+            No topics found. Try pasting your list in a different format.
+          </p>
+        )}
+
+        <div className="flex items-center justify-between">
+          <button
+            onClick={() => setShowConfirm(false)}
+            className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors"
+          >
+            <Pencil className="h-4 w-4" />
+            Edit
+          </button>
+          <Button
+            onClick={() => onNext("manual", text)}
+            disabled={totalTopics === 0}
+            className="gap-1.5"
+          >
+            Looks correct
+            <ArrowRight className="h-4 w-4" />
+          </Button>
+        </div>
+      </motion.div>
+    )
+  }
 
   return (
     <motion.div
@@ -164,72 +282,40 @@ function Step2EntryMethod({
       animate={{ opacity: 1, x: 0 }}
       exit={{ opacity: 0, x: -40 }}
       transition={{ duration: 0.35, ease: "easeOut" }}
-      className="space-y-6"
+      className="space-y-5"
     >
       <div className="flex flex-col items-center text-center gap-3">
         <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-primary/10">
           <GraduationCap className="h-7 w-7 text-primary" />
         </div>
-        <p className="text-lg font-medium leading-snug max-w-sm">How would you like to add your backlog?</p>
+        <p className="text-lg font-medium leading-snug max-w-sm">What's waiting to be studied?</p>
+        <p className="text-sm text-muted-foreground max-w-xs">
+          Just paste whatever you've got. It doesn't have to be organized.
+        </p>
       </div>
 
-      <div className="grid grid-cols-2 gap-3">
-        {options.map((opt) => {
-          const Icon = opt.icon
-          const selected = method === opt.value
-          return (
-            <button
-              key={opt.value}
-              onClick={() => handleSelect(opt.value)}
-              className={`flex flex-col items-center gap-2 rounded-xl border-2 p-4 text-center transition-all ${
-                selected
-                  ? "border-primary bg-primary/5 shadow-sm"
-                  : "border-border hover:border-muted-foreground/30 hover:bg-muted/50"
-              }`}
-            >
-              <Icon className={`h-6 w-6 ${selected ? "text-primary" : "text-muted-foreground"}`} />
-              <span className={`text-xs font-medium ${selected ? "text-foreground" : "text-muted-foreground"}`}>
-                {opt.label}
-              </span>
-            </button>
-          )
-        })}
-      </div>
+      <textarea
+        value={text}
+        onChange={(e) => handleChange(e.target.value)}
+        rows={8}
+        className="w-full rounded-xl border border-input bg-background px-4 py-3 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring transition-all resize-none font-mono"
+      />
 
-      {showManual && (
-        <motion.div
-          initial={{ opacity: 0, height: 0 }}
-          animate={{ opacity: 1, height: "auto" }}
-          className="space-y-3"
+      <div className="flex items-center justify-between">
+        <button onClick={onBack} className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors">
+          <ArrowLeft className="h-4 w-4" />
+          Back
+        </button>
+        <Button
+          onClick={() => { if (hasContent) setShowConfirm(true) }}
+          disabled={!hasContent}
+          size="lg"
+          className="gap-2 h-12 px-6 rounded-xl"
         >
-          <textarea
-            value={manualText}
-            onChange={(e) => setManualText(e.target.value)}
-            placeholder={`Physics\nMotion\nGravitation\n\nMaths\nTriangles\nCircles\n\nChemistry\nCarbon`}
-            rows={8}
-            className="w-full rounded-xl border border-input bg-background px-4 py-3 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring transition-all resize-none font-mono"
-          />
-          <div className="flex justify-between items-center">
-            <button onClick={onBack} className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors">
-              <ArrowLeft className="h-4 w-4" />
-              Back
-            </button>
-            <Button onClick={() => onNext(method || "manual", manualText)} disabled={!valid} className="gap-1.5">
-              Continue
-              <ArrowRight className="h-4 w-4" />
-            </Button>
-          </div>
-        </motion.div>
-      )}
-
-      {!showManual && (
-        <div className="flex justify-center">
-          <button onClick={onBack} className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors">
-            <ArrowLeft className="h-4 w-4" />
-            Back
-          </button>
-        </div>
-      )}
+          Build My Plan
+          <Sparkles className="h-4 w-4" />
+        </Button>
+      </div>
     </motion.div>
   )
 }
@@ -267,7 +353,7 @@ function Step3Exams({
           <Calendar className="h-7 w-7 text-primary" />
         </div>
         <p className="text-lg font-medium leading-snug max-w-sm">When is your next important exam?</p>
-        <p className="text-xs text-muted-foreground">Add one or more exams</p>
+        <p className="text-xs text-muted-foreground">(Optional)</p>
       </div>
 
       <div className="flex items-end gap-2">
@@ -318,7 +404,7 @@ function Step3Exams({
           Back
         </button>
         <Button onClick={() => onNext(exams)} className="gap-1.5">
-          {exams.length === 0 ? "Skip" : "Continue"}
+          Continue
           <ArrowRight className="h-4 w-4" />
         </Button>
       </div>
@@ -412,6 +498,36 @@ function Step4Weekday({
   )
 }
 
+function Step6Ready({ onFinish }: { onFinish: () => void }) {
+  return (
+    <motion.div
+      initial={{ opacity: 0, scale: 0.95 }}
+      animate={{ opacity: 1, scale: 1 }}
+      transition={{ duration: 0.4 }}
+      className="flex flex-col items-center text-center gap-6 py-4"
+    >
+      <motion.div
+        initial={{ scale: 0 }}
+        animate={{ scale: 1 }}
+        transition={{ type: "spring", stiffness: 200, delay: 0.2 }}
+        className="flex h-20 w-20 items-center justify-center rounded-full bg-emerald-100 dark:bg-emerald-900/30"
+      >
+        <Sparkles className="h-10 w-10 text-emerald-500" />
+      </motion.div>
+      <div className="space-y-2">
+        <h1 className="text-2xl font-bold tracking-tight">Your study plan is ready</h1>
+        <p className="text-sm text-muted-foreground max-w-xs mx-auto">
+          Let's tackle one thing at a time.
+        </p>
+      </div>
+      <Button onClick={onFinish} size="lg" className="gap-2 mt-2">
+        Let's go
+        <ArrowRight className="h-4 w-4" />
+      </Button>
+    </motion.div>
+  )
+}
+
 function Step5Loading({
   messageIndex,
 }: {
@@ -457,11 +573,13 @@ function Step5Loading({
 
 export function OnboardingPage() {
   const navigate = useNavigate()
+  const queryClient = useQueryClient()
 
   const [step, setStep] = useState(0)
   const [loadingMsgIndex, setLoadingMsgIndex] = useState(0)
   const loadingTimer = useRef<ReturnType<typeof setInterval>>()
 
+  const nameRef = useRef("")
   const manualTextRef = useRef("")
   const methodRef = useRef("manual")
   const examsRef = useRef<{ title: string; date: string }[]>([])
@@ -483,6 +601,7 @@ export function OnboardingPage() {
       const parsed = parseBacklogInput(raw)
       const courseIdMap = new Map<string, string>()
 
+      console.log("Creating courses...")
       for (let i = 0; i < parsed.length; i++) {
         const result = await api.post<any>("/api/v1/courses", {
           name: parsed[i].subject,
@@ -492,6 +611,7 @@ export function OnboardingPage() {
         courseIdMap.set(parsed[i].subject, result.data.id)
       }
 
+      console.log("Creating backlog items...")
       let itemCount = 0
       for (const group of parsed) {
         const courseId = courseIdMap.get(group.subject)
@@ -507,6 +627,7 @@ export function OnboardingPage() {
         }
       }
 
+      console.log("Creating goals...")
       for (const exam of examsRef.current) {
         await api.post<any>("/api/v1/goals", {
           title: exam.title,
@@ -535,13 +656,16 @@ export function OnboardingPage() {
         studyStart = "17:00"
       }
 
-      await api.put<StudentProfileData>("/api/v1/profile", {
+      const profilePayload: Record<string, unknown> = {
+        name: nameRef.current || undefined,
         sleep_schedule: { start: "22:00", end: "06:00" },
         energy_peak: "morning",
         preferred_study_window: { earliest_start: studyStart, latest_end: studyEnd },
         daily_target_minutes: 120,
         class_name: "Student",
-      })
+      }
+      console.log("Creating profile...")
+      await api.put<StudentProfileData>("/api/v1/profile", profilePayload)
 
       const weekdays = ["monday", "tuesday", "wednesday", "thursday", "friday"]
       const schedule: Record<string, any[]> = {}
@@ -558,12 +682,18 @@ export function OnboardingPage() {
       clearInterval(loadingTimer.current)
 
       localStorage.setItem("momentum_onboarded", "true")
-      navigate("/", { replace: true })
-    } catch {
+      setStep(6)
+    } catch (error) {
       clearInterval(loadingTimer.current)
-      setStep(3)
+      console.error(error)
+      alert(error instanceof Error ? error.message : String(error))
     }
   }, [navigate])
+
+  const handleReady = useCallback(() => {
+    queryClient.removeQueries({ queryKey: ["profile"] })
+    navigate("/", { replace: true })
+  }, [navigate, queryClient])
 
   return (
     <div className="min-h-screen bg-background flex flex-col items-center justify-center p-4">
@@ -575,6 +705,16 @@ export function OnboardingPage() {
                 <Step1Welcome key="welcome" onNext={advance} />
               )}
               {step === 1 && (
+                <Step1Name
+                  key="name"
+                  onNext={(name) => {
+                    nameRef.current = name
+                    advance()
+                  }}
+                  onBack={retreat}
+                />
+              )}
+              {step === 2 && (
                 <Step2EntryMethod
                   key="entry"
                   onNext={(method, text) => {
@@ -585,7 +725,7 @@ export function OnboardingPage() {
                   onBack={retreat}
                 />
               )}
-              {step === 2 && (
+              {step === 3 && (
                 <Step3Exams
                   key="exams"
                   onNext={(exams) => {
@@ -595,7 +735,7 @@ export function OnboardingPage() {
                   onBack={retreat}
                 />
               )}
-              {step === 3 && (
+              {step === 4 && (
                 <Step4Weekday
                   key="weekday"
                   onNext={(type, end) => {
@@ -606,8 +746,11 @@ export function OnboardingPage() {
                   onBack={retreat}
                 />
               )}
-              {step === 4 && (
+              {step === 5 && (
                 <Step5Loading key="loading" messageIndex={loadingMsgIndex} />
+              )}
+              {step === 6 && (
+                <Step6Ready key="ready" onFinish={handleReady} />
               )}
             </AnimatePresence>
           </div>

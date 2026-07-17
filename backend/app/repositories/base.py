@@ -1,3 +1,4 @@
+import logging
 import uuid
 from collections.abc import Sequence
 from typing import Any, Generic, TypeVar
@@ -6,6 +7,8 @@ from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import Base
+
+logger = logging.getLogger(__name__)
 
 ModelType = TypeVar("ModelType", bound=Base)
 
@@ -16,11 +19,16 @@ class BaseRepository(Generic[ModelType]):
         self.db = db
 
     async def create(self, **kwargs: Any) -> ModelType:
-        instance = self.model(**kwargs)
-        self.db.add(instance)
-        await self.db.flush()
-        await self.db.refresh(instance)
-        return instance
+        try:
+            instance = self.model(**kwargs)
+            self.db.add(instance)
+            await self.db.flush()
+            await self.db.refresh(instance)
+            return instance
+        except Exception:
+            await self.db.rollback()
+            logger.exception("Failed creating %s", self.model.__name__)
+            raise
 
     async def get(self, id: uuid.UUID) -> ModelType | None:
         result = await self.db.execute(select(self.model).where(self.model.id == id))

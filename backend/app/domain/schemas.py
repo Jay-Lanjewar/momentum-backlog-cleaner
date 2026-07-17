@@ -16,6 +16,7 @@ class UserResponse(BaseModel):
 
 
 class StudentProfileBase(BaseModel):
+    name: str | None = Field(None, max_length=100)
     class_name: str | None = Field(None, max_length=50)
     board: str | None = Field(None, max_length=50)
     school_timings: dict | None = None
@@ -31,6 +32,7 @@ class StudentProfileCreate(StudentProfileBase):
 
 
 class StudentProfileUpdate(BaseModel):
+    name: str | None = Field(None, max_length=100)
     class_name: str | None = Field(None, max_length=50)
     board: str | None = Field(None, max_length=50)
     school_timings: dict | None = None

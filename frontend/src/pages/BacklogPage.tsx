@@ -127,7 +127,7 @@ function ItemFormModal({
       >
         <form onSubmit={handleSubmit} className="space-y-5 p-6">
           <div className="flex items-center justify-between">
-            <h2 className="text-lg font-semibold">{initial ? "Edit Item" : "Add Item"}</h2>
+            <h2 className="text-lg font-semibold">{initial ? "Edit work" : "Add work"}</h2>
             <button type="button" onClick={onClose} className="text-sm text-muted-foreground hover:text-foreground">Cancel</button>
           </div>
 
@@ -233,8 +233,8 @@ function DeleteConfirm({ open, onClose, onConfirm, deleting }: {
         <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-red-100 dark:bg-red-900/30">
           <AlertCircle className="h-6 w-6 text-red-500" />
         </div>
-        <h3 className="text-lg font-semibold mb-1">Delete item?</h3>
-        <p className="text-sm text-muted-foreground mb-6">This action cannot be undone.</p>
+        <h3 className="text-lg font-semibold mb-1">Remove this work?</h3>
+        <p className="text-sm text-muted-foreground mb-6">This won't affect your study plan.</p>
         <div className="flex gap-3">
           <Button variant="outline" onClick={onClose} className="flex-1">Cancel</Button>
           <Button variant="destructive" onClick={onConfirm} disabled={deleting} className="flex-1 gap-1.5">
@@ -391,13 +391,13 @@ export function BacklogPage() {
                 <Layers className="h-5 w-5 text-primary" />
               </div>
               <div>
-                <h1 className="text-xl font-semibold tracking-tight">Backlog</h1>
-                <p className="text-sm text-muted-foreground">{items.length} item{items.length !== 1 ? "s" : ""}</p>
+                <h1 className="text-xl font-semibold tracking-tight">Pending Work</h1>
+                <p className="text-sm text-muted-foreground">{items.length} pending</p>
               </div>
             </div>
             <Button onClick={() => { setEditingItem(null); setShowForm(true) }} className="gap-1.5">
               <Plus className="h-4 w-4" />
-              Add Item
+              Add work
             </Button>
           </div>
         </Container>
@@ -432,8 +432,8 @@ export function BacklogPage() {
           <Container delay={0.1}>
             <div className="flex flex-col items-center justify-center rounded-xl border border-dashed p-12 text-center">
               <Layers className="h-10 w-10 text-muted-foreground/30 mb-3" />
-              <p className="text-sm font-medium text-muted-foreground mb-1">No backlog items</p>
-              <p className="text-xs text-muted-foreground/60 mb-4">Add your first task to get started.</p>
+              <p className="text-sm font-medium text-muted-foreground mb-1">You haven't added any work yet.</p>
+              <p className="text-xs text-muted-foreground/60 mb-4">Add what you need to study, and we'll take care of the rest.</p>
               <Button
                 onClick={() => { setEditingItem(null); setShowForm(true) }}
                 variant="outline"
@@ -441,7 +441,7 @@ export function BacklogPage() {
                 className="gap-1.5"
               >
                 <Plus className="h-3.5 w-3.5" />
-                Add Item
+                Add my pending work
               </Button>
             </div>
           </Container>

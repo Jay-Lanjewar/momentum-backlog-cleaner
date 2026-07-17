@@ -1,5 +1,5 @@
 import uuid
-from datetime import date
+from datetime import date, datetime
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -83,12 +83,15 @@ class TestGeneratePlanEndpoint:
         app.dependency_overrides[get_db] = lambda: mock_db
         app.dependency_overrides[get_current_user] = lambda: mock_user
 
+        now = datetime.now()
+        start_hour = min(now.hour + 2, 20)
+        end_hour = start_hour + 1
         ai_output = {
             "sessions": [
                 {
                     "backlog_item_id": str(backlog_item.id),
-                    "start_time": "06:00",
-                    "end_time": "07:00",
+                    "start_time": f"{start_hour:02d}:00",
+                    "end_time": f"{end_hour:02d}:00",
                     "reason": "Focus on high priority homework",
                 }
             ],

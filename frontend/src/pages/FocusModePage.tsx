@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, useMemo } from "react"
 import { motion, AnimatePresence } from "framer-motion"
 import { useNavigate, useLocation } from "react-router-dom"
+import { useQueryClient } from "@tanstack/react-query"
 import {
   Play,
   Pause,
@@ -11,6 +12,7 @@ import {
   RotateCcw,
 } from "lucide-react"
 
+import { useProfile, useUpdateBacklogItem } from "@/services/hooks"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/cn"
 import type { PlanSession, GeneratedPlan } from "@/services/types"
@@ -91,6 +93,9 @@ type Phase = "focus" | "paused" | "complete"
 export function FocusModePage() {
   const navigate = useNavigate()
   const location = useLocation()
+  const queryClient = useQueryClient()
+  const { data: profile } = useProfile()
+  const updateBacklogItem = useUpdateBacklogItem()
   const state = location.state as {
     session: PlanSession
     sessions: PlanSession[]
@@ -139,6 +144,9 @@ export function FocusModePage() {
   const handleComplete = () => {
     clearInterval(intervalRef.current)
     setPhase("complete")
+    if (session) {
+      updateBacklogItem.mutate({ id: session.backlog_item_id, payload: { status: "completed" } })
+    }
   }
 
   const handleReset = () => {
@@ -148,6 +156,8 @@ export function FocusModePage() {
   }
 
   const handleBack = () => {
+    queryClient.invalidateQueries({ queryKey: ["planning"] })
+    queryClient.invalidateQueries({ queryKey: ["plans"] })
     navigate("/", { replace: true })
   }
 
@@ -155,7 +165,7 @@ export function FocusModePage() {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center p-4">
         <div className="text-center space-y-4">
-          <p className="text-sm text-muted-foreground">No active session found.</p>
+          <p className="text-sm text-muted-foreground">No study block found.</p>
           <Button onClick={handleBack} variant="outline" size="sm">Back to Today</Button>
         </div>
       </div>
@@ -189,9 +199,9 @@ export function FocusModePage() {
             </motion.div>
 
             <div className="space-y-1">
-              <h1 className="text-2xl font-bold tracking-tight">Great work!</h1>
+              <h1 className="text-2xl font-bold tracking-tight">Great work{profile?.name ? `, ${profile.name}` : ""}!</h1>
               <p className="text-sm text-muted-foreground">
-                You completed a focused session.
+                One study block done!
               </p>
             </div>
 
@@ -210,9 +220,9 @@ export function FocusModePage() {
                 <div className="flex items-start gap-3">
                   <Sparkles className="h-5 w-5 text-primary shrink-0 mt-0.5" />
                   <div>
-                    <p className="text-sm font-medium">Time saved</p>
+                    <p className="text-sm font-medium">One less thing to worry about</p>
                     <p className="text-xs text-muted-foreground">
-                      You finished {savedMinutes} min early by staying focused.
+                      Future You will thank you.
                     </p>
                   </div>
                 </div>
@@ -222,7 +232,7 @@ export function FocusModePage() {
                 <div className="flex items-start gap-3">
                   <Clock className="h-5 w-5 text-amber-500 shrink-0 mt-0.5" />
                   <div>
-                    <p className="text-sm font-medium">{otherSessions.length} topic{otherSessions.length !== 1 ? "s" : ""} remaining</p>
+                    <p className="text-sm font-medium">{otherSessions.length} topic{otherSessions.length !== 1 ? "s" : ""} still to go</p>
                     <p className="text-xs text-muted-foreground">
                       {otherSessions.slice(0, 3).map((s) => s.reason).join(" · ")}
                       {otherSessions.length > 3 && ` · +${otherSessions.length - 3} more`}
@@ -253,8 +263,11 @@ export function FocusModePage() {
           animate={{ opacity: 1, y: 0 }}
           className="space-y-1"
         >
-          <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Focus Session</p>
+          <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Study Mode</p>
           <h1 className="text-lg font-semibold leading-snug">{session.reason}</h1>
+          {profile?.name && (
+            <p className="text-sm text-muted-foreground">Let's finish this one, {profile.name}.</p>
+          )}
         </motion.div>
 
         {/* Timer */}

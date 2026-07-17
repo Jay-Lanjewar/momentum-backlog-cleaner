@@ -59,6 +59,7 @@ export interface PlanGenerateResponse {
 export interface StudentProfileData {
   id: string
   user_id: string
+  name: string | null
   class_name: string | null
   board: string | null
   school_timings: Record<string, unknown> | null
@@ -105,6 +106,7 @@ export interface UserData {
 }
 
 export interface ProfileUpdatePayload {
+  name?: string | null
   class_name?: string | null
   board?: string | null
   sleep_schedule?: SleepTime | null

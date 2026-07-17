@@ -14,6 +14,7 @@ def sample_profile() -> StudentProfile:
     return StudentProfile(
         id=uuid.uuid4(),
         user_id=TEST_USER_ID,
+        name="Priyani",
         class_name="12th Grade",
         board="CBSE",
         energy_peak="morning",
@@ -45,6 +46,7 @@ async def test_get_profile(
     result = await profile_service.get(TEST_USER_ID)
 
     assert result is not None
+    assert result.name == "Priyani"
     assert result.class_name == "12th Grade"
     assert result.board == "CBSE"
     profile_repo.get_by_user_id.assert_awaited_once_with(TEST_USER_ID)
@@ -68,6 +70,7 @@ async def test_upsert_profile_create(
     profile_repo: AsyncMock,
 ):
     data = StudentProfileCreate(
+        name="Ravi",
         class_name="11th Grade",
         board="ICSE",
         energy_peak="afternoon",
@@ -75,6 +78,7 @@ async def test_upsert_profile_create(
     expected = StudentProfile(
         id=uuid.uuid4(),
         user_id=TEST_USER_ID,
+        name="Ravi",
         class_name="11th Grade",
         board="ICSE",
         energy_peak="afternoon",
@@ -94,10 +98,11 @@ async def test_upsert_profile_update(
     profile_repo: AsyncMock,
     sample_profile: StudentProfile,
 ):
-    data = StudentProfileUpdate(daily_target_minutes=180)
+    data = StudentProfileUpdate(name="Priyani Updated", daily_target_minutes=180)
     updated = StudentProfile(
         id=sample_profile.id,
         user_id=TEST_USER_ID,
+        name="Priyani Updated",
         class_name=sample_profile.class_name,
         board=sample_profile.board,
         energy_peak=sample_profile.energy_peak,
@@ -107,6 +112,7 @@ async def test_upsert_profile_update(
 
     result = await profile_service.upsert(TEST_USER_ID, data)
 
+    assert result.name == "Priyani Updated"
     assert result.daily_target_minutes == 180
 
 

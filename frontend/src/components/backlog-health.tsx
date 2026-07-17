@@ -52,7 +52,7 @@ export function BacklogHealthWidget({
 
       <div className="space-y-1.5">
         <div className="flex justify-between text-xs text-muted-foreground">
-          <span>Clear rate (7 days)</span>
+          <span>Progress (7 days)</span>
           <span>{clearPercent}%</span>
         </div>
         <div className="h-1.5 w-full overflow-hidden rounded-full bg-background">
@@ -82,7 +82,7 @@ export function BacklogHealthWidget({
 
       {completionDate && (
         <div className="flex items-center justify-center gap-1.5 rounded-lg bg-background/80 px-3 py-2 text-xs text-muted-foreground">
-          <span>Estimated completion:</span>
+          <span>On track to finish by</span>
           <span className="font-medium text-foreground">{completionDate}</span>
         </div>
       )}

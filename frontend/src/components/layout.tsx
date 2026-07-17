@@ -4,7 +4,7 @@ import { cn } from "@/lib/cn"
 
 const navItems = [
   { to: "/", icon: Sparkles, label: "Today" },
-  { to: "/backlog", icon: Layers, label: "Backlog" },
+  { to: "/backlog", icon: Layers, label: "Pending Work" },
   { to: "/profile", icon: User, label: "Profile" },
 ]
 
