@@ -24,5 +24,13 @@ class Settings(BaseSettings):
     GEMINI_MODEL: str = "gemini-2.0-flash"
     AI_PROVIDER: str = "gemini"
 
+    def model_post_init(self, __context):
+        if self.DATABASE_URL.startswith("postgresql://"):
+            self.DATABASE_URL = self.DATABASE_URL.replace(
+                "postgresql://",
+                "postgresql+asyncpg://",
+                1,
+            )
+
 
 settings = Settings()
