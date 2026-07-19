@@ -176,6 +176,10 @@ export interface StudyStreakData {
   longest_streak: number
   total_study_days: number
   last_completed_date: string | null
+  recovery_tokens_current: number
+  recovery_tokens_earned: number
+  recovery_tokens_used: number
+  streak_protected_today: boolean
 }
 
 export interface SubjectStreakData {

@@ -227,6 +227,10 @@ class StudyStreakResponse(BaseModel):
     longest_streak: int
     total_study_days: int
     last_completed_date: datetime | None = None
+    recovery_tokens_current: int = 0
+    recovery_tokens_earned: int = 0
+    recovery_tokens_used: int = 0
+    streak_protected_today: bool = False
 
     model_config = {"from_attributes": True}
 

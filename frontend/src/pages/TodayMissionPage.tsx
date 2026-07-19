@@ -10,7 +10,7 @@ import { Button } from "@/components/ui/button"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Badge } from "@/components/ui/badge"
 import { Progress } from "@/components/ui/progress"
-import { MomentumStreak, SubjectStreaksCard, BalanceScoreCard } from "@/components/streak-display"
+import { MomentumStreak, RecoveryTokens, SubjectStreaksCard, BalanceScoreCard } from "@/components/streak-display"
 import type { PlanSession, PrioritizedBacklogItem, BacklogHealth } from "@/services/types"
 
 /* ─── Helpers ─── */
@@ -594,6 +594,17 @@ export function TodayMissionPage() {
             <MomentumStreak
               currentStreak={streaks.momentum.current_streak}
               lastCompletedDate={streaks.momentum.last_completed_date}
+              streakProtectedToday={streaks.momentum.streak_protected_today}
+            />
+          </Container>
+        )}
+
+        {streaks?.momentum && streaks.momentum.recovery_tokens_earned > 0 && (
+          <Container delay={0.04}>
+            <RecoveryTokens
+              current={streaks.momentum.recovery_tokens_current}
+              earned={streaks.momentum.recovery_tokens_earned}
+              used={streaks.momentum.recovery_tokens_used}
             />
           </Container>
         )}

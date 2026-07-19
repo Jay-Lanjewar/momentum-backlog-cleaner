@@ -7,6 +7,17 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.domain.models import BacklogItem, Course
 from app.repositories.streak_repo import StudyStreakRepository, SubjectStreakRepository
 
+MAX_RECOVERY_TOKENS = 5
+TOKEN_MILESTONE_BASE = [14, 30, 60, 100]
+
+
+def _get_milestones_for_streak(streak: int) -> list[int]:
+    milestones = list(TOKEN_MILESTONE_BASE)
+    if streak >= 200:
+        for h in range(200, streak + 1, 100):
+            milestones.append(h)
+    return milestones
+
 
 class StreakService:
     def __init__(self, db: AsyncSession):
@@ -37,6 +48,10 @@ class StreakService:
                 "longest_streak": momentum.longest_streak if momentum else 0,
                 "total_study_days": momentum.total_study_days if momentum else 0,
                 "last_completed_date": momentum.last_completed_date if momentum else None,
+                "recovery_tokens_current": momentum.recovery_tokens_current if momentum else 0,
+                "recovery_tokens_earned": momentum.recovery_tokens_earned if momentum else 0,
+                "recovery_tokens_used": momentum.recovery_tokens_used if momentum else 0,
+                "streak_protected_today": False,
             },
             "subjects": subjects_data,
         }
@@ -53,28 +68,62 @@ class StreakService:
         longest_streak = momentum.longest_streak if momentum else 0
         total_study_days = momentum.total_study_days if momentum else 0
         last_completed = momentum.last_completed_date if momentum else None
+        tokens_current = momentum.recovery_tokens_current if momentum else 0
+        tokens_earned = momentum.recovery_tokens_earned if momentum else 0
+        tokens_used = momentum.recovery_tokens_used if momentum else 0
+        token_milestones = momentum.token_milestones if momentum and momentum.token_milestones else {}
+
+        streak_reset = False
+        streak_protected = False
+        gap_days = 0
+        new_streak = current_streak
 
         if last_completed:
             last_date = last_completed.replace(tzinfo=timezone.utc) if last_completed.tzinfo is None else last_completed
-            if last_date < yesterday:
-                current_streak = 1
-            elif last_date >= today:
-                current_streak = current_streak
-            else:
-                current_streak += 1
-        else:
-            current_streak = 1
+            gap_days = (today - last_date).days
 
-        total_study_days += 1
-        if current_streak > longest_streak:
-            longest_streak = current_streak
+            if gap_days >= 2:
+                streak_reset = True
+            elif gap_days == 1:
+                new_streak = current_streak + 1
+        else:
+            new_streak = 1
+
+        if streak_reset:
+            if tokens_current > 0 and gap_days == 1:
+                tokens_current -= 1
+                tokens_used += 1
+                new_streak = current_streak
+                streak_reset = False
+                streak_protected = True
+            else:
+                new_streak = 1
+
+        if not streak_reset:
+            total_study_days += 1
+
+        if not streak_reset and new_streak > longest_streak:
+            longest_streak = new_streak
+
+        applicable_milestones = _get_milestones_for_streak(new_streak)
+        for milestone in applicable_milestones:
+            milestone_key = str(milestone)
+            if milestone_key not in token_milestones:
+                token_milestones[milestone_key] = True
+                if tokens_current < MAX_RECOVERY_TOKENS:
+                    tokens_current += 1
+                    tokens_earned += 1
 
         await self.study_streak_repo.upsert(
             user_id=user_id,
-            current_streak=current_streak,
+            current_streak=new_streak,
             longest_streak=longest_streak,
             total_study_days=total_study_days,
             last_completed_date=today,
+            recovery_tokens_current=tokens_current,
+            recovery_tokens_earned=tokens_earned,
+            recovery_tokens_used=tokens_used,
+            token_milestones=token_milestones,
         )
 
         existing_subject_streaks = {
@@ -110,7 +159,35 @@ class StreakService:
                 last_completion_date=today,
             )
 
-        return await self.get_streaks(user_id)
+        momentum = await self.study_streak_repo.get_by_user(user_id)
+        subject_streaks = await self.subject_streak_repo.get_by_user(user_id)
+
+        subjects_data = []
+        for ss in subject_streaks:
+            course = await self.db.get(Course, ss.course_id)
+            subjects_data.append({
+                "id": ss.id,
+                "course_id": ss.course_id,
+                "course_name": course.name if course else "Unknown",
+                "course_color": course.color if course else "#888",
+                "current_streak": ss.current_streak,
+                "longest_streak": ss.longest_streak,
+                "last_completion_date": ss.last_completion_date,
+            })
+
+        return {
+            "momentum": {
+                "current_streak": momentum.current_streak,
+                "longest_streak": momentum.longest_streak,
+                "total_study_days": momentum.total_study_days,
+                "last_completed_date": momentum.last_completed_date,
+                "recovery_tokens_current": momentum.recovery_tokens_current,
+                "recovery_tokens_earned": momentum.recovery_tokens_earned,
+                "recovery_tokens_used": momentum.recovery_tokens_used,
+                "streak_protected_today": streak_protected,
+            },
+            "subjects": subjects_data,
+        }
 
     async def compute_balance_score(self, user_id: uuid.UUID) -> dict:
         subject_streaks = await self.subject_streak_repo.get_by_user(user_id)

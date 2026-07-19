@@ -25,6 +25,10 @@ class StudyStreakRepository(BaseRepository[StudyStreak]):
         longest_streak: int,
         total_study_days: int,
         last_completed_date: datetime,
+        recovery_tokens_current: int | None = None,
+        recovery_tokens_earned: int | None = None,
+        recovery_tokens_used: int | None = None,
+        token_milestones: dict | None = None,
     ) -> StudyStreak:
         existing = await self.get_by_user(user_id)
         if existing:
@@ -32,6 +36,14 @@ class StudyStreakRepository(BaseRepository[StudyStreak]):
             existing.longest_streak = longest_streak
             existing.total_study_days = total_study_days
             existing.last_completed_date = last_completed_date
+            if recovery_tokens_current is not None:
+                existing.recovery_tokens_current = recovery_tokens_current
+            if recovery_tokens_earned is not None:
+                existing.recovery_tokens_earned = recovery_tokens_earned
+            if recovery_tokens_used is not None:
+                existing.recovery_tokens_used = recovery_tokens_used
+            if token_milestones is not None:
+                existing.token_milestones = token_milestones
             await self.db.flush()
             await self.db.refresh(existing)
             return existing
@@ -41,6 +53,10 @@ class StudyStreakRepository(BaseRepository[StudyStreak]):
             longest_streak=longest_streak,
             total_study_days=total_study_days,
             last_completed_date=last_completed_date,
+            recovery_tokens_current=recovery_tokens_current or 0,
+            recovery_tokens_earned=recovery_tokens_earned or 0,
+            recovery_tokens_used=recovery_tokens_used or 0,
+            token_milestones=token_milestones or {},
         )
 
 

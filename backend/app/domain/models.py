@@ -187,6 +187,10 @@ class StudyStreak(Base):
     longest_streak: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     total_study_days: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     last_completed_date: Mapped[date | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    recovery_tokens_current: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    recovery_tokens_earned: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    recovery_tokens_used: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    token_milestones: Mapped[dict | None] = mapped_column(JSONB, nullable=True, default=dict)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )
