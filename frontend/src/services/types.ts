@@ -207,6 +207,12 @@ export interface StreakUpdatePayload {
   completed_subject_ids: string[]
 }
 
+export interface InsightData {
+  title: string
+  message: string
+  priority: number
+}
+
 export interface GoalData {
   id: string
   user_id: string

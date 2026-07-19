@@ -1,9 +1,9 @@
 import { useEffect, useMemo } from "react"
 import { motion } from "framer-motion"
-import { Play, Clock, Target, AlertTriangle, CheckCircle2, Brain } from "lucide-react"
+import { Play, Clock, Target, AlertTriangle, CheckCircle2, Sprout } from "lucide-react"
 import { useNavigate } from "react-router-dom"
 
-import { usePlanningPreview, useGeneratePlan, useProfile, useStreaks, useBalanceScore } from "@/services/hooks"
+import { usePlanningPreview, useGeneratePlan, useProfile, useStreaks, useBalanceScore, useInsight } from "@/services/hooks"
 import { Layout } from "@/components/layout"
 import { getCurrentSession, getNextSession, EmptySessionState } from "@/components/session-card"
 import { Button } from "@/components/ui/button"
@@ -386,89 +386,31 @@ function BacklogHealthCard({ health }: { health: BacklogHealth | undefined }) {
   )
 }
 
-/* ─── AI Coach Card ─── */
+/* ─── Today's Insight ─── */
 
-function AICoachCard({
-  message,
-  source,
-  health,
-  balanceScore,
-  totalSessions,
-  completedSessions,
-}: {
-  message: string | undefined
-  source?: string
-  health?: BacklogHealth
-  balanceScore?: { score: number; message: string | null; neglected_subjects: string[] }
-  totalSessions?: number
-  completedSessions?: number
-}) {
-  const getFallbackMessage = (): string | null => {
-    if (balanceScore && balanceScore.score < 50 && balanceScore.neglected_subjects.length > 0) {
-      const subject = balanceScore.neglected_subjects[0]
-      return `You haven't studied ${subject} recently. Adding a session would improve your balance.`
-    }
-
-    if (balanceScore && balanceScore.score < 80 && balanceScore.neglected_subjects.length > 0) {
-      const subject = balanceScore.neglected_subjects[0]
-      return `Studying ${subject} today would improve your study balance.`
-    }
-
-    if (!health) return null
-
-    if (health.health_score === "good" && health.pending_items > 0) {
-      const remainingSessions = (totalSessions ?? 0) - (completedSessions ?? 0)
-      if (remainingSessions > 0) {
-        const reductionPercent = Math.round(((totalSessions ?? 0) / Math.max(1, health.pending_items)) * 100)
-        return `Completing today's sessions will reduce your backlog by ${reductionPercent}%.`
-      }
-      return "You're ahead of schedule. Keep up the great work!"
-    }
-
-    if (health.health_score === "good" && health.pending_items === 0) {
-      return "All caught up! Enjoy your free time."
-    }
-
-    if (health.health_score === "critical") {
-      const daysBehind = Math.ceil(health.overdue_items / Math.max(1, totalSessions ?? 1))
-      if (daysBehind <= 1) {
-        return "Skipping today will delay your completion by a day."
-      }
-      return `You have ${health.overdue_items} overdue topics. Start with the highest priority.`
-    }
-
-    if (health.health_score === "fair") {
-      return `Stay consistent. Completing your ${health.pending_items} pending topics keeps things manageable.`
-    }
-
-    return null
-  }
-
-  const displayMessage = message || getFallbackMessage()
-  if (!displayMessage) return null
+function TodayInsight({ insight }: { insight: { title: string; message: string } | undefined }) {
+  if (!insight) return null
 
   return (
     <motion.div
       initial={{ opacity: 0, y: 12 }}
       animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.2, delay: 0.25, ease: "easeOut" }}
+      transition={{ duration: 0.2, ease: "easeOut" }}
       className="rounded-xl border bg-card p-5"
     >
       <div className="flex items-start gap-3">
         <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-primary/10">
-          <Brain className="h-4 w-4 text-primary" />
+          <Sprout className="h-4 w-4 text-primary" />
         </div>
-        <div className="space-y-1">
+        <div className="space-y-1.5">
           <div className="flex items-center gap-2">
-            <span className="text-xs font-medium text-muted-foreground">AI Coach</span>
-            {source && (
-              <span className="text-[10px] uppercase tracking-wider text-muted-foreground/50">
-                {source === "ai" ? "AI" : "Auto"}
-              </span>
-            )}
+            <span className="text-xs font-medium text-muted-foreground">Today's Insight</span>
           </div>
-          <p className="text-sm leading-relaxed text-card-foreground/80">
-            {displayMessage}
+          <p className="text-sm font-medium leading-snug text-card-foreground">
+            {insight.title}
+          </p>
+          <p className="text-sm leading-relaxed text-card-foreground/70 max-w-[30ch]">
+            {insight.message}
           </p>
         </div>
       </div>
@@ -485,6 +427,7 @@ export function TodayMissionPage() {
   const { data: planData, isLoading: planLoading, error: planError, refetch: refetchPlan } = useGeneratePlan()
   const { data: streaks } = useStreaks()
   const { data: balanceScore } = useBalanceScore()
+  const { data: insight } = useInsight()
 
   const onboarded = localStorage.getItem("momentum_onboarded") === "true"
 
@@ -527,13 +470,6 @@ export function TodayMissionPage() {
 
   const overdueMinutes = useMemo(() => computeOverdueMinutes(preview?.prioritized_backlog), [preview])
   const statusMessage = useMemo(() => getStatusMessage(preview?.backlog_health, overdueMinutes), [preview, overdueMinutes])
-
-  const now = new Date()
-  const currentMinutes = now.getHours() * 60 + now.getMinutes()
-  const completedSessionsCount = sessions.filter((s) => {
-    const [eh, em] = s.end_time.split(":").map(Number)
-    return eh * 60 + em <= currentMinutes
-  }).length
 
   const handleRefresh = () => {
     refetchPreview()
@@ -662,14 +598,7 @@ export function TodayMissionPage() {
         )}
 
         <Container delay={0.25}>
-          <AICoachCard
-            message={plan?.daily_message}
-            source={planData?.source}
-            health={preview?.backlog_health}
-            balanceScore={balanceScore}
-            totalSessions={sessions.length}
-            completedSessions={completedSessionsCount}
-          />
+          <TodayInsight insight={insight} />
         </Container>
       </div>
     </Layout>

@@ -19,6 +19,7 @@ import type {
   StreakAllData,
   StreakUpdatePayload,
   BalanceScoreData,
+  InsightData,
 } from "@/services/types"
 
 export function usePlanningPreview() {
@@ -234,6 +235,19 @@ export function useBalanceScore() {
       return result.data
     },
     staleTime: 1000 * 60,
+  })
+}
+
+export function useInsight() {
+  return useQuery({
+    queryKey: ["motivation", "insight"],
+    queryFn: async () => {
+      const result = await api.get<InsightData>("/api/v1/motivation/insight")
+      if (result.error) throw new Error(result.error)
+      return result.data
+    },
+    staleTime: 1000 * 60 * 5,
+    refetchOnWindowFocus: false,
   })
 }
 
