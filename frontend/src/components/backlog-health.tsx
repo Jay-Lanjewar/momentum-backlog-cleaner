@@ -3,11 +3,11 @@ import { cn } from "@/lib/cn"
 function getHealthColor(score: string) {
   switch (score) {
     case "good":
-      return { bar: "bg-emerald-500", text: "text-emerald-600 dark:text-emerald-400", bg: "bg-emerald-50 dark:bg-emerald-950/50", border: "border-emerald-200 dark:border-emerald-800", label: "Good" }
+      return { bar: "bg-emerald-500", text: "text-emerald-600 dark:text-emerald-400", bg: "bg-emerald-500/10", border: "border-emerald-300 dark:border-emerald-800", label: "Good" }
     case "fair":
-      return { bar: "bg-amber-500", text: "text-amber-600 dark:text-amber-400", bg: "bg-amber-50 dark:bg-amber-950/50", border: "border-amber-200 dark:border-amber-800", label: "Fair" }
+      return { bar: "bg-amber-500", text: "text-amber-600 dark:text-amber-400", bg: "bg-amber-500/10", border: "border-amber-300 dark:border-amber-800", label: "Fair" }
     case "critical":
-      return { bar: "bg-red-500", text: "text-red-600 dark:text-red-400", bg: "bg-red-50 dark:bg-red-950/50", border: "border-red-200 dark:border-red-800", label: "Critical" }
+      return { bar: "bg-red-500", text: "text-red-600 dark:text-red-400", bg: "bg-red-500/10", border: "border-red-300 dark:border-red-800", label: "Critical" }
     default:
       return { bar: "bg-muted", text: "text-muted-foreground", bg: "bg-muted/50", border: "border-border", label: score }
   }

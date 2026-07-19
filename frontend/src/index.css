@@ -25,22 +25,22 @@
   }
 
   .dark {
-    --background: 240 10% 3.9%;
-    --foreground: 0 0% 98%;
-    --card: 240 10% 3.9%;
-    --card-foreground: 0 0% 98%;
-    --primary: 0 0% 98%;
-    --primary-foreground: 240 5.9% 10%;
-    --secondary: 240 3.7% 15.9%;
-    --secondary-foreground: 0 0% 98%;
-    --muted: 240 3.7% 15.9%;
-    --muted-foreground: 240 5% 64.9%;
-    --accent: 240 3.7% 15.9%;
-    --accent-foreground: 0 0% 98%;
-    --border: 240 3.7% 15.9%;
-    --input: 240 3.7% 15.9%;
-    --ring: 240 4.9% 83.9%;
-    --destructive: 0 72% 51%;
+    --background: 220 40% 11%;
+    --foreground: 0 0% 95%;
+    --card: 220 40% 11%;
+    --card-foreground: 0 0% 95%;
+    --primary: 0 0% 95%;
+    --primary-foreground: 220 40% 11%;
+    --secondary: 215 25% 17%;
+    --secondary-foreground: 0 0% 95%;
+    --muted: 215 25% 17%;
+    --muted-foreground: 215 10% 60%;
+    --accent: 215 25% 17%;
+    --accent-foreground: 0 0% 95%;
+    --border: 215 25% 20%;
+    --input: 215 25% 20%;
+    --ring: 215 20% 75%;
+    --destructive: 0 62% 55%;
     --destructive-foreground: 0 0% 98%;
   }
 }
@@ -49,6 +49,19 @@
   * {
     @apply border-border;
   }
+
+  *,
+  *::before,
+  *::after {
+    transition: background-color 200ms ease, border-color 200ms ease, color 200ms ease;
+  }
+
+  html.disable-transitions *,
+  html.disable-transitions *::before,
+  html.disable-transitions *::after {
+    transition: none !important;
+  }
+
   body {
     @apply bg-background text-foreground;
     scroll-behavior: smooth;

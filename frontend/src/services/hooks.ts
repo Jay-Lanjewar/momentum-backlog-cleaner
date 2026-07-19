@@ -16,6 +16,9 @@ import type {
   GoalData,
   GoalCreatePayload,
   GoalUpdatePayload,
+  StreakAllData,
+  StreakUpdatePayload,
+  BalanceScoreData,
 } from "@/services/types"
 
 export function usePlanningPreview() {
@@ -192,6 +195,45 @@ export function useDeleteGoal() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["goals"] })
     },
+  })
+}
+
+export function useStreaks() {
+  return useQuery({
+    queryKey: ["streaks"],
+    queryFn: async () => {
+      const result = await api.get<StreakAllData>("/api/v1/streaks")
+      if (result.error) throw new Error(result.error)
+      return result.data
+    },
+    staleTime: 1000 * 60,
+  })
+}
+
+export function useUpdateStreaks() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: async (payload: StreakUpdatePayload) => {
+      const result = await api.post<StreakAllData>("/api/v1/streaks/update", payload)
+      if (result.error) throw new Error(result.error)
+      return result.data
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["streaks"] })
+      queryClient.invalidateQueries({ queryKey: ["streaks", "balance"] })
+    },
+  })
+}
+
+export function useBalanceScore() {
+  return useQuery({
+    queryKey: ["streaks", "balance"],
+    queryFn: async () => {
+      const result = await api.get<BalanceScoreData>("/api/v1/streaks/balance")
+      if (result.error) throw new Error(result.error)
+      return result.data
+    },
+    staleTime: 1000 * 60,
   })
 }
 

@@ -222,6 +222,42 @@ class PlanGenerateResponse(BaseModel):
     source: str
 
 
+class StudyStreakResponse(BaseModel):
+    current_streak: int
+    longest_streak: int
+    total_study_days: int
+    last_completed_date: datetime | None = None
+
+    model_config = {"from_attributes": True}
+
+
+class SubjectStreakResponse(BaseModel):
+    id: uuid.UUID
+    course_id: uuid.UUID
+    course_name: str
+    course_color: str
+    current_streak: int
+    longest_streak: int
+    last_completion_date: datetime | None = None
+
+    model_config = {"from_attributes": True}
+
+
+class StreakUpdatePayload(BaseModel):
+    completed_subject_ids: list[uuid.UUID]
+
+
+class StreakAllResponse(BaseModel):
+    momentum: StudyStreakResponse
+    subjects: list[SubjectStreakResponse]
+
+
+class BalanceScoreResponse(BaseModel):
+    score: int
+    message: str | None = None
+    neglected_subjects: list[str] = []
+
+
 class PaginatedResponse(BaseModel):
     items: list
     total: int

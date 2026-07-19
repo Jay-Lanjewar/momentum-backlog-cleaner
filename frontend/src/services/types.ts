@@ -171,6 +171,38 @@ export interface CourseUpdatePayload {
   color?: string
 }
 
+export interface StudyStreakData {
+  current_streak: number
+  longest_streak: number
+  total_study_days: number
+  last_completed_date: string | null
+}
+
+export interface SubjectStreakData {
+  id: string
+  course_id: string
+  course_name: string
+  course_color: string
+  current_streak: number
+  longest_streak: number
+  last_completion_date: string | null
+}
+
+export interface StreakAllData {
+  momentum: StudyStreakData
+  subjects: SubjectStreakData[]
+}
+
+export interface BalanceScoreData {
+  score: number
+  message: string | null
+  neglected_subjects: string[]
+}
+
+export interface StreakUpdatePayload {
+  completed_subject_ids: string[]
+}
+
 export interface GoalData {
   id: string
   user_id: string

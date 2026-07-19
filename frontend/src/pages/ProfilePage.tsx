@@ -18,6 +18,7 @@ import {
   Sunset,
   ChevronDown,
   Settings2,
+  Monitor,
 } from "lucide-react"
 
 import { Layout } from "@/components/layout"
@@ -25,6 +26,7 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Skeleton } from "@/components/ui/skeleton"
 import { useProfile, useWeeklySchedule, useSaveProfile, useSaveWeeklySchedule } from "@/services/hooks"
+import { useTheme } from "@/lib/theme"
 import type {
   WeeklyBlock,
   DayName,
@@ -373,6 +375,11 @@ export function ProfilePage() {
           </Card>
         </Container>
 
+        {/* Theme */}
+        <Container delay={0.18}>
+          <ThemeToggle />
+        </Container>
+
         {/* Preferred Study Hours */}
         <Container delay={0.2}>
           <Card>
@@ -476,6 +483,57 @@ export function ProfilePage() {
         </Container>
       </div>
     </Layout>
+  )
+}
+
+/* ─── Theme Toggle ─── */
+
+const THEME_OPTIONS = [
+  { value: "light" as const, label: "Light", icon: Sun, desc: "Always light" },
+  { value: "dark" as const, label: "Dark", icon: Moon, desc: "Always dark" },
+  { value: "system" as const, label: "System", icon: Monitor, desc: "Follow device" },
+]
+
+function ThemeToggle() {
+  const { theme, setTheme, resolvedTheme } = useTheme()
+
+  return (
+    <Card>
+      <CardHeader className="pb-3">
+        <CardTitle className="flex items-center gap-2 text-base">
+          <Sun className="h-4 w-4 text-muted-foreground" />
+          Theme
+        </CardTitle>
+      </CardHeader>
+      <CardContent>
+        <div className="grid grid-cols-3 gap-2">
+          {THEME_OPTIONS.map((opt) => {
+            const selected = theme === opt.value
+            const Icon = opt.icon
+            return (
+              <button
+                key={opt.value}
+                onClick={() => setTheme(opt.value)}
+                className={`flex flex-col items-center gap-1.5 rounded-xl border p-3 text-center transition-all ${
+                  selected
+                    ? "border-primary bg-primary/5 shadow-sm"
+                    : "border-border hover:border-muted-foreground/30 hover:bg-muted/50"
+                }`}
+              >
+                <Icon className={`h-5 w-5 ${selected ? "text-primary" : "text-muted-foreground"}`} />
+                <span className={`text-xs font-medium ${selected ? "text-foreground" : "text-muted-foreground"}`}>
+                  {opt.label}
+                </span>
+                <span className="text-[10px] text-muted-foreground/60">{opt.desc}</span>
+              </button>
+            )
+          })}
+        </div>
+        <p className="mt-3 text-xs text-muted-foreground text-center">
+          {resolvedTheme === "dark" ? "🌙 Dark mode active" : "☀️ Light mode active"}
+        </p>
+      </CardContent>
+    </Card>
   )
 }
 

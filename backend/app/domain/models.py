@@ -37,6 +37,12 @@ class User(Base):
     goals: Mapped[list["Goal"]] = relationship(
         "Goal", back_populates="user", cascade="all, delete-orphan"
     )
+    study_streak: Mapped["StudyStreak | None"] = relationship(
+        "StudyStreak", back_populates="user", uselist=False, cascade="all, delete-orphan"
+    )
+    subject_streaks: Mapped[list["SubjectStreak"]] = relationship(
+        "SubjectStreak", back_populates="user", cascade="all, delete-orphan"
+    )
 
 
 class StudentProfile(Base):
@@ -166,3 +172,52 @@ class Goal(Base):
     )
 
     user: Mapped["User"] = relationship("User", back_populates="goals")
+
+
+class StudyStreak(Base):
+    __tablename__ = "study_streaks"
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+    )
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False, unique=True
+    )
+    current_streak: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    longest_streak: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    total_study_days: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    last_completed_date: Mapped[date | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
+
+    user: Mapped["User"] = relationship("User")
+
+
+class SubjectStreak(Base):
+    __tablename__ = "subject_streaks"
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+    )
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False
+    )
+    course_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("courses.id", ondelete="CASCADE"), nullable=False
+    )
+    current_streak: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    longest_streak: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    last_completion_date: Mapped[date | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
+
+    user: Mapped["User"] = relationship("User")
+    course: Mapped["Course"] = relationship("Course")

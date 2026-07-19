@@ -3,13 +3,14 @@ import { motion } from "framer-motion"
 import { Play, Clock, Target, AlertTriangle, CheckCircle2, Brain } from "lucide-react"
 import { useNavigate } from "react-router-dom"
 
-import { usePlanningPreview, useGeneratePlan, useProfile } from "@/services/hooks"
+import { usePlanningPreview, useGeneratePlan, useProfile, useStreaks, useBalanceScore } from "@/services/hooks"
 import { Layout } from "@/components/layout"
 import { getCurrentSession, getNextSession, EmptySessionState } from "@/components/session-card"
 import { Button } from "@/components/ui/button"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Badge } from "@/components/ui/badge"
 import { Progress } from "@/components/ui/progress"
+import { MomentumStreak, SubjectStreaksCard, BalanceScoreCard } from "@/components/streak-display"
 import type { PlanSession, PrioritizedBacklogItem, BacklogHealth } from "@/services/types"
 
 /* ─── Helpers ─── */
@@ -391,16 +392,28 @@ function AICoachCard({
   message,
   source,
   health,
+  balanceScore,
   totalSessions,
   completedSessions,
 }: {
   message: string | undefined
   source?: string
   health?: BacklogHealth
+  balanceScore?: { score: number; message: string | null; neglected_subjects: string[] }
   totalSessions?: number
   completedSessions?: number
 }) {
   const getFallbackMessage = (): string | null => {
+    if (balanceScore && balanceScore.score < 50 && balanceScore.neglected_subjects.length > 0) {
+      const subject = balanceScore.neglected_subjects[0]
+      return `You haven't studied ${subject} recently. Adding a session would improve your balance.`
+    }
+
+    if (balanceScore && balanceScore.score < 80 && balanceScore.neglected_subjects.length > 0) {
+      const subject = balanceScore.neglected_subjects[0]
+      return `Studying ${subject} today would improve your study balance.`
+    }
+
     if (!health) return null
 
     if (health.health_score === "good" && health.pending_items > 0) {
@@ -470,6 +483,8 @@ export function TodayMissionPage() {
   const { data: profile, isLoading: profileLoading } = useProfile()
   const { data: preview, isLoading: previewLoading, error: previewError, refetch: refetchPreview } = usePlanningPreview()
   const { data: planData, isLoading: planLoading, error: planError, refetch: refetchPlan } = useGeneratePlan()
+  const { data: streaks } = useStreaks()
+  const { data: balanceScore } = useBalanceScore()
 
   const onboarded = localStorage.getItem("momentum_onboarded") === "true"
 
@@ -574,6 +589,15 @@ export function TodayMissionPage() {
           <Greeting name={profile?.name ?? null} status={statusMessage} />
         </Container>
 
+        {streaks?.momentum && (
+          <Container delay={0.03}>
+            <MomentumStreak
+              currentStreak={streaks.momentum.current_streak}
+              lastCompletedDate={streaks.momentum.last_completed_date}
+            />
+          </Container>
+        )}
+
         <Container delay={0.05}>
           {missionSession ? (
             <MissionCard
@@ -614,11 +638,24 @@ export function TodayMissionPage() {
           <BacklogHealthCard health={preview?.backlog_health} />
         </Container>
 
+        {balanceScore && (
+          <Container delay={0.22}>
+            <BalanceScoreCard data={balanceScore} />
+          </Container>
+        )}
+
+        {streaks?.subjects && streaks.subjects.length > 0 && (
+          <Container delay={0.24}>
+            <SubjectStreaksCard subjects={streaks.subjects} />
+          </Container>
+        )}
+
         <Container delay={0.25}>
           <AICoachCard
             message={plan?.daily_message}
             source={planData?.source}
             health={preview?.backlog_health}
+            balanceScore={balanceScore}
             totalSessions={sessions.length}
             completedSessions={completedSessionsCount}
           />
