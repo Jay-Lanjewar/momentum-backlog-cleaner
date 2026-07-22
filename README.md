@@ -1,5 +1,9 @@
 # Momentum
 
+🚀 **Live Demo:** https://momentum-backlog-cleaner.vercel.app/
+
+[Try Momentum](https://momentum-backlog-cleaner.vercel.app/)
+
 AI-powered academic manager that helps students clear their academic backlog through personalized daily study plans.
 
 > *"The student should never wonder what to study next."*
