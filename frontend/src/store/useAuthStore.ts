@@ -1,15 +1,21 @@
 import { create } from "zustand";
+console.log("Creating Auth Store");
+import type { AuthMeResponse } from "@/services/types";
 
 interface AuthState {
   isAuthenticated: boolean;
-  user: Record<string, unknown> | null;
-  setUser: (user: Record<string, unknown> | null) => void;
+  isLoading: boolean;
+  user: AuthMeResponse | null;
+  setUser: (user: AuthMeResponse | null) => void;
+  setLoading: (loading: boolean) => void;
   clearAuth: () => void;
 }
 
 export const useAuthStore = create<AuthState>((set) => ({
   isAuthenticated: false,
+  isLoading: true,
   user: null,
-  setUser: (user) => set({ user, isAuthenticated: !!user }),
-  clearAuth: () => set({ user: null, isAuthenticated: false }),
+  setUser: (user) => set({ user, isAuthenticated: !!user, isLoading: false }),
+  setLoading: (isLoading) => set({ isLoading }),
+  clearAuth: () => set({ user: null, isAuthenticated: false, isLoading: false }),
 }));

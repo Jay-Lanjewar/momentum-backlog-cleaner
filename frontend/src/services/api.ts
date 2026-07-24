@@ -5,22 +5,52 @@ interface ApiResponse<T> {
   error: string | null;
 }
 
+function getSessionToken(): string | null {
+  try {
+    const url = import.meta.env.VITE_SUPABASE_URL || "";
+    const ref = url.replace("https://", "").split(".")[0];
+    if (!ref) return null;
+    const raw = localStorage.getItem(`sb-${ref}-auth-token`);
+    if (raw) {
+      const session = JSON.parse(raw);
+      return session?.access_token || null;
+    }
+  } catch {
+    // ignore
+  }
+  return null;
+}
+
 async function request<T>(
   endpoint: string,
   options?: RequestInit
 ): Promise<ApiResponse<T>> {
   try {
     const url = `${API_BASE}${endpoint}`;
+    const headers: Record<string, string> = {
+      "Content-Type": "application/json",
+    };
+
+    const token = getSessionToken();
+    if (token) {
+      headers["Authorization"] = `Bearer ${token}`;
+    }
+
     const response = await fetch(url, {
-      headers: {
-        "Content-Type": "application/json",
-      },
+      headers,
       ...options,
     });
 
     if (!response.ok) {
       const errorBody = await response.text();
-      return { data: null as T, error: errorBody || response.statusText };
+      let detail = errorBody || response.statusText;
+      try {
+        const parsed = JSON.parse(errorBody);
+        detail = parsed.detail || detail;
+      } catch {
+        // use raw text
+      }
+      return { data: null as T, error: detail };
     }
 
     const data = await response.json();
@@ -28,7 +58,7 @@ async function request<T>(
   } catch (error) {
     return {
       data: null as T,
-      error: error instanceof Error ? error.message : "Unknown error",
+      error: error instanceof Error ? error.message : "Network error",
     };
   }
 }

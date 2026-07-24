@@ -16,6 +16,8 @@ from app.domain import (
     Course,
     Goal,
     StudentProfile,
+    StudyStreak,
+    SubjectStreak,
     User,
     WeeklySchedule,
 )

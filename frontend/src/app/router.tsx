@@ -1,5 +1,6 @@
 import { createBrowserRouter } from "react-router-dom";
 
+import { ProtectedRoute, PublicOnlyRoute } from "@/components/auth/ProtectedRoute";
 import { TodayMissionPage } from "@/pages/TodayMissionPage";
 import { OnboardingPage } from "@/pages/OnboardingPage";
 import { FocusModePage } from "@/pages/FocusModePage";
@@ -8,38 +9,99 @@ import { BacklogPage } from "@/pages/BacklogPage";
 import { CoursesPage } from "@/pages/CoursesPage";
 import { ProfilePage } from "@/pages/ProfilePage";
 import { HealthPage } from "@/pages/HealthPage";
+import { LoginPage } from "@/pages/LoginPage";
+import { RegisterPage } from "@/pages/RegisterPage";
+import { ForgotPasswordPage } from "@/pages/ForgotPasswordPage";
 
 export const router = createBrowserRouter([
+  // Auth pages (public-only)
+  {
+    path: "/login",
+    element: (
+      <PublicOnlyRoute>
+        <LoginPage />
+      </PublicOnlyRoute>
+    ),
+  },
+  {
+    path: "/register",
+    element: (
+      <PublicOnlyRoute>
+        <RegisterPage />
+      </PublicOnlyRoute>
+    ),
+  },
+  {
+    path: "/forgot-password",
+    element: (
+      <PublicOnlyRoute>
+        <ForgotPasswordPage />
+      </PublicOnlyRoute>
+    ),
+  },
+  // Protected pages (each page wraps itself with <Layout>)
   {
     path: "/",
-    element: <TodayMissionPage />,
+    element: (
+      <ProtectedRoute>
+        <TodayMissionPage />
+      </ProtectedRoute>
+    ),
   },
   {
     path: "/onboarding",
-    element: <OnboardingPage />,
+    element: (
+      <ProtectedRoute>
+        <OnboardingPage />
+      </ProtectedRoute>
+    ),
   },
   {
     path: "/focus",
-    element: <FocusModePage />,
+    element: (
+      <ProtectedRoute>
+        <FocusModePage />
+      </ProtectedRoute>
+    ),
   },
   {
     path: "/plan",
-    element: <PlanPage />,
+    element: (
+      <ProtectedRoute>
+        <PlanPage />
+      </ProtectedRoute>
+    ),
   },
   {
     path: "/backlog",
-    element: <BacklogPage />,
+    element: (
+      <ProtectedRoute>
+        <BacklogPage />
+      </ProtectedRoute>
+    ),
   },
   {
     path: "/courses",
-    element: <CoursesPage />,
+    element: (
+      <ProtectedRoute>
+        <CoursesPage />
+      </ProtectedRoute>
+    ),
   },
   {
     path: "/profile",
-    element: <ProfilePage />,
+    element: (
+      <ProtectedRoute>
+        <ProfilePage />
+      </ProtectedRoute>
+    ),
   },
   {
     path: "/health",
-    element: <HealthPage />,
+    element: (
+      <ProtectedRoute>
+        <HealthPage />
+      </ProtectedRoute>
+    ),
   },
 ]);

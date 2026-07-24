@@ -267,3 +267,39 @@ class PaginatedResponse(BaseModel):
     total: int
     page: int
     per_page: int
+
+
+# ─── Auth Schemas ───
+
+class AuthLoginRequest(BaseModel):
+    email: str
+    password: str
+
+
+class AuthSignupRequest(BaseModel):
+    email: str
+    password: str
+    name: str | None = None
+
+
+class AuthResponse(BaseModel):
+    access_token: str
+    token_type: str = "bearer"
+    user: UserResponse
+
+
+class ForgotPasswordRequest(BaseModel):
+    email: str
+
+
+class AuthMeResponse(BaseModel):
+    id: uuid.UUID
+    email: str
+    name: str | None = None
+    avatar_url: str | None = None
+    created_at: datetime
+    updated_at: datetime
+    profile: StudentProfileResponse | None = None
+    streak: StudyStreakResponse | None = None
+
+    model_config = {"from_attributes": True}

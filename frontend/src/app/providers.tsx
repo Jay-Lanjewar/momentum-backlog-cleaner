@@ -4,6 +4,7 @@ import { useState } from "react";
 
 import { router } from "@/app/router";
 import { ThemeProvider } from "@/lib/theme";
+import { AuthProvider } from "@/components/auth/AuthProvider";
 
 export function Providers() {
   const [queryClient] = useState(
@@ -21,7 +22,9 @@ export function Providers() {
   return (
     <ThemeProvider defaultTheme="system" storageKey="momentum-theme">
       <QueryClientProvider client={queryClient}>
-        <RouterProvider router={router} />
+        <AuthProvider>
+          <RouterProvider router={router} />
+        </AuthProvider>
       </QueryClientProvider>
     </ThemeProvider>
   );

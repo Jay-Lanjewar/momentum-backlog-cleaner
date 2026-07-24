@@ -239,3 +239,29 @@ export interface GoalUpdatePayload {
   category?: string | null
   status?: string
 }
+
+// ─── Auth Types ───
+
+export interface AuthLoginRequest {
+  email: string
+  password: string
+}
+
+export interface AuthSignupRequest {
+  email: string
+  password: string
+  name?: string | null
+}
+
+export interface AuthResponse {
+  access_token: string
+  token_type: string
+  user: UserData
+}
+
+export interface AuthMeResponse extends UserData {
+  created_at: string
+  updated_at: string
+  profile: StudentProfileData | null
+  streak: StudyStreakData | null
+}

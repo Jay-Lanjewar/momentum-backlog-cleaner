@@ -3,6 +3,8 @@ from app.domain.models import (
     Course,
     Goal,
     StudentProfile,
+    StudyStreak,
+    SubjectStreak,
     User,
     WeeklySchedule,
 )
@@ -12,6 +14,8 @@ __all__ = [
     "Course",
     "Goal",
     "StudentProfile",
+    "StudyStreak",
+    "SubjectStreak",
     "User",
     "WeeklySchedule",
 ]

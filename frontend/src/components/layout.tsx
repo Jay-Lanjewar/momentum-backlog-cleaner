@@ -1,6 +1,8 @@
-import { Sparkles, Layers, User } from "lucide-react"
-import { NavLink } from "react-router-dom"
+import { Sparkles, Layers, User, LogOut } from "lucide-react"
+import { NavLink, useNavigate } from "react-router-dom"
 import { cn } from "@/lib/cn"
+import { useAuthStore } from "@/store/useAuthStore"
+import { useAuth } from "@/hooks/useAuth"
 
 const navItems = [
   { to: "/", icon: Sparkles, label: "Today" },
@@ -35,6 +37,10 @@ export function MobileNav() {
 }
 
 export function Sidebar() {
+  const user = useAuthStore((s) => s.user)
+  const { logout } = useAuth()
+  const navigate = useNavigate()
+
   return (
     <aside className="hidden md:flex md:w-56 lg:w-64 md:flex-col md:fixed md:inset-y-0 z-50 border-r bg-card">
       <div className="flex h-14 items-center gap-2 border-b px-6">
@@ -60,11 +66,23 @@ export function Sidebar() {
           </NavLink>
         ))}
       </nav>
-      <div className="border-t p-4">
-        <div className="flex items-center gap-3 text-sm text-muted-foreground">
-          <div className="h-2 w-2 rounded-full bg-emerald-500" />
-          Dev Mode
+      <div className="border-t p-4 space-y-3">
+        <div className="flex items-center gap-3 text-sm">
+          <div className="flex h-7 w-7 items-center justify-center rounded-full bg-primary/10 text-xs font-semibold text-primary">
+            {user?.name?.[0]?.toUpperCase() || user?.email?.[0]?.toUpperCase() || "?"}
+          </div>
+          <div className="flex-1 min-w-0">
+            <p className="text-xs font-medium truncate">{user?.name || "User"}</p>
+            <p className="text-[10px] text-muted-foreground truncate">{user?.email}</p>
+          </div>
         </div>
+        <button
+          onClick={() => { logout(); navigate("/login"); }}
+          className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-xs font-medium text-muted-foreground hover:bg-destructive/10 hover:text-destructive transition-colors"
+        >
+          <LogOut className="h-3.5 w-3.5" />
+          Sign out
+        </button>
       </div>
     </aside>
   )

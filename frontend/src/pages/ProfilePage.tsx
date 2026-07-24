@@ -19,14 +19,22 @@ import {
   ChevronDown,
   Settings2,
   Monitor,
+  Mail,
+  LogOut,
+  Flame,
+  HeartPulse,
+  Shield,
 } from "lucide-react"
+import { useNavigate } from "react-router-dom"
 
 import { Layout } from "@/components/layout"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Skeleton } from "@/components/ui/skeleton"
-import { useProfile, useWeeklySchedule, useSaveProfile, useSaveWeeklySchedule } from "@/services/hooks"
+import { useProfile, useWeeklySchedule, useSaveProfile, useSaveWeeklySchedule, useStreaks, useBalanceScore } from "@/services/hooks"
 import { useTheme } from "@/lib/theme"
+import { useAuthStore } from "@/store/useAuthStore"
+import { useAuth } from "@/hooks/useAuth"
 import type {
   WeeklyBlock,
   DayName,
@@ -58,6 +66,20 @@ function Container({ children, delay = 0 }: { children: React.ReactNode; delay?:
     <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.4, delay, ease: "easeOut" }}>
       {children}
     </motion.div>
+  )
+}
+
+function StatCard({ icon: Icon, label, value }: { icon: React.ElementType; label: string; value: React.ReactNode }) {
+  return (
+    <div className="rounded-xl border bg-card p-4 flex items-center gap-3">
+      <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary/5">
+        <Icon className="h-4 w-4 text-primary" />
+      </div>
+      <div>
+        <p className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider">{label}</p>
+        <p className="text-sm font-semibold">{value}</p>
+      </div>
+    </div>
   )
 }
 
@@ -177,10 +199,17 @@ function DaySchedule({ day, blocks, onChange }: {
 /* ---------- Main Profile Page ---------- */
 
 export function ProfilePage() {
+  const navigate = useNavigate()
+  const authUser = useAuthStore((s) => s.user)
+  const { logout } = useAuth()
+
   const { data: profile, isLoading: profileLoading } = useProfile()
   const { data: schedule, isLoading: scheduleLoading } = useSchedule()
   const saveProfile = useSaveProfile()
   const saveSchedule = useSaveWeeklySchedule()
+
+  const { data: streaks } = useStreaks()
+  const { data: balanceScore } = useBalanceScore()
 
   const [class_name, setClassName] = useState("")
   const [board, setBoard] = useState("")
@@ -247,11 +276,21 @@ export function ProfilePage() {
     }
   }, [class_name, board, sleepStart, sleepEnd, energyPeak, studyEarliest, studyLatest, dailyTarget, weeklyBlocks, saveProfile, saveSchedule])
 
+  const memberSince = authUser?.created_at
+    ? new Date(authUser.created_at).toLocaleDateString("en-US", { year: "numeric", month: "long" })
+    : "—"
+
+  const handleLogout = async () => {
+    await logout()
+    navigate("/login")
+  }
+
   if (isLoading) {
     return (
       <Layout>
         <div className="space-y-4">
           <Skeleton className="h-8 w-48" />
+          <Skeleton className="h-24 w-full rounded-xl" />
           <Skeleton className="h-32 w-full rounded-xl" />
           <Skeleton className="h-32 w-full rounded-xl" />
           <Skeleton className="h-48 w-full rounded-xl" />
@@ -271,9 +310,53 @@ export function ProfilePage() {
             </div>
             <div>
               <h1 className="text-xl font-semibold tracking-tight">Profile</h1>
-              <p className="text-sm text-muted-foreground">Manage your study preferences and schedule</p>
+              <p className="text-sm text-muted-foreground">Manage your account and study preferences</p>
             </div>
           </div>
+        </Container>
+
+        {/* Account Info */}
+        <Container delay={0.03}>
+          <Card>
+            <CardHeader className="pb-3">
+              <CardTitle className="flex items-center gap-2 text-base">
+                <User className="h-4 w-4 text-muted-foreground" />
+                Account
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="flex items-center gap-4 mb-4">
+                <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-primary/10 text-xl font-semibold text-primary">
+                  {authUser?.name?.[0]?.toUpperCase() || authUser?.email?.[0]?.toUpperCase() || "?"}
+                </div>
+                <div>
+                  <p className="text-base font-semibold">{authUser?.name || "User"}</p>
+                  <p className="text-sm text-muted-foreground flex items-center gap-1.5">
+                    <Mail className="h-3.5 w-3.5" />
+                    {authUser?.email}
+                  </p>
+                </div>
+              </div>
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                <StatCard icon={CalendarDays} label="Member Since" value={memberSince} />
+                <StatCard icon={Flame} label="Streak" value={streaks?.momentum?.current_streak ?? 0} />
+                <StatCard icon={HeartPulse} label="Health" value={balanceScore?.score != null ? `${balanceScore.score}%` : "—"} />
+                <StatCard icon={Shield} label="Recovery" value={streaks?.momentum?.recovery_tokens_current ?? 0} />
+              </div>
+            </CardContent>
+          </Card>
+        </Container>
+
+        {/* Sign Out */}
+        <Container delay={0.04}>
+          <Button
+            variant="destructive"
+            onClick={handleLogout}
+            className="w-full gap-2 rounded-xl"
+          >
+            <LogOut className="h-4 w-4" />
+            Sign out
+          </Button>
         </Container>
 
         {/* Personal Info */}
@@ -530,7 +613,7 @@ function ThemeToggle() {
           })}
         </div>
         <p className="mt-3 text-xs text-muted-foreground text-center">
-          {resolvedTheme === "dark" ? "🌙 Dark mode active" : "☀️ Light mode active"}
+          {resolvedTheme === "dark" ? "Dark mode active" : "Light mode active"}
         </p>
       </CardContent>
     </Card>
