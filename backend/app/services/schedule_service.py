@@ -1,7 +1,11 @@
 from datetime import date, datetime
 
 WEEKDAYS = ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"]
-BLOCKED_TYPES = {"school", "coaching", "break", "sleep", "commute"}
+BLOCKED_TYPES = {
+    "school", "coaching", "homework", "self_study", "project",
+    "robotics", "competition", "exercise", "sports", "music",
+    "art", "reading", "travel", "meal", "break", "sleep", "custom",
+}
 ENERGY_PEAK_MAP = {
     "morning": {"morning": "high", "afternoon": "medium", "evening": "low", "night": "low"},
     "afternoon": {"morning": "medium", "afternoon": "high", "evening": "medium", "night": "low"},

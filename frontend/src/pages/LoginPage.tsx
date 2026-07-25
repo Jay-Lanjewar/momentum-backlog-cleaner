@@ -4,19 +4,8 @@ import { Link } from "react-router-dom";
 import { Sparkles, Eye, EyeOff, Loader2, AlertCircle } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
+import { FadeIn } from "@/components/ui/fade-in";
 import { useAuth } from "@/hooks/useAuth";
-
-function Container({ children, delay = 0 }: { children: React.ReactNode; delay?: number }) {
-  return (
-    <motion.div
-      initial={{ opacity: 0, y: 16 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.4, delay, ease: "easeOut" }}
-    >
-      {children}
-    </motion.div>
-  );
-}
 
 export function LoginPage() {
   const { login, signInWithGoogle } = useAuth();
@@ -58,7 +47,7 @@ export function LoginPage() {
   return (
     <div className="flex min-h-screen flex-col items-center justify-center bg-background p-4">
       <div className="w-full max-w-sm space-y-6">
-        <Container delay={0}>
+        <FadeIn delay={0}>
           <div className="flex flex-col items-center gap-2 text-center">
             <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-primary shadow-sm">
               <Sparkles className="h-6 w-6 text-primary-foreground" />
@@ -66,9 +55,9 @@ export function LoginPage() {
             <h1 className="text-2xl font-semibold tracking-tight">Welcome back</h1>
             <p className="text-sm text-muted-foreground">Sign in to continue your momentum</p>
           </div>
-        </Container>
+        </FadeIn>
 
-        <Container delay={0.05}>
+        <FadeIn delay={0.05}>
           <form onSubmit={handleSubmit} className="space-y-4">
             <div className="space-y-1.5">
               <label htmlFor="email" className="text-xs font-medium text-muted-foreground">
@@ -103,6 +92,7 @@ export function LoginPage() {
                 <button
                   type="button"
                   onClick={() => setShowPassword(!showPassword)}
+                  aria-label={showPassword ? "Hide password" : "Show password"}
                   className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
                   tabIndex={-1}
                 >
@@ -127,9 +117,9 @@ export function LoginPage() {
               {loading ? "Signing in..." : "Sign in"}
             </Button>
           </form>
-        </Container>
+        </FadeIn>
 
-        <Container delay={0.1}>
+        <FadeIn delay={0.1}>
           <div className="relative">
             <div className="absolute inset-0 flex items-center">
               <div className="w-full border-t" />
@@ -138,9 +128,9 @@ export function LoginPage() {
               <span className="bg-background px-2 text-muted-foreground">or continue with</span>
             </div>
           </div>
-        </Container>
+        </FadeIn>
 
-        <Container delay={0.12}>
+        <FadeIn delay={0.12}>
           <Button
             type="button"
             variant="outline"
@@ -172,9 +162,9 @@ export function LoginPage() {
             )}
             {googleLoading ? "Connecting..." : "Google"}
           </Button>
-        </Container>
+        </FadeIn>
 
-        <Container delay={0.15}>
+        <FadeIn delay={0.15}>
           <div className="flex items-center justify-between text-sm">
             <Link
               to="/forgot-password"
@@ -189,7 +179,7 @@ export function LoginPage() {
               Create account
             </Link>
           </div>
-        </Container>
+        </FadeIn>
       </div>
     </div>
   );

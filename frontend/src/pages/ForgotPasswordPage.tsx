@@ -4,19 +4,8 @@ import { Link } from "react-router-dom";
 import { Sparkles, Loader2, AlertCircle, CheckCircle2, ArrowLeft } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
+import { FadeIn } from "@/components/ui/fade-in";
 import { useAuth } from "@/hooks/useAuth";
-
-function Container({ children, delay = 0 }: { children: React.ReactNode; delay?: number }) {
-  return (
-    <motion.div
-      initial={{ opacity: 0, y: 16 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.4, delay, ease: "easeOut" }}
-    >
-      {children}
-    </motion.div>
-  );
-}
 
 export function ForgotPasswordPage() {
   const { forgotPassword } = useAuth();
@@ -45,7 +34,7 @@ export function ForgotPasswordPage() {
   return (
     <div className="flex min-h-screen flex-col items-center justify-center bg-background p-4">
       <div className="w-full max-w-sm space-y-6">
-        <Container delay={0}>
+        <FadeIn delay={0}>
           <div className="flex flex-col items-center gap-2 text-center">
             <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-primary shadow-sm">
               <Sparkles className="h-6 w-6 text-primary-foreground" />
@@ -57,10 +46,10 @@ export function ForgotPasswordPage() {
                 : "Enter your email and we'll send you a reset link"}
             </p>
           </div>
-        </Container>
+        </FadeIn>
 
         {sent ? (
-          <Container delay={0.05}>
+          <FadeIn delay={0.05}>
             <div className="space-y-4">
               <motion.div
                 initial={{ scale: 0.9 }}
@@ -78,9 +67,9 @@ export function ForgotPasswordPage() {
                 </Button>
               </Link>
             </div>
-          </Container>
+          </FadeIn>
         ) : (
-          <Container delay={0.05}>
+          <FadeIn delay={0.05}>
             <form onSubmit={handleSubmit} className="space-y-4">
               <div className="space-y-1.5">
                 <label htmlFor="email" className="text-xs font-medium text-muted-foreground">
@@ -124,7 +113,7 @@ export function ForgotPasswordPage() {
                 </Link>
               </div>
             </form>
-          </Container>
+          </FadeIn>
         )}
       </div>
     </div>

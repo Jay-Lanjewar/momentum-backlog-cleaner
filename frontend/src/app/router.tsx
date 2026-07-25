@@ -1,17 +1,33 @@
+import { lazy, Suspense } from "react";
 import { createBrowserRouter } from "react-router-dom";
 
 import { ProtectedRoute, PublicOnlyRoute } from "@/components/auth/ProtectedRoute";
+import { Skeleton } from "@/components/ui/skeleton";
 import { TodayMissionPage } from "@/pages/TodayMissionPage";
-import { OnboardingPage } from "@/pages/OnboardingPage";
-import { FocusModePage } from "@/pages/FocusModePage";
-import { PlanPage } from "@/pages/PlanPage";
-import { BacklogPage } from "@/pages/BacklogPage";
-import { CoursesPage } from "@/pages/CoursesPage";
-import { ProfilePage } from "@/pages/ProfilePage";
-import { HealthPage } from "@/pages/HealthPage";
 import { LoginPage } from "@/pages/LoginPage";
 import { RegisterPage } from "@/pages/RegisterPage";
 import { ForgotPasswordPage } from "@/pages/ForgotPasswordPage";
+
+const OnboardingPage = lazy(() => import("@/pages/OnboardingPage").then((m) => ({ default: m.OnboardingPage })));
+const FocusModePage = lazy(() => import("@/pages/FocusModePage").then((m) => ({ default: m.FocusModePage })));
+const PlanPage = lazy(() => import("@/pages/PlanPage").then((m) => ({ default: m.PlanPage })));
+const BacklogPage = lazy(() => import("@/pages/BacklogPage").then((m) => ({ default: m.BacklogPage })));
+const CoursesPage = lazy(() => import("@/pages/CoursesPage").then((m) => ({ default: m.CoursesPage })));
+const SchedulePage = lazy(() => import("@/pages/SchedulePage").then((m) => ({ default: m.SchedulePage })));
+const ProfilePage = lazy(() => import("@/pages/ProfilePage").then((m) => ({ default: m.ProfilePage })));
+const HealthPage = lazy(() => import("@/pages/HealthPage").then((m) => ({ default: m.HealthPage })));
+
+function PageFallback() {
+  return (
+    <div className="flex min-h-screen items-center justify-center bg-background">
+      <div className="w-full max-w-sm space-y-4 p-8">
+        <Skeleton className="h-8 w-32 mx-auto" />
+        <Skeleton className="h-24 w-full rounded-xl" />
+        <Skeleton className="h-12 w-full rounded-xl" />
+      </div>
+    </div>
+  );
+}
 
 export const router = createBrowserRouter([
   // Auth pages (public-only)
@@ -39,7 +55,7 @@ export const router = createBrowserRouter([
       </PublicOnlyRoute>
     ),
   },
-  // Protected pages (each page wraps itself with <Layout>)
+  // Protected pages
   {
     path: "/",
     element: (
@@ -52,7 +68,9 @@ export const router = createBrowserRouter([
     path: "/onboarding",
     element: (
       <ProtectedRoute>
-        <OnboardingPage />
+        <Suspense fallback={<PageFallback />}>
+          <OnboardingPage />
+        </Suspense>
       </ProtectedRoute>
     ),
   },
@@ -60,7 +78,9 @@ export const router = createBrowserRouter([
     path: "/focus",
     element: (
       <ProtectedRoute>
-        <FocusModePage />
+        <Suspense fallback={<PageFallback />}>
+          <FocusModePage />
+        </Suspense>
       </ProtectedRoute>
     ),
   },
@@ -68,7 +88,9 @@ export const router = createBrowserRouter([
     path: "/plan",
     element: (
       <ProtectedRoute>
-        <PlanPage />
+        <Suspense fallback={<PageFallback />}>
+          <PlanPage />
+        </Suspense>
       </ProtectedRoute>
     ),
   },
@@ -76,7 +98,9 @@ export const router = createBrowserRouter([
     path: "/backlog",
     element: (
       <ProtectedRoute>
-        <BacklogPage />
+        <Suspense fallback={<PageFallback />}>
+          <BacklogPage />
+        </Suspense>
       </ProtectedRoute>
     ),
   },
@@ -84,7 +108,19 @@ export const router = createBrowserRouter([
     path: "/courses",
     element: (
       <ProtectedRoute>
-        <CoursesPage />
+        <Suspense fallback={<PageFallback />}>
+          <CoursesPage />
+        </Suspense>
+      </ProtectedRoute>
+    ),
+  },
+  {
+    path: "/schedule",
+    element: (
+      <ProtectedRoute>
+        <Suspense fallback={<PageFallback />}>
+          <SchedulePage />
+        </Suspense>
       </ProtectedRoute>
     ),
   },
@@ -92,7 +128,9 @@ export const router = createBrowserRouter([
     path: "/profile",
     element: (
       <ProtectedRoute>
-        <ProfilePage />
+        <Suspense fallback={<PageFallback />}>
+          <ProfilePage />
+        </Suspense>
       </ProtectedRoute>
     ),
   },
@@ -100,7 +138,9 @@ export const router = createBrowserRouter([
     path: "/health",
     element: (
       <ProtectedRoute>
-        <HealthPage />
+        <Suspense fallback={<PageFallback />}>
+          <HealthPage />
+        </Suspense>
       </ProtectedRoute>
     ),
   },

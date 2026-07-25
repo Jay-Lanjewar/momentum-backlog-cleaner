@@ -1,5 +1,4 @@
 import { useCallback, useEffect, useState } from "react"
-import { motion } from "framer-motion"
 import {
   User,
   BookOpen,
@@ -7,17 +6,11 @@ import {
   Zap,
   Clock,
   CalendarDays,
-  Plus,
-  Trash2,
   Save,
-  CheckCircle2,
-  AlertCircle,
   Loader2,
   Sun,
   Sunrise,
   Sunset,
-  ChevronDown,
-  Settings2,
   Monitor,
   Mail,
   LogOut,
@@ -25,49 +18,28 @@ import {
   HeartPulse,
   Shield,
 } from "lucide-react"
+import { toast } from "sonner"
 import { useNavigate } from "react-router-dom"
 
 import { Layout } from "@/components/layout"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Skeleton } from "@/components/ui/skeleton"
-import { useProfile, useWeeklySchedule, useSaveProfile, useSaveWeeklySchedule, useStreaks, useBalanceScore } from "@/services/hooks"
+import { FadeIn } from "@/components/ui/fade-in"
+import { useProfile, useSaveProfile, useStreaks, useBalanceScore } from "@/services/hooks"
 import { useTheme } from "@/lib/theme"
 import { useAuthStore } from "@/store/useAuthStore"
 import { useAuth } from "@/hooks/useAuth"
 import type {
-  WeeklyBlock,
-  DayName,
   ProfileUpdatePayload,
-  WeeklyScheduleUpdatePayload,
 } from "@/services/types"
 
-const DAYS: DayName[] = ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"]
-const DAY_LABELS: Record<DayName, string> = {
-  monday: "Monday", tuesday: "Tuesday", wednesday: "Wednesday", thursday: "Thursday",
-  friday: "Friday", saturday: "Saturday", sunday: "Sunday",
-}
-const BLOCK_TYPES = [
-  { value: "school" as const, label: "School", color: "bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300" },
-  { value: "coaching" as const, label: "Coaching", color: "bg-purple-100 text-purple-700 dark:bg-purple-900 dark:text-purple-300" },
-  { value: "study" as const, label: "Study", color: "bg-emerald-100 text-emerald-700 dark:bg-emerald-900 dark:text-emerald-300" },
-  { value: "break" as const, label: "Break", color: "bg-amber-100 text-amber-700 dark:bg-amber-900 dark:text-amber-300" },
-  { value: "commute" as const, label: "Commute", color: "bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300" },
-]
 const ENERGY_OPTIONS = [
   { value: "morning", label: "Morning", icon: Sunrise, desc: "Sharpest in the AM" },
   { value: "afternoon", label: "Afternoon", icon: Sun, desc: "Peak after lunch" },
   { value: "evening", label: "Evening", icon: Sunset, desc: "Best after 5 PM" },
   { value: "night", label: "Night", icon: Moon, desc: "Night owl mode" },
 ]
-
-function Container({ children, delay = 0 }: { children: React.ReactNode; delay?: number }) {
-  return (
-    <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.4, delay, ease: "easeOut" }}>
-      {children}
-    </motion.div>
-  )
-}
 
 function StatCard({ icon: Icon, label, value }: { icon: React.ElementType; label: string; value: React.ReactNode }) {
   return (
@@ -90,7 +62,7 @@ function TimeInput({ value, onChange, id }: { value: string; onChange: (v: strin
       type="time"
       value={value}
       onChange={(e) => onChange(e.target.value)}
-      className="flex h-9 w-28 rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm transition-colors file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
+      className="flex h-10 w-28 rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm transition-colors file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
     />
   )
 }
@@ -109,89 +81,8 @@ function NumberInput({ value, onChange, id, min, max, label }: { value: number |
           const v = e.target.value
           onChange(v ? parseInt(v, 10) : null)
         }}
-        className="flex h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
+        className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
       />
-    </div>
-  )
-}
-
-/* ---------- Weekly Schedule Editor ---------- */
-
-function BlockRow({ block, index, onChange, onRemove }: {
-  block: WeeklyBlock
-  index: number
-  onChange: (b: WeeklyBlock) => void
-  onRemove: () => void
-}) {
-  return (
-    <div className="flex items-center gap-2 group">
-      <select
-        value={block.type}
-        onChange={(e) => onChange({ ...block, type: e.target.value as WeeklyBlock["type"] })}
-        className="flex h-8 w-28 rounded-md border border-input bg-background px-2 text-xs shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
-      >
-        {BLOCK_TYPES.map((t) => (
-          <option key={t.value} value={t.value}>{t.label}</option>
-        ))}
-      </select>
-      <TimeInput id={`block-${index}-start`} value={block.start} onChange={(v) => onChange({ ...block, start: v })} />
-      <span className="text-xs text-muted-foreground">to</span>
-      <TimeInput id={`block-${index}-end`} value={block.end} onChange={(v) => onChange({ ...block, end: v })} />
-      <button
-        onClick={onRemove}
-        className="ml-auto flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground opacity-0 group-hover:opacity-100 hover:bg-destructive/10 hover:text-destructive transition-all"
-      >
-        <Trash2 className="h-3.5 w-3.5" />
-      </button>
-    </div>
-  )
-}
-
-function DaySchedule({ day, blocks, onChange }: {
-  day: DayName
-  blocks: WeeklyBlock[]
-  onChange: (blocks: WeeklyBlock[]) => void
-}) {
-  const addBlock = (type: WeeklyBlock["type"]) => {
-    onChange([...blocks, { type, start: "09:00", end: "10:00" }])
-  }
-
-  return (
-    <div className="rounded-lg border bg-card p-3">
-      <div className="flex items-center justify-between mb-2">
-        <span className="text-sm font-medium">{DAY_LABELS[day]}</span>
-        <div className="flex gap-1">
-          {["school", "coaching", "study"].map((type) => (
-            <button
-              key={type}
-              onClick={() => addBlock(type as WeeklyBlock["type"])}
-              className="flex h-6 items-center gap-1 rounded-md border border-dashed px-2 text-[10px] uppercase tracking-wider text-muted-foreground hover:border-solid hover:text-foreground transition-colors"
-            >
-              <Plus className="h-3 w-3" />
-              {type}
-            </button>
-          ))}
-        </div>
-      </div>
-      {blocks.length === 0 ? (
-        <p className="text-xs text-muted-foreground py-2 text-center">No blocks</p>
-      ) : (
-        <div className="space-y-1.5">
-          {blocks.map((block, i) => (
-            <BlockRow
-              key={i}
-              block={block}
-              index={i}
-              onChange={(b) => {
-                const next = [...blocks]
-                next[i] = b
-                onChange(next)
-              }}
-              onRemove={() => onChange(blocks.filter((_, j) => j !== i))}
-            />
-          ))}
-        </div>
-      )}
     </div>
   )
 }
@@ -204,9 +95,7 @@ export function ProfilePage() {
   const { logout } = useAuth()
 
   const { data: profile, isLoading: profileLoading } = useProfile()
-  const { data: schedule, isLoading: scheduleLoading } = useSchedule()
   const saveProfile = useSaveProfile()
-  const saveSchedule = useSaveWeeklySchedule()
 
   const { data: streaks } = useStreaks()
   const { data: balanceScore } = useBalanceScore()
@@ -219,13 +108,10 @@ export function ProfilePage() {
   const [studyEarliest, setStudyEarliest] = useState("06:00")
   const [studyLatest, setStudyLatest] = useState("22:00")
   const [dailyTarget, setDailyTarget] = useState<number | null>(120)
-  const [weeklyBlocks, setWeeklyBlocks] = useState<Partial<Record<DayName, WeeklyBlock[]>>>({})
 
-  const [showAdvanced, setShowAdvanced] = useState(false)
-  const [saveStatus, setSaveStatus] = useState<"idle" | "saving" | "success" | "error">("idle")
-  const [errorMsg, setErrorMsg] = useState("")
+  const [saving, setSaving] = useState(false)
 
-  const isLoading = profileLoading || scheduleLoading
+  const isLoading = profileLoading
 
   useEffect(() => {
     if (profile) {
@@ -244,15 +130,8 @@ export function ProfilePage() {
     }
   }, [profile])
 
-  useEffect(() => {
-    if (schedule?.schedule) {
-      setWeeklyBlocks(schedule.schedule)
-    }
-  }, [schedule])
-
   const handleSave = useCallback(async () => {
-    setSaveStatus("saving")
-    setErrorMsg("")
+    setSaving(true)
 
     try {
       const profilePayload: ProfileUpdatePayload = {
@@ -264,17 +143,13 @@ export function ProfilePage() {
         daily_target_minutes: dailyTarget,
       }
       await saveProfile.mutateAsync(profilePayload)
-
-      const schedulePayload: WeeklyScheduleUpdatePayload = { schedule: weeklyBlocks }
-      await saveSchedule.mutateAsync(schedulePayload)
-
-      setSaveStatus("success")
-      setTimeout(() => setSaveStatus("idle"), 3000)
+      toast.success("Profile saved")
     } catch {
-      setSaveStatus("error")
-      setErrorMsg("Failed to save. Please try again.")
+      toast.error("Failed to save profile")
+    } finally {
+      setSaving(false)
     }
-  }, [class_name, board, sleepStart, sleepEnd, energyPeak, studyEarliest, studyLatest, dailyTarget, weeklyBlocks, saveProfile, saveSchedule])
+  }, [class_name, board, sleepStart, sleepEnd, energyPeak, studyEarliest, studyLatest, dailyTarget, saveProfile])
 
   const memberSince = authUser?.created_at
     ? new Date(authUser.created_at).toLocaleDateString("en-US", { year: "numeric", month: "long" })
@@ -303,7 +178,7 @@ export function ProfilePage() {
   return (
     <Layout>
       <div className="space-y-6 pb-8">
-        <Container>
+        <FadeIn>
           <div className="flex items-center gap-3">
             <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary/10">
               <User className="h-5 w-5 text-primary" />
@@ -313,10 +188,10 @@ export function ProfilePage() {
               <p className="text-sm text-muted-foreground">Manage your account and study preferences</p>
             </div>
           </div>
-        </Container>
+        </FadeIn>
 
         {/* Account Info */}
-        <Container delay={0.03}>
+        <FadeIn delay={0.03}>
           <Card>
             <CardHeader className="pb-3">
               <CardTitle className="flex items-center gap-2 text-base">
@@ -331,7 +206,7 @@ export function ProfilePage() {
                 </div>
                 <div>
                   <p className="text-base font-semibold">{authUser?.name || "User"}</p>
-                  <p className="text-sm text-muted-foreground flex items-center gap-1.5">
+                   <p className="text-sm text-muted-foreground flex items-center gap-1.5 truncate">
                     <Mail className="h-3.5 w-3.5" />
                     {authUser?.email}
                   </p>
@@ -345,10 +220,10 @@ export function ProfilePage() {
               </div>
             </CardContent>
           </Card>
-        </Container>
+        </FadeIn>
 
         {/* Sign Out */}
-        <Container delay={0.04}>
+        <FadeIn delay={0.04}>
           <Button
             variant="destructive"
             onClick={handleLogout}
@@ -357,10 +232,10 @@ export function ProfilePage() {
             <LogOut className="h-4 w-4" />
             Sign out
           </Button>
-        </Container>
+        </FadeIn>
 
         {/* Personal Info */}
-        <Container delay={0.05}>
+        <FadeIn delay={0.05}>
           <Card>
             <CardHeader className="pb-3">
               <CardTitle className="flex items-center gap-2 text-base">
@@ -378,7 +253,7 @@ export function ProfilePage() {
                     onChange={(e) => setClassName(e.target.value)}
                     placeholder="e.g. Class 12"
                     maxLength={50}
-                    className="flex h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                    className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
                   />
                 </div>
                 <div className="space-y-1.5">
@@ -389,16 +264,16 @@ export function ProfilePage() {
                     onChange={(e) => setBoard(e.target.value)}
                     placeholder="e.g. CBSE, ICSE"
                     maxLength={50}
-                    className="flex h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                    className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
                   />
                 </div>
               </div>
             </CardContent>
           </Card>
-        </Container>
+        </FadeIn>
 
         {/* Sleep Schedule */}
-        <Container delay={0.1}>
+        <FadeIn delay={0.1}>
           <Card>
             <CardHeader className="pb-3">
               <CardTitle className="flex items-center gap-2 text-base">
@@ -419,10 +294,10 @@ export function ProfilePage() {
               </div>
             </CardContent>
           </Card>
-        </Container>
+        </FadeIn>
 
         {/* Energy Preference */}
-        <Container delay={0.15}>
+        <FadeIn delay={0.15}>
           <Card>
             <CardHeader className="pb-3">
               <CardTitle className="flex items-center gap-2 text-base">
@@ -456,15 +331,15 @@ export function ProfilePage() {
               </div>
             </CardContent>
           </Card>
-        </Container>
+        </FadeIn>
 
         {/* Theme */}
-        <Container delay={0.18}>
+        <FadeIn delay={0.18}>
           <ThemeToggle />
-        </Container>
+        </FadeIn>
 
         {/* Preferred Study Hours */}
-        <Container delay={0.2}>
+        <FadeIn delay={0.2}>
           <Card>
             <CardHeader className="pb-3">
               <CardTitle className="flex items-center gap-2 text-base">
@@ -488,74 +363,13 @@ export function ProfilePage() {
               </div>
             </CardContent>
           </Card>
-        </Container>
-
-        {/* Advanced Settings */}
-        <Container delay={0.25}>
-          <Card>
-            <button
-              onClick={() => setShowAdvanced(!showAdvanced)}
-              className="w-full"
-            >
-              <CardHeader className="pb-3">
-                <CardTitle className="flex items-center gap-2 text-base">
-                  <Settings2 className="h-4 w-4 text-muted-foreground" />
-                  Advanced Settings
-                  <ChevronDown className={`h-4 w-4 ml-auto text-muted-foreground transition-transform ${showAdvanced ? "rotate-180" : ""}`} />
-                </CardTitle>
-              </CardHeader>
-            </button>
-            {showAdvanced && (
-              <CardContent className="space-y-4 border-t pt-4">
-                <div className="space-y-3">
-                  <div className="flex items-center gap-2">
-                    <CalendarDays className="h-4 w-4 text-muted-foreground" />
-                    <span className="text-sm font-medium">Weekly Schedule</span>
-                  </div>
-                  <p className="text-xs text-muted-foreground">
-                    Add your regular weekly commitments. The planner uses this to find available study windows.
-                  </p>
-                  <div className="grid gap-3 sm:grid-cols-2">
-                    {DAYS.map((day) => (
-                      <DaySchedule
-                        key={day}
-                        day={day}
-                        blocks={weeklyBlocks[day] ?? []}
-                        onChange={(blocks) => setWeeklyBlocks({ ...weeklyBlocks, [day]: blocks })}
-                      />
-                    ))}
-                  </div>
-                </div>
-              </CardContent>
-            )}
-          </Card>
-        </Container>
+        </FadeIn>
 
         {/* Save Button */}
-        <Container delay={0.3}>
-          <div className="flex items-center justify-between rounded-xl border bg-card px-5 py-3">
-            <div className="flex items-center gap-2 text-sm text-muted-foreground">
-              {saveStatus === "success" && (
-                <span className="flex items-center gap-1.5 text-emerald-600">
-                  <CheckCircle2 className="h-4 w-4" />
-                  Saved successfully
-                </span>
-              )}
-              {saveStatus === "error" && (
-                <span className="flex items-center gap-1.5 text-red-500">
-                  <AlertCircle className="h-4 w-4" />
-                  {errorMsg}
-                </span>
-              )}
-              {saveStatus === "saving" && (
-                <span className="flex items-center gap-1.5 text-muted-foreground">
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                  Saving...
-                </span>
-              )}
-            </div>
-            <Button onClick={handleSave} disabled={saveStatus === "saving"} className="gap-1.5">
-              {saveStatus === "saving" ? (
+        <FadeIn delay={0.3}>
+          <div className="flex justify-end">
+            <Button onClick={handleSave} disabled={saving} className="gap-1.5">
+              {saving ? (
                 <Loader2 className="h-4 w-4 animate-spin" />
               ) : (
                 <Save className="h-4 w-4" />
@@ -563,7 +377,7 @@ export function ProfilePage() {
               Save Changes
             </Button>
           </div>
-        </Container>
+        </FadeIn>
       </div>
     </Layout>
   )
@@ -618,8 +432,4 @@ function ThemeToggle() {
       </CardContent>
     </Card>
   )
-}
-
-function useSchedule() {
-  return useWeeklySchedule()
 }

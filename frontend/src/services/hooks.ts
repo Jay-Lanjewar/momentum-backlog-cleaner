@@ -138,6 +138,7 @@ export function useSaveWeeklySchedule() {
       return result.data
     },
     onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["schedule"] })
       queryClient.invalidateQueries({ queryKey: ["backlog"] })
     },
   })

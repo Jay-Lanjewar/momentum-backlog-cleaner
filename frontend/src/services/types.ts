@@ -43,6 +43,7 @@ export interface PlanSession {
   start_time: string
   end_time: string
   reason: string
+  remaining_minutes: number
 }
 
 export interface GeneratedPlan {
@@ -82,10 +83,16 @@ export interface StudyWindow {
   latest_end: string
 }
 
+export type BlockType =
+  | "school" | "coaching" | "homework" | "self_study" | "project"
+  | "robotics" | "competition" | "exercise" | "sports" | "music"
+  | "art" | "reading" | "travel" | "meal" | "break" | "sleep" | "custom"
+
 export interface WeeklyBlock {
-  type: "school" | "coaching" | "study" | "break" | "commute"
+  type: BlockType
   start: string
   end: string
+  title?: string
 }
 
 export type DayName = "monday" | "tuesday" | "wednesday" | "thursday" | "friday" | "saturday" | "sunday"

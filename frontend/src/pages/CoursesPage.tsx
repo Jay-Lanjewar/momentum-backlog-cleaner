@@ -1,11 +1,13 @@
 import { useState } from "react"
 import { motion, AnimatePresence } from "framer-motion"
 import { BookOpen, Plus, Palette, Loader2, AlertCircle } from "lucide-react"
+import { toast } from "sonner"
 
 import { Layout } from "@/components/layout"
 import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Skeleton } from "@/components/ui/skeleton"
+import { FadeIn } from "@/components/ui/fade-in"
 import { useCourses, useCreateCourse, useUpdateCourse, useDeleteCourse } from "@/services/hooks"
 import type { CourseData, CourseCreatePayload, CourseUpdatePayload } from "@/services/types"
 
@@ -15,18 +17,6 @@ const PRESET_COLORS = [
   "#eab308", "#22c55e", "#14b8a6", "#06b6d4",
   "#3b82f6", "#6b7280",
 ]
-
-function Container({ children, delay = 0 }: { children: React.ReactNode; delay?: number }) {
-  return (
-    <motion.div
-      initial={{ opacity: 0, y: 16 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.4, delay, ease: "easeOut" }}
-    >
-      {children}
-    </motion.div>
-  )
-}
 
 /* ---------- Add/Edit Modal ---------- */
 
@@ -58,16 +48,19 @@ function CourseFormModal({
 
   return (
     <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center">
-      <div className="fixed inset-0 bg-black/40 backdrop-blur-sm" onClick={onClose} />
+      <div className="fixed inset-0 bg-black/40 backdrop-blur-sm" onClick={onClose} aria-hidden="true" />
       <motion.div
         initial={{ opacity: 0, y: 40 }}
         animate={{ opacity: 1, y: 0 }}
         exit={{ opacity: 0, y: 40 }}
         className="relative z-10 w-full sm:max-w-lg rounded-t-2xl sm:rounded-2xl bg-background border shadow-xl overflow-hidden"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="course-form-modal-title"
       >
         <form onSubmit={handleSubmit} className="space-y-5 p-6">
           <div className="flex items-center justify-between">
-            <h2 className="text-lg font-semibold">{initial ? "Edit Course" : "Add Course"}</h2>
+            <h2 id="course-form-modal-title" className="text-lg font-semibold">{initial ? "Edit Course" : "Add Course"}</h2>
             <button type="button" onClick={onClose} className="text-sm text-muted-foreground hover:text-foreground">Cancel</button>
           </div>
 
@@ -94,7 +87,7 @@ function CourseFormModal({
                   key={c}
                   type="button"
                   onClick={() => setColor(c)}
-                  className={`h-8 w-8 rounded-full border-2 transition-all ${
+                  className={`h-10 w-10 rounded-full border-2 transition-all ${
                     color === c ? "border-foreground scale-110" : "border-transparent hover:scale-105"
                   }`}
                   style={{ backgroundColor: c }}
@@ -133,17 +126,20 @@ function DeleteConfirm({ open, onClose, onConfirm, deleting, courseName }: {
   if (!open) return null
   return (
     <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center">
-      <div className="fixed inset-0 bg-black/40 backdrop-blur-sm" onClick={onClose} />
+      <div className="fixed inset-0 bg-black/40 backdrop-blur-sm" onClick={onClose} aria-hidden="true" />
       <motion.div
         initial={{ opacity: 0, scale: 0.95 }}
         animate={{ opacity: 1, scale: 1 }}
         exit={{ opacity: 0, scale: 0.95 }}
         className="relative z-10 w-full sm:max-w-sm rounded-t-2xl sm:rounded-2xl bg-background border shadow-xl p-6 text-center"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="course-delete-modal-title"
       >
         <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-red-100 dark:bg-red-900/30">
           <AlertCircle className="h-6 w-6 text-red-500" />
         </div>
-        <h3 className="text-lg font-semibold mb-1">Delete "{courseName}"?</h3>
+        <h3 id="course-delete-modal-title" className="text-lg font-semibold mb-1">Delete "{courseName}"?</h3>
         <p className="text-sm text-muted-foreground mb-6">This action cannot be undone. Any backlog items linked to this course will remain but will be uncategorized.</p>
         <div className="flex gap-3">
           <Button variant="outline" onClick={onClose} className="flex-1">Cancel</Button>
@@ -184,11 +180,11 @@ function CourseCard({
               <div className="h-5 w-5 rounded-full shrink-0" style={{ backgroundColor: course.color }} />
               <h3 className="text-sm font-medium truncate">{course.name}</h3>
             </div>
-            <div className="flex gap-1 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
-              <button onClick={onEdit} className="h-7 px-2 rounded-md text-xs text-muted-foreground hover:bg-muted hover:text-foreground transition-colors">
+            <div className="flex gap-1 shrink-0 md:opacity-0 md:group-hover:opacity-100 opacity-100 transition-opacity">
+              <button onClick={onEdit} className="h-9 px-2 rounded-md text-xs text-muted-foreground hover:bg-muted hover:text-foreground transition-colors">
                 Edit
               </button>
-              <button onClick={onDelete} className="h-7 px-2 rounded-md text-xs text-muted-foreground hover:bg-destructive/10 hover:text-destructive transition-colors">
+              <button onClick={onDelete} className="h-9 px-2 rounded-md text-xs text-muted-foreground hover:bg-destructive/10 hover:text-destructive transition-colors">
                 Delete
               </button>
             </div>
@@ -212,19 +208,30 @@ export function CoursesPage() {
   const deleteCourse = useDeleteCourse()
 
   const handleSave = async (data: CourseCreatePayload | CourseUpdatePayload) => {
-    if (editingCourse) {
-      await updateCourse.mutateAsync({ id: editingCourse.id, payload: data as CourseUpdatePayload })
-      setEditingCourse(null)
-    } else {
-      await createCourse.mutateAsync(data as CourseCreatePayload)
-      setShowForm(false)
+    try {
+      if (editingCourse) {
+        await updateCourse.mutateAsync({ id: editingCourse.id, payload: data as CourseUpdatePayload })
+        toast.success("Course updated")
+        setEditingCourse(null)
+      } else {
+        await createCourse.mutateAsync(data as CourseCreatePayload)
+        toast.success("Course added")
+        setShowForm(false)
+      }
+    } catch {
+      toast.error("Failed to save course")
     }
   }
 
   const handleDelete = async () => {
     if (!deletingCourse) return
-    await deleteCourse.mutateAsync(deletingCourse.id)
-    setDeletingCourse(null)
+    try {
+      await deleteCourse.mutateAsync(deletingCourse.id)
+      toast.success("Course deleted")
+      setDeletingCourse(null)
+    } catch {
+      toast.error("Failed to delete course")
+    }
   }
 
   const isSaving = createCourse.isPending || updateCourse.isPending
@@ -233,7 +240,7 @@ export function CoursesPage() {
     <Layout>
       <div className="space-y-5 pb-8">
         {/* Header */}
-        <Container>
+        <FadeIn>
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
               <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary/10">
@@ -249,7 +256,7 @@ export function CoursesPage() {
               Add Course
             </Button>
           </div>
-        </Container>
+        </FadeIn>
 
         {/* Course List */}
         {isLoading ? (
@@ -259,7 +266,7 @@ export function CoursesPage() {
             ))}
           </div>
         ) : courses.length === 0 ? (
-          <Container delay={0.1}>
+          <FadeIn delay={0.1}>
             <div className="flex flex-col items-center justify-center rounded-xl border border-dashed p-12 text-center">
               <BookOpen className="h-10 w-10 text-muted-foreground/30 mb-3" />
               <p className="text-sm font-medium text-muted-foreground mb-1">No courses yet</p>
@@ -274,18 +281,18 @@ export function CoursesPage() {
                 Add Course
               </Button>
             </div>
-          </Container>
+          </FadeIn>
         ) : (
           <AnimatePresence mode="popLayout">
             <div className="space-y-2">
               {courses.map((course, i) => (
-                <Container key={course.id} delay={0.05 * Math.min(i, 5)}>
+                <FadeIn key={course.id} delay={0.05 * Math.min(i, 5)}>
                   <CourseCard
                     course={course}
                     onEdit={() => setEditingCourse(course)}
                     onDelete={() => setDeletingCourse(course)}
                   />
-                </Container>
+                </FadeIn>
               ))}
             </div>
           </AnimatePresence>

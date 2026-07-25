@@ -4,10 +4,6 @@ import { Skeleton } from "@/components/ui/skeleton";
 
 export function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const { isAuthenticated, isLoading } = useAuthStore();
-  console.log("ProtectedRoute:", {
-  isLoading,
-  isAuthenticated,
-  });
   const location = useLocation();
 
   if (isLoading) {

@@ -86,7 +86,8 @@ async def generate_plan(
 
     if validated is None:
         logger.info("AI plan invalid or unavailable, using deterministic fallback")
-        fallback = generate_deterministic_plan(planning_data)
+        daily_capacity = profile.daily_target_minutes if profile and profile.daily_target_minutes else None
+        fallback = generate_deterministic_plan(planning_data, daily_capacity_minutes=daily_capacity)
         validated = fallback
 
     return PlanGenerateResponse(

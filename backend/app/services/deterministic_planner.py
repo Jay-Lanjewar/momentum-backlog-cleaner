@@ -10,24 +10,39 @@ def _format_time(minutes: int) -> str:
     return f"{minutes // 60:02d}:{minutes % 60:02d}"
 
 
-def generate_deterministic_plan(planning_data: dict) -> dict:
+def generate_deterministic_plan(
+    planning_data: dict,
+    daily_capacity_minutes: int | None = None,
+) -> dict:
     windows = planning_data.get("available_windows", [])
     backlog = planning_data.get("prioritized_backlog", [])
     backlog.sort(key=lambda x: (-x["score"], x["priority"]))
 
+    total_available = sum(w.get("total_minutes", 0) for w in windows)
+    capacity = daily_capacity_minutes if daily_capacity_minutes and daily_capacity_minutes > 0 else total_available
+
     occupied_intervals: list[list[int]] = []
     sessions = []
     overflow_ids = set()
+    time_used = 0
 
     for item in backlog:
+        if time_used >= capacity:
+            overflow_ids.add(str(item["id"]))
+            continue
+
         item_id = str(item["id"])
         est_minutes = item.get("estimated_minutes") or 60
         remaining = est_minutes
 
-        while remaining > 0:
-            slot = _find_best_slot(remaining, windows, occupied_intervals)
+        while remaining > 0 and time_used < capacity:
+            available_in_window = capacity - time_used
+            slot = _find_best_slot(
+                min(remaining, available_in_window),
+                windows,
+                occupied_intervals,
+            )
             if slot is None:
-                overflow_ids.add(item_id)
                 break
 
             window_start, window_end, slot_start, slot_end, used = slot
@@ -36,13 +51,15 @@ def generate_deterministic_plan(planning_data: dict) -> dict:
                 "start_time": _format_time(slot_start),
                 "end_time": _format_time(slot_end),
                 "reason": f"Work on {item['title']}",
+                "remaining_minutes": remaining - used,
             })
             occupied_intervals.append([slot_start, slot_end])
             occupied_intervals.sort(key=lambda x: x[0])
             remaining -= used
+            time_used += used
 
-            if remaining > 0:
-                overflow_ids.add(item_id)
+        if remaining > 0:
+            overflow_ids.add(item_id)
 
     pending_count = len(backlog)
     scheduled_count = len(set(s["backlog_item_id"] for s in sessions))

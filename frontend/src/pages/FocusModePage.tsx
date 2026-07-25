@@ -2,6 +2,7 @@ import { useState, useEffect, useRef, useMemo } from "react"
 import { motion, AnimatePresence } from "framer-motion"
 import { useNavigate, useLocation } from "react-router-dom"
 import { useQueryClient } from "@tanstack/react-query"
+import { toast } from "sonner"
 import {
   Play,
   Pause,
@@ -146,6 +147,7 @@ export function FocusModePage() {
     setPhase("complete")
     if (session) {
       updateBacklogItem.mutate({ id: session.backlog_item_id, payload: { status: "completed" } })
+      toast.success("Task marked complete")
     }
   }
 
@@ -165,8 +167,15 @@ export function FocusModePage() {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center p-4">
         <div className="text-center space-y-4">
-          <p className="text-sm text-muted-foreground">No study block found.</p>
-          <Button onClick={handleBack} variant="outline" size="sm">Back to Today</Button>
+          <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-primary/10 mx-auto">
+            <Clock className="h-7 w-7 text-primary" />
+          </div>
+          <p className="text-sm font-medium">No study block found</p>
+          <p className="text-xs text-muted-foreground">Go back to Today's Mission to start a study session.</p>
+          <Button onClick={handleBack} variant="outline" size="sm" className="gap-2">
+            Back to Today
+            <ArrowRight className="h-4 w-4" />
+          </Button>
         </div>
       </div>
     )
@@ -209,7 +218,7 @@ export function FocusModePage() {
               <div className="flex items-start gap-3">
                 <CheckCircle2 className="h-5 w-5 text-emerald-500 shrink-0 mt-0.5" />
                 <div>
-                  <p className="text-sm font-medium">{session.reason}</p>
+                  <p className="text-sm font-medium break-words">{session.reason}</p>
                   <p className="text-xs text-muted-foreground">
                     {formatTimeDisplay(session.start_time)} – {formatTimeDisplay(session.end_time)}
                   </p>
@@ -233,7 +242,7 @@ export function FocusModePage() {
                   <Clock className="h-5 w-5 text-amber-500 shrink-0 mt-0.5" />
                   <div>
                     <p className="text-sm font-medium">{otherSessions.length} topic{otherSessions.length !== 1 ? "s" : ""} still to go</p>
-                    <p className="text-xs text-muted-foreground">
+                    <p className="text-xs text-muted-foreground line-clamp-2 break-words">
                       {otherSessions.slice(0, 3).map((s) => s.reason).join(" · ")}
                       {otherSessions.length > 3 && ` · +${otherSessions.length - 3} more`}
                     </p>
@@ -264,7 +273,7 @@ export function FocusModePage() {
           className="space-y-1"
         >
           <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Study Mode</p>
-          <h1 className="text-lg font-semibold leading-snug">{session.reason}</h1>
+          <h1 className="text-lg font-semibold leading-snug break-words">{session.reason}</h1>
           {profile?.name && (
             <p className="text-sm text-muted-foreground">Let's finish this one, {profile.name}.</p>
           )}
@@ -366,7 +375,7 @@ export function FocusModePage() {
         {/* Reset */}
         <button
           onClick={handleReset}
-          className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors mx-auto"
+          className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors mx-auto py-2 px-3 -mx-3"
         >
           <RotateCcw className="h-3.5 w-3.5" />
           Restart timer

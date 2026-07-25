@@ -2,6 +2,7 @@ import { useState, useCallback, useRef, useMemo } from "react"
 import { motion, AnimatePresence } from "framer-motion"
 import { useNavigate } from "react-router-dom"
 import { useQueryClient } from "@tanstack/react-query"
+import { toast } from "sonner"
 import {
   Sparkles,
   ArrowRight,
@@ -142,7 +143,7 @@ function Step1Name({ onNext, onBack }: { onNext: (name: string) => void; onBack:
       </div>
 
       <div className="flex items-center justify-between">
-        <button onClick={onBack} className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors">
+        <button onClick={onBack} className="flex items-center gap-1.5 py-2 px-1 text-sm text-muted-foreground hover:text-foreground transition-colors">
           <ArrowLeft className="h-4 w-4" />
           Back
         </button>
@@ -302,7 +303,7 @@ function Step2EntryMethod({
       />
 
       <div className="flex items-center justify-between">
-        <button onClick={onBack} className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors">
+        <button onClick={onBack} className="flex items-center gap-1.5 py-2 px-1 text-sm text-muted-foreground hover:text-foreground transition-colors">
           <ArrowLeft className="h-4 w-4" />
           Back
         </button>
@@ -390,7 +391,7 @@ function Step3Exams({
                 <span className="font-medium">{exam.title}</span>
                 {exam.date && <span className="text-muted-foreground">· {new Date(exam.date).toLocaleDateString("en-US", { month: "short", day: "numeric" })}</span>}
               </div>
-              <button onClick={() => removeExam(i)} className="text-muted-foreground hover:text-destructive transition-colors">
+              <button onClick={() => removeExam(i)} className="h-9 w-9 flex items-center justify-center rounded-lg text-muted-foreground hover:text-destructive transition-colors">
                 <X className="h-4 w-4" />
               </button>
             </div>
@@ -399,7 +400,7 @@ function Step3Exams({
       )}
 
       <div className="flex justify-between items-center">
-        <button onClick={onBack} className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors">
+        <button onClick={onBack} className="flex items-center gap-1.5 py-2 px-1 text-sm text-muted-foreground hover:text-foreground transition-colors">
           <ArrowLeft className="h-4 w-4" />
           Back
         </button>
@@ -485,7 +486,7 @@ function Step4Weekday({
       )}
 
       <div className="flex justify-between items-center">
-        <button onClick={onBack} className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors">
+        <button onClick={onBack} className="flex items-center gap-1.5 py-2 px-1 text-sm text-muted-foreground hover:text-foreground transition-colors">
           <ArrowLeft className="h-4 w-4" />
           Back
         </button>
@@ -601,7 +602,6 @@ export function OnboardingPage() {
       const parsed = parseBacklogInput(raw)
       const courseIdMap = new Map<string, string>()
 
-      console.log("Creating courses...")
       for (let i = 0; i < parsed.length; i++) {
         const result = await api.post<any>("/api/v1/courses", {
           name: parsed[i].subject,
@@ -611,7 +611,6 @@ export function OnboardingPage() {
         courseIdMap.set(parsed[i].subject, result.data.id)
       }
 
-      console.log("Creating backlog items...")
       let itemCount = 0
       for (const group of parsed) {
         const courseId = courseIdMap.get(group.subject)
@@ -627,7 +626,6 @@ export function OnboardingPage() {
         }
       }
 
-      console.log("Creating goals...")
       for (const exam of examsRef.current) {
         await api.post<any>("/api/v1/goals", {
           title: exam.title,
@@ -664,7 +662,6 @@ export function OnboardingPage() {
         daily_target_minutes: 120,
         class_name: "Student",
       }
-      console.log("Creating profile...")
       await api.put<StudentProfileData>("/api/v1/profile", profilePayload)
 
       const weekdays = ["monday", "tuesday", "wednesday", "thursday", "friday"]
@@ -685,8 +682,7 @@ export function OnboardingPage() {
       setStep(6)
     } catch (error) {
       clearInterval(loadingTimer.current)
-      console.error(error)
-      alert(error instanceof Error ? error.message : String(error))
+      toast.error(error instanceof Error ? error.message : "Something went wrong")
     }
   }, [navigate])
 

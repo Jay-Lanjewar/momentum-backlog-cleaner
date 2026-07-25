@@ -1,5 +1,4 @@
 import { create } from "zustand";
-console.log("Creating Auth Store");
 import type { AuthMeResponse } from "@/services/types";
 
 interface AuthState {

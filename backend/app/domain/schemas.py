@@ -209,6 +209,7 @@ class PlanSession(BaseModel):
     start_time: str
     end_time: str
     reason: str
+    remaining_minutes: int = 0
 
 
 class GeneratedPlan(BaseModel):

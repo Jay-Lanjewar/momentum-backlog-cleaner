@@ -1,23 +1,25 @@
-import { Sparkles, Layers, User, LogOut } from "lucide-react"
+import { Sparkles, Layers, CalendarDays, User, LogOut } from "lucide-react"
 import { NavLink, useNavigate } from "react-router-dom"
 import { cn } from "@/lib/cn"
 import { useAuthStore } from "@/store/useAuthStore"
 import { useAuth } from "@/hooks/useAuth"
 
 const navItems = [
-  { to: "/", icon: Sparkles, label: "Today" },
+  { to: "/", icon: Sparkles, label: "Today's Mission" },
   { to: "/backlog", icon: Layers, label: "Pending Work" },
+  { to: "/schedule", icon: CalendarDays, label: "Schedule" },
   { to: "/profile", icon: User, label: "Profile" },
 ]
 
 export function MobileNav() {
   return (
-    <nav className="fixed inset-x-0 bottom-0 z-50 border-t bg-background/80 backdrop-blur-lg supports-[backdrop-filter]:bg-background/60 md:hidden">
+    <nav aria-label="Main navigation" className="fixed inset-x-0 bottom-0 z-50 border-t bg-background/80 backdrop-blur-lg supports-[backdrop-filter]:bg-background/60 md:hidden">
       <div className="flex items-center justify-around h-16 px-2">
         {navItems.map(({ to, icon: Icon, label }) => (
           <NavLink
             key={to}
             to={to}
+            aria-label={label}
             className={({ isActive }) =>
               cn(
                 "flex flex-col items-center justify-center gap-0.5 rounded-lg px-3 py-1.5 text-xs font-medium transition-colors",
@@ -47,7 +49,7 @@ export function Sidebar() {
         <Sparkles className="h-5 w-5 text-primary" />
         <span className="font-semibold tracking-tight">Momentum</span>
       </div>
-      <nav className="flex-1 space-y-1 p-4">
+      <nav aria-label="Main navigation" className="flex-1 space-y-1 p-4">
         {navItems.map(({ to, icon: Icon, label }) => (
           <NavLink
             key={to}
@@ -78,6 +80,7 @@ export function Sidebar() {
         </div>
         <button
           onClick={() => { logout(); navigate("/login"); }}
+          aria-label="Sign out"
           className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-xs font-medium text-muted-foreground hover:bg-destructive/10 hover:text-destructive transition-colors"
         >
           <LogOut className="h-3.5 w-3.5" />
@@ -92,7 +95,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
   return (
     <div className="min-h-screen bg-background md:pl-56 lg:pl-64 pb-16 md:pb-0">
       <Sidebar />
-      <main className="mx-auto max-w-3xl px-4 py-6 sm:px-6 lg:px-8">{children}</main>
+      <main aria-label="Main content" className="mx-auto max-w-3xl px-4 py-6 sm:px-6 lg:px-8">{children}</main>
       <MobileNav />
     </div>
   )
