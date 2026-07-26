@@ -14,6 +14,8 @@ from app.repositories.friend_repo import (
     UserRepository,
 )
 from app.services.activity_service import ActivityService
+from app.services.friend_service import FriendService
+from app.domain.schemas import FriendRequestCreate
 from tests.conftest import TEST_USER_ID, TEST_USER_ID_2
 
 
@@ -573,3 +575,143 @@ async def test_search_no_exclusions_returns_all(
 
     assert len(result) == 1
     assert result[0]["display_name"] == "Alice"
+
+
+# ─── FriendService.send_request eager loading tests ───
+
+
+@pytest.fixture
+def friend_service(
+    mock_db: AsyncMock,
+    friend_request_repo: FriendRequestRepository,
+    friendship_repo: FriendshipRepository,
+    user_repo: UserRepository,
+) -> FriendService:
+    service = FriendService.__new__(FriendService)
+    service.db = mock_db
+    service.request_repo = friend_request_repo
+    friend_request_repo.find_any_between = AsyncMock(return_value=None)
+    friend_request_repo.create = AsyncMock()
+    friend_request_repo.get_with_users = AsyncMock()
+    service.friendship_repo = friendship_repo
+    friendship_repo.find_between = AsyncMock(return_value=None)
+    service.user_repo = user_repo
+    user_repo.get = AsyncMock()
+    return service
+
+
+def _make_friend_request(request_id=None, sender_id=None, receiver_id=None, status="pending", sender=None, receiver=None):
+    return SimpleNamespace(
+        id=request_id or uuid.uuid4(),
+        sender_id=sender_id or uuid.uuid4(),
+        receiver_id=receiver_id or uuid.uuid4(),
+        status=status,
+        created_at=datetime.now(timezone.utc),
+        sender=sender or _make_user(),
+        receiver=receiver or _make_user(),
+    )
+
+
+@pytest.mark.asyncio
+async def test_send_request_calls_get_with_users(
+    friend_service: FriendService,
+    friend_request_repo: AsyncMock,
+    friendship_repo: AsyncMock,
+    user_repo: AsyncMock,
+):
+    receiver_id = uuid.uuid4()
+    user_repo.get.return_value = _make_user(user_id=receiver_id)
+    friend_request_repo.find_any_between.return_value = None
+    friendship_repo.find_between.return_value = None
+
+    created = _make_friend_request(sender_id=TEST_USER_ID, receiver_id=receiver_id)
+    friend_request_repo.create.return_value = created
+
+    hydrated = _make_friend_request(sender_id=TEST_USER_ID, receiver_id=receiver_id)
+    friend_request_repo.get_with_users.return_value = hydrated
+
+    result = await friend_service.send_request(TEST_USER_ID, FriendRequestCreate(receiver_id=receiver_id))
+
+    friend_request_repo.get_with_users.assert_awaited_once_with(created.id)
+    assert result.sender is not None
+    assert result.receiver is not None
+
+
+@pytest.mark.asyncio
+async def test_send_request_returns_hydrated_object(
+    friend_service: FriendService,
+    friend_request_repo: AsyncMock,
+    friendship_repo: AsyncMock,
+    user_repo: AsyncMock,
+):
+    receiver_id = uuid.uuid4()
+    sender = _make_user(user_id=TEST_USER_ID, name="Alice")
+    receiver = _make_user(user_id=receiver_id, name="Bob")
+
+    user_repo.get.return_value = receiver
+    friend_request_repo.find_any_between.return_value = None
+    friendship_repo.find_between.return_value = None
+
+    created = _make_friend_request(sender_id=TEST_USER_ID, receiver_id=receiver_id)
+    friend_request_repo.create.return_value = created
+
+    hydrated = _make_friend_request(
+        sender_id=TEST_USER_ID, receiver_id=receiver_id, sender=sender, receiver=receiver
+    )
+    friend_request_repo.get_with_users.return_value = hydrated
+
+    result = await friend_service.send_request(TEST_USER_ID, FriendRequestCreate(receiver_id=receiver_id))
+
+    assert result.sender.name == "Alice"
+    assert result.receiver.name == "Bob"
+    assert result.sender_id == TEST_USER_ID
+    assert result.receiver_id == receiver_id
+
+
+@pytest.mark.asyncio
+async def test_send_request_no_missing_greenlet_risk(
+    friend_service: FriendService,
+    friend_request_repo: AsyncMock,
+    friendship_repo: AsyncMock,
+    user_repo: AsyncMock,
+):
+    receiver_id = uuid.uuid4()
+    user_repo.get.return_value = _make_user(user_id=receiver_id)
+    friend_request_repo.find_any_between.return_value = None
+    friendship_repo.find_between.return_value = None
+
+    created = _make_friend_request(sender_id=TEST_USER_ID, receiver_id=receiver_id)
+    friend_request_repo.create.return_value = created
+
+    hydrated = _make_friend_request(sender_id=TEST_USER_ID, receiver_id=receiver_id)
+    friend_request_repo.get_with_users.return_value = hydrated
+
+    result = await friend_service.send_request(TEST_USER_ID, FriendRequestCreate(receiver_id=receiver_id))
+
+    assert hasattr(result, "sender")
+    assert hasattr(result, "receiver")
+    assert result.sender is not None
+    assert result.receiver is not None
+
+
+@pytest.mark.asyncio
+async def test_send_request_validates_no_self_request(
+    friend_service: FriendService,
+):
+    with pytest.raises(ValueError, match="yourself"):
+        await friend_service.send_request(TEST_USER_ID, FriendRequestCreate(receiver_id=TEST_USER_ID))
+
+
+@pytest.mark.asyncio
+async def test_send_request_validates_receiver_exists(
+    friend_service: FriendService,
+    user_repo: AsyncMock,
+    friend_request_repo: AsyncMock,
+    friendship_repo: AsyncMock,
+):
+    user_repo.get.return_value = None
+    friend_request_repo.find_any_between.return_value = None
+    friendship_repo.find_between.return_value = None
+
+    with pytest.raises(ValueError, match="not found"):
+        await friend_service.send_request(TEST_USER_ID, FriendRequestCreate(receiver_id=uuid.uuid4()))

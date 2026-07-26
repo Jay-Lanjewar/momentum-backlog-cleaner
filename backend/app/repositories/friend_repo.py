@@ -13,6 +13,19 @@ class FriendRequestRepository(BaseRepository[FriendRequest]):
     def __init__(self, db: AsyncSession):
         super().__init__(FriendRequest, db)
 
+    async def get_with_users(self, request_id: uuid.UUID) -> FriendRequest | None:
+        from sqlalchemy import select
+
+        result = await self.db.execute(
+            select(FriendRequest)
+            .options(
+                selectinload(FriendRequest.sender),
+                selectinload(FriendRequest.receiver),
+            )
+            .where(FriendRequest.id == request_id)
+        )
+        return result.scalar_one_or_none()
+
     async def find_pending_between(
         self, sender_id: uuid.UUID, receiver_id: uuid.UUID
     ) -> FriendRequest | None:

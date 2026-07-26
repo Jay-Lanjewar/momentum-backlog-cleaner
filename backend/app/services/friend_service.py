@@ -30,7 +30,8 @@ class FriendService:
         if already_friends is not None:
             raise ValueError("Already friends with this user")
 
-        return await self.request_repo.create(sender_id=sender_id, receiver_id=data.receiver_id, status="pending")
+        created = await self.request_repo.create(sender_id=sender_id, receiver_id=data.receiver_id, status="pending")
+        return await self.request_repo.get_with_users(created.id)
 
     async def accept_request(self, user_id: uuid.UUID, request_id: uuid.UUID) -> Friendship:
         req = await self.request_repo.get(request_id)
