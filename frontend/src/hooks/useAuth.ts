@@ -36,24 +36,31 @@ export function useAuth() {
   }, []);
 
   const login = useCallback(async (email: string, password: string) => {
-    const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
+    const result = await api.post<AuthResponse>("/api/v1/auth/login", {
       email,
       password,
     });
 
-    if (authError) {
-      const msg = authError.message.toLowerCase();
-      if (msg.includes("invalid login credentials")) {
+    if (result.error) {
+      const msg = result.error.toLowerCase();
+      if (msg.includes("invalid login credentials") || msg.includes("incorrect email or password")) {
         throw new Error("Incorrect email or password");
       }
       if (msg.includes("email not confirmed")) {
         throw new Error("Please confirm your email before logging in");
       }
-      throw new Error(authError.message);
+      throw new Error(result.error);
+    }
+
+    if (result.data?.access_token) {
+      await supabase.auth.setSession({
+        access_token: result.data.access_token,
+        refresh_token: "",
+      });
     }
 
     await fetchUser();
-    return authData.session;
+    return result.data;
   }, []);
 
   const logout = useCallback(async () => {
