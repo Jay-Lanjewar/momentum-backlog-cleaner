@@ -46,8 +46,9 @@ class AuthService:
         uid = uuid.UUID(supabase_user_id)
         result = await self.db.execute(select(User).where(User.id == uid))
         user = result.scalar_one_or_none()
-
+        logger.info("Existing user: %s", user)
         if user is None:
+            logger.info("Creating new user with id: %s", uid)
             user = User(
                 id=uid,
                 email=email,
@@ -60,7 +61,7 @@ class AuthService:
             streak = StudyStreak(user_id=uid)
             self.db.add(streak)
             await self.db.flush()
-
+            logger.info("Successfully flushed new user and streak to database")
         return user
 
     async def signup(self, email: str, password: str, name: str | None = None) -> dict:
