@@ -16,6 +16,8 @@ const CoursesPage = lazy(() => import("@/pages/CoursesPage").then((m) => ({ defa
 const SchedulePage = lazy(() => import("@/pages/SchedulePage").then((m) => ({ default: m.SchedulePage })));
 const ProfilePage = lazy(() => import("@/pages/ProfilePage").then((m) => ({ default: m.ProfilePage })));
 const HealthPage = lazy(() => import("@/pages/HealthPage").then((m) => ({ default: m.HealthPage })));
+const FriendsPage = lazy(() => import("@/pages/FriendsPage").then((m) => ({ default: m.FriendsPage })));
+const FeedPage = lazy(() => import("@/pages/FeedPage").then((m) => ({ default: m.FeedPage })));
 
 function PageFallback() {
   return (
@@ -140,6 +142,26 @@ export const router = createBrowserRouter([
       <ProtectedRoute>
         <Suspense fallback={<PageFallback />}>
           <HealthPage />
+        </Suspense>
+      </ProtectedRoute>
+    ),
+  },
+  {
+    path: "/friends",
+    element: (
+      <ProtectedRoute>
+        <Suspense fallback={<PageFallback />}>
+          <FriendsPage />
+        </Suspense>
+      </ProtectedRoute>
+    ),
+  },
+  {
+    path: "/feed",
+    element: (
+      <ProtectedRoute>
+        <Suspense fallback={<PageFallback />}>
+          <FeedPage />
         </Suspense>
       </ProtectedRoute>
     ),

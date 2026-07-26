@@ -272,3 +272,63 @@ export interface AuthMeResponse extends UserData {
   profile: StudentProfileData | null
   streak: StudyStreakData | null
 }
+
+// ─── Social Types ───
+
+export interface FriendUser {
+  id: string
+  name: string | null
+  avatar_url: string | null
+  created_at: string
+}
+
+export interface FriendRequest {
+  id: string
+  sender_id: string
+  receiver_id: string
+  status: string
+  created_at: string
+  sender: FriendUser
+  receiver: FriendUser
+}
+
+export interface FriendRequestPayload {
+  receiver_id: string
+}
+
+export interface FriendshipData {
+  friend: FriendUser
+  since: string
+}
+
+export interface UserSearchResult {
+  id: string
+  display_name: string | null
+  avatar_url: string | null
+}
+
+export interface FriendRequestsResponse {
+  received: FriendRequest[]
+  sent: FriendRequest[]
+}
+
+export interface ActivityFeedUser {
+  id: string
+  name: string | null
+  avatar_url: string | null
+  created_at: string
+}
+
+export interface ActivityFeedItem {
+  activity: {
+    id: string
+    user_id: string
+    type: string
+    extra: Record<string, unknown> | null
+    visibility: string
+    occurred_at: string
+    created_at: string
+    user: ActivityFeedUser
+  }
+  friend: ActivityFeedUser
+}

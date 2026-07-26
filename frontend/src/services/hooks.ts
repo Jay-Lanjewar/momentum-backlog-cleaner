@@ -20,6 +20,12 @@ import type {
   StreakUpdatePayload,
   BalanceScoreData,
   InsightData,
+  FriendRequest,
+  FriendRequestPayload,
+  FriendshipData,
+  UserSearchResult,
+  FriendRequestsResponse,
+  ActivityFeedItem,
 } from "@/services/types"
 
 export function usePlanningPreview() {
@@ -317,5 +323,116 @@ export function useDeleteBacklogItem() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["backlog"] })
     },
+  })
+}
+
+// ─── Social Hooks ───
+
+export function useSearchUsers(query: string) {
+  return useQuery({
+    queryKey: ["users", "search", query],
+    queryFn: async () => {
+      const result = await api.get<UserSearchResult[]>(`/api/v1/users/search?q=${encodeURIComponent(query)}`)
+      if (result.error) throw new Error(result.error)
+      return result.data
+    },
+    enabled: query.trim().length >= 2,
+    staleTime: 1000 * 30,
+  })
+}
+
+export function useFriends() {
+  return useQuery({
+    queryKey: ["friends"],
+    queryFn: async () => {
+      const result = await api.get<FriendshipData[]>("/api/v1/friends")
+      if (result.error) throw new Error(result.error)
+      return result.data
+    },
+    staleTime: 1000 * 60,
+  })
+}
+
+export function useFriendRequests() {
+  return useQuery({
+    queryKey: ["friends", "requests"],
+    queryFn: async () => {
+      const result = await api.get<FriendRequestsResponse>("/api/v1/friends/requests")
+      if (result.error) throw new Error(result.error)
+      return result.data
+    },
+    staleTime: 1000 * 30,
+  })
+}
+
+export function useSendFriendRequest() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: async (payload: FriendRequestPayload) => {
+      const result = await api.post<FriendRequest>("/api/v1/friends/request", payload)
+      if (result.error) throw new Error(result.error)
+      return result.data
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["friends", "requests"] })
+      queryClient.invalidateQueries({ queryKey: ["users", "search"] })
+    },
+  })
+}
+
+export function useAcceptFriendRequest() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: async (requestId: string) => {
+      const result = await api.post<FriendshipData>(`/api/v1/friends/request/${requestId}/accept`, {})
+      if (result.error) throw new Error(result.error)
+      return result.data
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["friends"] })
+      queryClient.invalidateQueries({ queryKey: ["friends", "requests"] })
+    },
+  })
+}
+
+export function useRejectFriendRequest() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: async (requestId: string) => {
+      const result = await api.post<null>(`/api/v1/friends/request/${requestId}/reject`, {})
+      if (result.error) throw new Error(result.error)
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["friends", "requests"] })
+    },
+  })
+}
+
+export function useRemoveFriend() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: async (friendId: string) => {
+      const result = await api.delete<null>(`/api/v1/friends/${friendId}`)
+      if (result.error) throw new Error(result.error)
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["friends"] })
+    },
+  })
+}
+
+// ─── Activity Feed Hook ───
+
+export function useActivityFeed(limit: number = 20, offset: number = 0) {
+  return useQuery({
+    queryKey: ["activities", "feed", limit, offset],
+    queryFn: async () => {
+      const result = await api.get<ActivityFeedItem[]>(
+        `/api/v1/activities/feed?limit=${limit}&offset=${offset}`
+      )
+      if (result.error) throw new Error(result.error)
+      return result.data
+    },
+    staleTime: 1000 * 60,
   })
 }

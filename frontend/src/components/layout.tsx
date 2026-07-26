@@ -1,4 +1,4 @@
-import { Sparkles, Layers, CalendarDays, User, LogOut } from "lucide-react"
+import { Sparkles, Layers, CalendarDays, User, Users, Activity, LogOut } from "lucide-react"
 import { NavLink, useNavigate } from "react-router-dom"
 import { cn } from "@/lib/cn"
 import { useAuthStore } from "@/store/useAuthStore"
@@ -8,6 +8,8 @@ const navItems = [
   { to: "/", icon: Sparkles, label: "Today's Mission" },
   { to: "/backlog", icon: Layers, label: "Pending Work" },
   { to: "/schedule", icon: CalendarDays, label: "Schedule" },
+  { to: "/feed", icon: Activity, label: "Feed" },
+  { to: "/friends", icon: Users, label: "Friends" },
   { to: "/profile", icon: User, label: "Profile" },
 ]
 

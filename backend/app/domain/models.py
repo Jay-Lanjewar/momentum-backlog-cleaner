@@ -1,11 +1,27 @@
+import enum
 import uuid
 from datetime import date, datetime
 
-from sqlalchemy import DateTime, ForeignKey, Integer, String, Text, func
+from sqlalchemy import DateTime, ForeignKey, Integer, String, Text, UniqueConstraint, func
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.database import Base
+
+
+class ActivityType(str, enum.Enum):
+    TASK_COMPLETED = "TASK_COMPLETED"
+    MISSION_COMPLETED = "MISSION_COMPLETED"
+    COURSE_CREATED = "COURSE_CREATED"
+    STREAK_INCREASED = "STREAK_INCREASED"
+    GOAL_ACHIEVED = "GOAL_ACHIEVED"
+    PROFILE_COMPLETED = "PROFILE_COMPLETED"
+
+
+class ActivityVisibility(str, enum.Enum):
+    PRIVATE = "PRIVATE"
+    FRIENDS = "FRIENDS"
+    PUBLIC = "PUBLIC"
 
 
 class User(Base):
@@ -42,6 +58,17 @@ class User(Base):
     )
     subject_streaks: Mapped[list["SubjectStreak"]] = relationship(
         "SubjectStreak", back_populates="user", cascade="all, delete-orphan"
+    )
+    sent_friend_requests: Mapped[list["FriendRequest"]] = relationship(
+        "FriendRequest", foreign_keys="FriendRequest.sender_id",
+        back_populates="sender", cascade="all, delete-orphan"
+    )
+    received_friend_requests: Mapped[list["FriendRequest"]] = relationship(
+        "FriendRequest", foreign_keys="FriendRequest.receiver_id",
+        back_populates="receiver", cascade="all, delete-orphan"
+    )
+    activities: Mapped[list["Activity"]] = relationship(
+        "Activity", back_populates="user"
     )
 
 
@@ -225,3 +252,74 @@ class SubjectStreak(Base):
 
     user: Mapped["User"] = relationship("User")
     course: Mapped["Course"] = relationship("Course")
+
+
+class FriendRequest(Base):
+    __tablename__ = "friend_requests"
+    __table_args__ = (
+        UniqueConstraint("sender_id", "receiver_id", name="uq_friend_request_pair"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    sender_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False
+    )
+    receiver_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False
+    )
+    status: Mapped[str] = mapped_column(String(20), nullable=False, default="pending")
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
+
+    sender: Mapped["User"] = relationship("User", foreign_keys=[sender_id], back_populates="sent_friend_requests")
+    receiver: Mapped["User"] = relationship("User", foreign_keys=[receiver_id], back_populates="received_friend_requests")
+
+
+class Friendship(Base):
+    __tablename__ = "friendships"
+    __table_args__ = (
+        UniqueConstraint("user1_id", "user2_id", name="uq_friendship_pair"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    user1_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False
+    )
+    user2_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+
+    user1: Mapped["User"] = relationship("User", foreign_keys=[user1_id])
+    user2: Mapped["User"] = relationship("User", foreign_keys=[user2_id])
+
+
+class Activity(Base):
+    __tablename__ = "activities"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False
+    )
+    type: Mapped[str] = mapped_column(String(50), nullable=False)
+    extra: Mapped[dict | None] = mapped_column("metadata", JSONB, nullable=True, default=dict)
+    visibility: Mapped[str] = mapped_column(
+        String(20), nullable=False, default=ActivityVisibility.FRIENDS.value
+    )
+    occurred_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+    deleted_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True, default=None
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+
+    user: Mapped["User"] = relationship("User", back_populates="activities")

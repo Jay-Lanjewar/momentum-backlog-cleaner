@@ -5,10 +5,11 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.dependencies import get_current_user, get_db
-from app.domain.models import User
+from app.domain.models import ActivityType, User
 from app.domain.schemas import GoalCreate, GoalResponse, GoalUpdate
 from app.repositories.goal_repo import GoalRepository
 from app.services.goal_service import GoalService
+from app.services.activity_service import ActivityService
 
 logger = logging.getLogger(__name__)
 
@@ -60,10 +61,15 @@ async def update_goal(
     data: GoalUpdate,
     user: User = Depends(get_current_user),
     service: GoalService = Depends(get_goal_service),
+    db: AsyncSession = Depends(get_db),
 ):
+    old = await service.get(goal_id, user.id)
     goal = await service.update(goal_id, user.id, data)
     if goal is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Goal not found")
+    if old and old.status != "achieved" and data.status == "achieved":
+        act = ActivityService(db)
+        await act.record(user.id, ActivityType.GOAL_ACHIEVED, {"goal_id": str(goal.id), "title": goal.title})
     return goal
 
 

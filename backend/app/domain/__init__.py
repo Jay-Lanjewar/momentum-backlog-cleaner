@@ -1,6 +1,11 @@
 from app.domain.models import (
+    Activity,
+    ActivityType,
+    ActivityVisibility,
     BacklogItem,
     Course,
+    FriendRequest,
+    Friendship,
     Goal,
     StudentProfile,
     StudyStreak,
@@ -10,8 +15,13 @@ from app.domain.models import (
 )
 
 __all__ = [
+    "Activity",
+    "ActivityType",
+    "ActivityVisibility",
     "BacklogItem",
     "Course",
+    "FriendRequest",
+    "Friendship",
     "Goal",
     "StudentProfile",
     "StudyStreak",

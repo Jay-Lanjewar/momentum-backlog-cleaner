@@ -5,10 +5,11 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.dependencies import get_current_user, get_db
-from app.domain.models import User
+from app.domain.models import ActivityType, User
 from app.domain.schemas import CourseCreate, CourseResponse, CourseUpdate
 from app.repositories.course_repo import CourseRepository
 from app.services.course_service import CourseService
+from app.services.activity_service import ActivityService
 
 logger = logging.getLogger(__name__)
 
@@ -25,8 +26,11 @@ async def create_course(
     data: CourseCreate,
     user: User = Depends(get_current_user),
     service: CourseService = Depends(get_course_service),
+    db: AsyncSession = Depends(get_db),
 ):
     course = await service.create(user.id, data)
+    act = ActivityService(db)
+    await act.record(user.id, ActivityType.COURSE_CREATED, {"course_id": str(course.id), "name": course.name})
     return course
 
 

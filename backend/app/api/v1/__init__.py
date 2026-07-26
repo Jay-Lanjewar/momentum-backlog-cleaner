@@ -10,6 +10,9 @@ from app.api.v1.planning import router as planning_router
 from app.api.v1.plans import router as plans_router
 from app.api.v1.streaks import router as streaks_router
 from app.api.v1.motivation import router as motivation_router
+from app.api.v1.friends import router as friends_router
+from app.api.v1.activities import router as activities_router
+from app.api.v1.users import router as users_router
 
 router = APIRouter(prefix="/api/v1")
 router.include_router(auth_router)
@@ -22,3 +25,6 @@ router.include_router(planning_router)
 router.include_router(plans_router)
 router.include_router(streaks_router)
 router.include_router(motivation_router)
+router.include_router(friends_router)
+router.include_router(activities_router)
+router.include_router(users_router)

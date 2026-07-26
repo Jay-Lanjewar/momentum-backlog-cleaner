@@ -3,6 +3,8 @@ from datetime import date, datetime
 
 from pydantic import BaseModel, Field, model_validator
 
+from app.domain.models import ActivityType, ActivityVisibility
+
 
 class UserResponse(BaseModel):
     id: uuid.UUID
@@ -302,5 +304,70 @@ class AuthMeResponse(BaseModel):
     updated_at: datetime
     profile: StudentProfileResponse | None = None
     streak: StudyStreakResponse | None = None
+
+    model_config = {"from_attributes": True}
+
+
+# ─── Friend Schemas ───
+
+class FriendRequestCreate(BaseModel):
+    receiver_id: uuid.UUID
+
+
+class FriendUserResponse(BaseModel):
+    id: uuid.UUID
+    name: str | None = None
+    avatar_url: str | None = None
+    created_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
+class FriendRequestResponse(BaseModel):
+    id: uuid.UUID
+    sender_id: uuid.UUID
+    receiver_id: uuid.UUID
+    status: str
+    created_at: datetime
+    sender: FriendUserResponse
+    receiver: FriendUserResponse
+
+    model_config = {"from_attributes": True}
+
+
+class FriendshipResponse(BaseModel):
+    friend: FriendUserResponse
+    since: datetime
+
+
+# ─── Activity Schemas ───
+
+class ActivityResponse(BaseModel):
+    id: uuid.UUID
+    user_id: uuid.UUID
+    type: ActivityType
+    extra: dict | None = None
+    visibility: ActivityVisibility = ActivityVisibility.FRIENDS
+    occurred_at: datetime
+    created_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
+class ActivityWithUser(ActivityResponse):
+    user: FriendUserResponse
+
+
+class ActivityFeedItem(BaseModel):
+    activity: ActivityWithUser
+    friend: FriendUserResponse
+
+
+# ─── User Search Schemas ───
+
+class UserSearchResult(BaseModel):
+    id: uuid.UUID
+    display_name: str | None = None
+    avatar_url: str | None = None
 
     model_config = {"from_attributes": True}

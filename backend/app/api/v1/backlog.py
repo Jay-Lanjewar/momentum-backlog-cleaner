@@ -5,11 +5,12 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.dependencies import get_current_user, get_db
-from app.domain.models import User
+from app.domain.models import ActivityType, User
 from app.domain.schemas import BacklogItemCreate, BacklogItemResponse, BacklogItemUpdate
 from app.repositories.backlog_repo import BacklogItemRepository
 from app.repositories.course_repo import CourseRepository
 from app.services.backlog_service import BacklogService
+from app.services.activity_service import ActivityService
 
 logger = logging.getLogger(__name__)
 
@@ -67,13 +68,18 @@ async def update_backlog_item(
     data: BacklogItemUpdate,
     user: User = Depends(get_current_user),
     service: BacklogService = Depends(get_backlog_service),
+    db: AsyncSession = Depends(get_db),
 ):
+    old = await service.get(item_id, user.id)
     try:
         item = await service.update(item_id, user.id, data)
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
     if item is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Backlog item not found")
+    if old and old.status != "completed" and item.status == "completed":
+        act = ActivityService(db)
+        await act.record(user.id, ActivityType.TASK_COMPLETED, {"item_id": str(item.id), "title": item.title})
     return item
 
 
