@@ -27,7 +27,13 @@ async def get_current_user(
 ) -> User:
     try:
         payload = verify_token(credentials.credentials)
+
+        logger.info("JWT payload: %s", payload)
+
         user_id = uuid.UUID(payload.get("sub", ""))
+
+        logger.info("Looking up user with id: %s", user_id)
+
     except Exception as e:
         logger.warning("Token verification failed: %s", e)
         raise HTTPException(
@@ -37,6 +43,8 @@ async def get_current_user(
 
     result = await db.execute(select(User).where(User.id == user_id))
     user = result.scalar_one_or_none()
+
+    logger.info("Database returned user: %s", user)
 
     if user is None:
         raise HTTPException(
