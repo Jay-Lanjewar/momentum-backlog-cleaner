@@ -18,6 +18,7 @@ print("DATABASE URL:", settings.DATABASE_URL)
 print("ENGINE:", engine)
 print("ENGINE URL:", engine.url)
 print("ENGINE KW:", engine.sync_engine.url)
+print("ENGINE CONNECT ARGS:", engine.sync_engine.dialect.connect_args)
 
 async_session_factory = async_sessionmaker(
     engine,
