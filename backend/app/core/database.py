@@ -19,6 +19,8 @@ print("ENGINE:", engine)
 print("ENGINE URL:", engine.url)
 print("ENGINE KW:", engine.sync_engine.url)
 print("ENGINE CONNECT ARGS:", engine.sync_engine.dialect.connect_args)
+args, kwargs = engine.sync_engine.dialect.create_connect_args(engine.url)
+print("DBAPI CONNECT KWARGS:", kwargs)
 
 async_session_factory = async_sessionmaker(
     engine,
