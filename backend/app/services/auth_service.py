@@ -29,6 +29,8 @@ class AuthService:
             "Content-Type": "application/json",
         }
 
+        logger.info("Calling Supabase Auth URL: %s", url)
+        
         async with httpx.AsyncClient() as client:
             if method == "POST":
                 resp = await client.post(url, json=body, headers=headers)
