@@ -14,6 +14,10 @@ engine = create_async_engine(
         "prepared_statement_name_func": lambda: f"__asyncpg_{uuid4()}__",
     },
 )   
+print("DATABASE URL:", settings.DATABASE_URL)
+print("ENGINE:", engine)
+print("ENGINE URL:", engine.url)
+print("ENGINE KW:", engine.sync_engine.url)
 
 async_session_factory = async_sessionmaker(
     engine,
