@@ -3,14 +3,14 @@ from sqlalchemy.orm import DeclarativeBase
 from collections.abc import AsyncGenerator
 from app.core.config import settings
 
+from sqlalchemy.pool import NullPool
+
 engine = create_async_engine(
     settings.DATABASE_URL,
     echo=settings.DEBUG,
-    pool_size=5,
-    max_overflow=10,
-    pool_pre_ping=True,
+    poolclass=NullPool,
     connect_args={
-        "statement_cache_size": 0,
+        "prepared_statement_cache_size": 0,
     },
 )
 
