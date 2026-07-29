@@ -20,6 +20,8 @@ print("ENGINE URL:", engine.url)
 print("ENGINE KW:", engine.sync_engine.url)
 args, kwargs = engine.sync_engine.dialect.create_connect_args(engine.url)
 print("DBAPI CONNECT KWARGS:", kwargs)
+import sqlalchemy
+print("SQLAlchemy version:", sqlalchemy.__version__)
 
 async_session_factory = async_sessionmaker(
     engine,
