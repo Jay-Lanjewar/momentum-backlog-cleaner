@@ -46,8 +46,26 @@ class AuthService:
 
     async def _get_or_create_user(self, supabase_user_id: str, email: str, name: str | None = None) -> User:
         uid = uuid.UUID(supabase_user_id)
-        result = await self.db.execute(select(User).where(User.id == uid))
+        result = await self.db.execute(
+            select(User).where(User.id == uid)
+        )
         user = result.scalar_one_or_none()
+
+        if user is None:
+            result = await self.db.execute(
+                select(User).where(User.email == email)
+            )
+            user = result.scalar_one_or_none()
+
+            if user is not None:
+                logger.info(
+                    "Existing user found by email. Updating id from %s to %s",
+                    user.id,
+                    uid,
+                )
+                user.id = uid
+                await self.db.flush()
+                
         logger.info("Existing user: %s", user)
         if user is None:
             logger.info("Creating new user with id: %s", uid)
