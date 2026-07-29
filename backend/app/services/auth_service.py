@@ -52,23 +52,6 @@ class AuthService:
         user = result.scalar_one_or_none()
 
         if user is None:
-            result = await self.db.execute(
-                select(User).where(User.email == email)
-            )
-            user = result.scalar_one_or_none()
-
-            if user is not None:
-                logger.info(
-                    "Existing user found by email. Updating id from %s to %s",
-                    user.id,
-                    uid,
-                )
-                user.id = uid
-                await self.db.flush()
-                
-        logger.info("Existing user: %s", user)
-        if user is None:
-            logger.info("Creating new user with id: %s", uid)
             user = User(
                 id=uid,
                 email=email,
@@ -77,17 +60,27 @@ class AuthService:
             self.db.add(user)
             await self.db.flush()
             await self.db.refresh(user)
+        elif name and user.name != name:
+            user.name = name
+            await self.db.flush()
 
+        result = await self.db.execute(
+            select(StudyStreak).where(StudyStreak.user_id == uid)
+        )
+        if result.scalar_one_or_none() is None:
             streak = StudyStreak(user_id=uid)
             self.db.add(streak)
             await self.db.flush()
-            logger.info("Successfully flushed new user and streak to database")
+
         return user
 
     async def signup(self, email: str, password: str, name: str | None = None) -> dict:
+        body = {"email": email, "password": password}
+        if name:
+            body["data"] = {"name": name}
         result = await self._supabase_request(
             "signup",
-            {"email": email, "password": password},
+            body,
             use_service_key=True,
         )
 

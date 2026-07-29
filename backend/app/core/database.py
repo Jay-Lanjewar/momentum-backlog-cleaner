@@ -13,15 +13,7 @@ engine = create_async_engine(
         "prepared_statement_cache_size": 0,
         "prepared_statement_name_func": lambda: f"__asyncpg_{uuid4()}__",
     },
-)   
-print("DATABASE URL:", settings.DATABASE_URL)
-print("ENGINE:", engine)
-print("ENGINE URL:", engine.url)
-print("ENGINE KW:", engine.sync_engine.url)
-args, kwargs = engine.sync_engine.dialect.create_connect_args(engine.url)
-print("DBAPI CONNECT KWARGS:", kwargs)
-import sqlalchemy
-print("SQLAlchemy version:", sqlalchemy.__version__)
+)
 
 async_session_factory = async_sessionmaker(
     engine,
