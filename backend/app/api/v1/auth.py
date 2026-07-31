@@ -36,6 +36,7 @@ async def signup(
         user = result["user"]
         return AuthResponse(
             access_token=result["access_token"],
+            refresh_token=result["refresh_token"],
             user=UserResponse.model_validate(user),
         )
     except ValueError as e:
@@ -55,6 +56,7 @@ async def login(
         user = result["user"]
         return AuthResponse(
             access_token=result["access_token"],
+            refresh_token=result["refresh_token"],
             user=UserResponse.model_validate(user),
         )
     except ValueError as e:

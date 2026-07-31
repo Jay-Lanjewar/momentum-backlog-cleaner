@@ -101,6 +101,7 @@ class AuthService:
         return {
             "user": user,
             "access_token": token_result.get("access_token", ""),
+            "refresh_token": token_result.get("refresh_token", ""),
         }
 
     async def login(self, email: str, password: str) -> dict:
@@ -118,6 +119,7 @@ class AuthService:
         return {
             "user": user,
             "access_token": result.get("access_token", ""),
+            "refresh_token": result.get("refresh_token", ""),
         }
 
     async def forgot_password(self, email: str) -> None:

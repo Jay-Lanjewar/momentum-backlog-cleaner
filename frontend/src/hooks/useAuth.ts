@@ -25,10 +25,14 @@ export function useAuth() {
     }
 
     if (result.data?.access_token) {
-      await supabase.auth.setSession({
+      const { error } = await supabase.auth.setSession({
         access_token: result.data.access_token,
-        refresh_token: "",
+        refresh_token: result.data.refresh_token,
       });
+
+      if (error) {
+        throw error;
+      }
     }
 
     await fetchUser();
@@ -53,10 +57,14 @@ export function useAuth() {
     }
 
     if (result.data?.access_token) {
-      await supabase.auth.setSession({
+      const { error } = await supabase.auth.setSession({
         access_token: result.data.access_token,
-        refresh_token: "",
+        refresh_token: result.data.refresh_token,
       });
+
+      if (error) {
+        throw error;
+      }
     }
 
     await fetchUser();
