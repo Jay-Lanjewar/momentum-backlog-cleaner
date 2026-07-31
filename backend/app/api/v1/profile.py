@@ -1,5 +1,6 @@
 import uuid
 import logging
+import time
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -36,9 +37,16 @@ async def get_profile(
     user: User = Depends(get_current_user),
     service: StudentProfileService = Depends(get_profile_service),
 ):
+    t0 = time.perf_counter()
+    logger.info("[PROFILE GET] handler entered (auth + session complete)")
+
     profile = await service.get(user.id)
+    logger.info("[PROFILE GET] service.get took %.2f ms", (time.perf_counter() - t0) * 1000)
+
     if profile is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Profile not found")
+
+    logger.info("[PROFILE GET] handler done in %.2f ms", (time.perf_counter() - t0) * 1000)
     return profile
 
 

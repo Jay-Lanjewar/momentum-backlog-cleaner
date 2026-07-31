@@ -1,4 +1,5 @@
 import logging
+import time
 
 from contextlib import asynccontextmanager
 
@@ -10,6 +11,8 @@ from app.core.config import settings
 from app.core.logging import setup_logging
 
 logger = logging.getLogger(__name__)
+
+TIMED_PATH_PREFIX = "/api/v1/profile"
 
 
 @asynccontextmanager
@@ -25,6 +28,23 @@ app = FastAPI(
     version=settings.VERSION,
     lifespan=lifespan,
 )
+
+
+@app.middleware("http")
+async def log_request_duration(request, call_next):
+    if not request.url.path.startswith(TIMED_PATH_PREFIX):
+        return await call_next(request)
+    t0 = time.perf_counter()
+    logger.info("[HTTP] request enters %s %s", request.method, request.url.path)
+    response = await call_next(request)
+    logger.info(
+        "[HTTP] total request duration %.2f ms (%s %s)",
+        (time.perf_counter() - t0) * 1000,
+        request.method,
+        request.url.path,
+    )
+    return response
+
 
 app.add_middleware(
     CORSMiddleware,

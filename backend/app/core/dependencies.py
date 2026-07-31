@@ -1,5 +1,6 @@
 import uuid
 import logging
+import time
 from collections.abc import AsyncGenerator
 
 from fastapi import Depends, HTTPException, status
@@ -25,6 +26,7 @@ async def get_current_user(
     credentials: HTTPAuthorizationCredentials = Depends(security_scheme),
     db: AsyncSession = Depends(get_db),
 ) -> User:
+    t0 = time.perf_counter()
     try:
         payload = verify_token(credentials.credentials)
 
@@ -44,6 +46,7 @@ async def get_current_user(
     result = await db.execute(select(User).where(User.id == user_id))
     user = result.scalar_one_or_none()
 
+    logger.info("[AUTH] completed in %.2f ms", (time.perf_counter() - t0) * 1000)
     logger.info("Database returned user: %s", user)
 
     if user is None:
