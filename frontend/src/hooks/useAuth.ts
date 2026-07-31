@@ -57,10 +57,35 @@ export function useAuth() {
     }
 
     if (result.data?.access_token) {
-      const { error } = await supabase.auth.setSession({
+      const redacted = (token: string | undefined) =>
+        token ? `${token.slice(0, 10)}...` : "<missing>";
+      console.log("Login backend response:", {
+        ...result.data,
+        access_token: redacted(result.data.access_token),
+        refresh_token: redacted(result.data.refresh_token),
+      });
+
+      const setSessionResult = await supabase.auth.setSession({
         access_token: result.data.access_token,
         refresh_token: result.data.refresh_token,
       });
+      const { error } = setSessionResult;
+
+      console.log("setSession result:", {
+        errorIsNull: error === null,
+        sessionExists: !!setSessionResult.data.session,
+        userExists: !!setSessionResult.data.user,
+        raw: setSessionResult,
+      });
+
+      const session = await supabase.auth.getSession();
+      console.log("Session after setSession:", session);
+
+      console.log("localStorage keys:", Object.keys(localStorage));
+      console.log(
+        "Supabase auth key:",
+        Object.keys(localStorage).find(k => k.includes("auth-token"))
+      );
 
       if (error) {
         throw error;
