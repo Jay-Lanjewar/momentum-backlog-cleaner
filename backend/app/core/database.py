@@ -21,12 +21,12 @@ engine = create_async_engine(
 )
 
 
-@event.listens_for(engine, "before_cursor_execute")
+@event.listens_for(engine.sync_engine, "before_cursor_execute")
 def _log_query_start(conn, cursor, statement, parameters, context, executemany):
     context._query_started = time.perf_counter()
 
 
-@event.listens_for(engine, "after_cursor_execute")
+@event.listens_for(engine.sync_engine, "after_cursor_execute")
 def _log_query_duration(conn, cursor, statement, parameters, context, executemany):
     elapsed_ms = (time.perf_counter() - context._query_started) * 1000
     sql = " ".join(statement.split())[:200]
