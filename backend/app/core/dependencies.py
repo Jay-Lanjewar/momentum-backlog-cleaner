@@ -47,8 +47,17 @@ async def get_current_user(
 
     t_db = time.perf_counter()
     logger.info("[AUTH] before database lookup")
+
+    t_exec = time.perf_counter()
+    logger.info("[AUTH] before session.execute")
     result = await db.execute(select(User).where(User.id == user_id))
+    logger.info("[AUTH] session.execute returned in %.2f ms", (time.perf_counter() - t_exec) * 1000)
+
+    t_proc = time.perf_counter()
+    logger.info("[AUTH] before result processing")
     user = result.scalar_one_or_none()
+    logger.info("[AUTH] result processing in %.2f ms", (time.perf_counter() - t_proc) * 1000)
+
     logger.info("[AUTH] after database lookup in %.2f ms", (time.perf_counter() - t_db) * 1000)
 
     logger.info("[AUTH] completed in %.2f ms", (time.perf_counter() - t0) * 1000)
