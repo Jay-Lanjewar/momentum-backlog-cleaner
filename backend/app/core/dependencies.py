@@ -27,8 +27,10 @@ async def get_current_user(
     db: AsyncSession = Depends(get_db),
 ) -> User:
     t0 = time.perf_counter()
+    logger.info("[AUTH] before JWT decode")
     try:
         payload = verify_token(credentials.credentials)
+        logger.info("[AUTH] after JWT decode in %.2f ms", (time.perf_counter() - t0) * 1000)
 
         logger.info("JWT payload: %s", payload)
 
@@ -43,10 +45,14 @@ async def get_current_user(
             detail="Invalid or expired authentication token",
         )
 
+    t_db = time.perf_counter()
+    logger.info("[AUTH] before database lookup")
     result = await db.execute(select(User).where(User.id == user_id))
     user = result.scalar_one_or_none()
+    logger.info("[AUTH] after database lookup in %.2f ms", (time.perf_counter() - t_db) * 1000)
 
     logger.info("[AUTH] completed in %.2f ms", (time.perf_counter() - t0) * 1000)
+    logger.info("[AUTH] before returning the user")
     logger.info("Database returned user: %s", user)
 
     if user is None:
