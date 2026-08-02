@@ -110,6 +110,8 @@ export interface UserData {
   email: string
   name: string | null
   avatar_url: string | null
+  created_at: string
+  updated_at: string
 }
 
 export interface ProfileUpdatePayload {
@@ -218,6 +220,15 @@ export interface InsightData {
   title: string
   message: string
   priority: number
+}
+
+export interface DashboardData {
+  profile: StudentProfileData | null
+  streaks: StreakAllData
+  balance: BalanceScoreData
+  insight: InsightData
+  planning: PlanningPreview
+  plan: PlanGenerateResponse
 }
 
 export interface GoalData {

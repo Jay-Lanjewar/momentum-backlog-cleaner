@@ -20,6 +20,7 @@ import type {
   StreakUpdatePayload,
   BalanceScoreData,
   InsightData,
+  DashboardData,
   FriendRequest,
   FriendRequestPayload,
   FriendshipData,
@@ -255,6 +256,19 @@ export function useInsight() {
     },
     staleTime: 1000 * 60 * 5,
     refetchOnWindowFocus: false,
+  })
+}
+
+export function useDashboard() {
+  return useQuery({
+    queryKey: ["dashboard"],
+    queryFn: async () => {
+      const result = await api.get<DashboardData>("/api/v1/dashboard")
+      if (result.error) throw new Error(result.error)
+      return result.data
+    },
+    staleTime: 1000 * 60,
+    retry: 1,
   })
 }
 

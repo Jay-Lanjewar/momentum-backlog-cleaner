@@ -32,19 +32,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     restoreSession();
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      async (event, session) => {
+      (event) => {
         if (cancelled) return;
-
-        if (event === "SIGNED_IN" || event === "TOKEN_REFRESHED") {
-          if (session?.access_token) {
-            const result = await api.get<AuthMeResponse>("/api/v1/auth/me");
-            if (cancelled) return;
-            if (result.data && !result.error) {
-              useAuthStore.getState().setUser(result.data);
-              return;
-            }
-          }
-        }
 
         if (event === "SIGNED_OUT") {
           useAuthStore.getState().setUser(null);

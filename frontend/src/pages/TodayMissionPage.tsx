@@ -12,13 +12,8 @@ import { toast } from "sonner"
 import { useNavigate } from "react-router-dom"
 
 import {
-  usePlanningPreview,
-  useGeneratePlan,
-  useProfile,
+  useDashboard,
   useUpdateBacklogItem,
-  useStreaks,
-  useBalanceScore,
-  useInsight,
 } from "@/services/hooks"
 import { Layout } from "@/components/layout"
 import { Button } from "@/components/ui/button"
@@ -571,40 +566,37 @@ function TodayInsight({
 
 export function TodayMissionPage() {
   const navigate = useNavigate()
-  const { data: profile, isLoading: profileLoading } = useProfile()
   const {
-    data: preview,
-    isLoading: previewLoading,
-    error: previewError,
-    refetch: refetchPreview,
-  } = usePlanningPreview()
-  const {
-    data: planData,
-    isLoading: planLoading,
-    error: planError,
-    refetch: refetchPlan,
-  } = useGeneratePlan()
-  const { data: streaks } = useStreaks()
-  const { data: balanceScore } = useBalanceScore()
-  const { data: insight } = useInsight()
+    data: dashboard,
+    isLoading,
+    error,
+    refetch,
+  } = useDashboard()
   const updateItem = useUpdateBacklogItem()
+
+  const profile = dashboard?.profile
+  const preview = dashboard?.planning
+  const planData = dashboard?.plan
+  const streaks = dashboard?.streaks
+  const balanceScore = dashboard?.balance
+  const insight = dashboard?.insight
 
   const onboarded = localStorage.getItem("momentum_onboarded") === "true"
 
   useEffect(() => {
-    if (profileLoading) return
-    if (onboarded && profile) return
-    if (!onboarded || !profile?.class_name) {
+    if (!onboarded) {
+      navigate("/onboarding", { replace: true })
+      return
+    }
+    if (isLoading) return
+    if (!dashboard?.profile?.class_name) {
       navigate("/onboarding", { replace: true })
     }
-  }, [profileLoading, onboarded, profile, navigate])
+  }, [onboarded, isLoading, dashboard, navigate])
 
   const [completedSessionIds, setCompletedSessionIds] = useState<Set<string>>(
     new Set()
   )
-
-  const isLoading = profileLoading || previewLoading || planLoading
-  const hasError = previewError || planError
 
   const backlogItemMap = useMemo(() => {
     if (!preview?.prioritized_backlog)
@@ -659,8 +651,7 @@ export function TodayMissionPage() {
   )
 
   const handleRefresh = () => {
-    refetchPreview()
-    refetchPlan()
+    refetch()
   }
 
   const handleStartStudy = () => {
@@ -692,7 +683,7 @@ export function TodayMissionPage() {
     )
   }
 
-  if (hasError) {
+  if (error) {
     return (
       <Layout>
         <div className="max-w-lg mx-auto space-y-5">

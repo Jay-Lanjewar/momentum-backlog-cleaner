@@ -23,7 +23,6 @@ import {
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
 import { api } from "@/services/api"
-import type { StudentProfileData } from "@/services/types"
 
 const COURSE_COLORS = [
   "#6366f1", "#8b5cf6", "#a855f7", "#d946ef",
@@ -600,40 +599,24 @@ export function OnboardingPage() {
     try {
       const raw = manualTextRef.current
       const parsed = parseBacklogInput(raw)
-      const courseIdMap = new Map<string, string>()
 
-      for (let i = 0; i < parsed.length; i++) {
-        const result = await api.post<any>("/api/v1/courses", {
-          name: parsed[i].subject,
-          color: COURSE_COLORS[i % COURSE_COLORS.length],
-        })
-        if (result.error) throw new Error(result.error)
-        courseIdMap.set(parsed[i].subject, result.data.id)
-      }
+      const courses = parsed.map((group, i) => ({
+        name: group.subject,
+        color: COURSE_COLORS[i % COURSE_COLORS.length],
+      }))
 
-      let itemCount = 0
-      for (const group of parsed) {
-        const courseId = courseIdMap.get(group.subject)
-        if (!courseId) continue
-        for (const item of group.items) {
-          await api.post<any>("/api/v1/backlog", {
-            title: item,
-            course_id: courseId,
-            priority: 3,
-            estimated_minutes: 30,
-          })
-          itemCount++
-        }
-      }
+      const backlog = parsed.flatMap((group, index) =>
+        group.items.map((item) => ({
+          title: item,
+          course_index: index,
+        }))
+      )
 
-      for (const exam of examsRef.current) {
-        await api.post<any>("/api/v1/goals", {
-          title: exam.title,
-          target_date: exam.date ? new Date(exam.date).toISOString() : null,
-          category: "exam",
-          status: "active",
-        })
-      }
+      const goals = examsRef.current.map((exam) => ({
+        title: exam.title,
+        target_date: exam.date ? new Date(exam.date).toISOString() : null,
+        category: "exam",
+      }))
 
       const weekdayType = weekdayTypeRef.current
       const coachingEnd = coachingEndRef.current
@@ -662,19 +645,26 @@ export function OnboardingPage() {
         daily_target_minutes: 120,
         class_name: "Student",
       }
-      await api.put<StudentProfileData>("/api/v1/profile", profilePayload)
 
       const weekdays = ["monday", "tuesday", "wednesday", "thursday", "friday"]
       const schedule: Record<string, any[]> = {}
       for (const day of weekdays) {
         const blocks = [{ type: "school", start: "08:00", end: "15:00" }]
         if (weekdayType === "coaching") {
-      const sh = parseInt(coachingEnd.split(":")[0], 10) - 2
-      blocks.push({ type: "coaching", start: `${String(sh).padStart(2, "0")}:00`, end: coachingEnd })
+          const sh = parseInt(coachingEnd.split(":")[0], 10) - 2
+          blocks.push({ type: "coaching", start: `${String(sh).padStart(2, "0")}:00`, end: coachingEnd })
         }
         schedule[day] = blocks
       }
-      await api.put<any>("/api/v1/profile/schedule", { schedule })
+
+      const result = await api.post<any>("/api/v1/onboarding", {
+        courses,
+        backlog,
+        goals,
+        profile: profilePayload,
+        schedule: { schedule },
+      })
+      if (result.error) throw new Error(result.error)
 
       clearInterval(loadingTimer.current)
 

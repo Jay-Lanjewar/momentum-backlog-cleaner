@@ -35,7 +35,11 @@ export function useAuth() {
       }
     }
 
-    await fetchUser();
+    useAuthStore.getState().setUser({
+      ...result.data.user,
+      profile: null,
+      streak: null,
+    });
     return result.data;
   }, []);
 
@@ -92,7 +96,11 @@ export function useAuth() {
       }
     }
 
-    await fetchUser();
+    useAuthStore.getState().setUser({
+      ...result.data.user,
+      profile: null,
+      streak: null,
+    });
     return result.data;
   }, []);
 
@@ -121,22 +129,6 @@ export function useAuth() {
     if (error) throw new Error(error.message);
   }, []);
 
-  const fetchUser = useCallback(async () => {
-    const { data: { session } } = await supabase.auth.getSession();
-    if (!session?.access_token) {
-      useAuthStore.getState().clearAuth();
-      return;
-    }
-
-    const result = await api.get<import("@/services/types").AuthMeResponse>("/api/v1/auth/me");
-    if (result.error || !result.data) {
-      useAuthStore.getState().clearAuth();
-      return;
-    }
-
-    useAuthStore.getState().setUser(result.data);
-  }, []);
-
   return {
     user,
     isAuthenticated,
@@ -146,6 +138,5 @@ export function useAuth() {
     logout,
     forgotPassword,
     signInWithGoogle,
-    fetchUser,
   };
 }

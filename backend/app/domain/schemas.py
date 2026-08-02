@@ -309,6 +309,60 @@ class AuthMeResponse(BaseModel):
     model_config = {"from_attributes": True}
 
 
+# ─── Onboarding Schemas ───
+
+class OnboardingCourseItem(BaseModel):
+    name: str = Field(..., min_length=1, max_length=255)
+    color: str = Field("#6366f1", pattern=r"^#[0-9a-fA-F]{6}$")
+
+
+class OnboardingBacklogItem(BaseModel):
+    title: str = Field(..., min_length=1, max_length=255)
+    course_index: int = Field(0, ge=0)
+    priority: int = Field(3, ge=1, le=4)
+    estimated_minutes: int = Field(30, ge=5, le=1440)
+    due_date: datetime | None = None
+
+
+class OnboardingGoalItem(BaseModel):
+    title: str = Field(..., min_length=1, max_length=255)
+    target_date: datetime | None = None
+    category: str | None = Field(None, max_length=50)
+
+
+class OnboardingRequest(BaseModel):
+    courses: list[OnboardingCourseItem] = Field(default_factory=list)
+    backlog: list[OnboardingBacklogItem] = Field(default_factory=list)
+    goals: list[OnboardingGoalItem] = Field(default_factory=list)
+    profile: StudentProfileUpdate | None = None
+    schedule: WeeklyScheduleUpdate | None = None
+
+
+class OnboardingResponse(BaseModel):
+    courses_created: int
+    backlog_items_created: int
+    goals_created: int
+    profile_saved: bool
+    schedule_saved: bool
+
+
+# ─── Dashboard Schemas ───
+
+class InsightResponse(BaseModel):
+    title: str
+    message: str
+    priority: int
+
+
+class DashboardResponse(BaseModel):
+    profile: StudentProfileResponse | None
+    streaks: StreakAllResponse
+    balance: BalanceScoreResponse
+    insight: InsightResponse
+    planning: PlanningPreviewResponse
+    plan: PlanGenerateResponse
+
+
 # ─── Friend Schemas ───
 
 class FriendRequestCreate(BaseModel):
