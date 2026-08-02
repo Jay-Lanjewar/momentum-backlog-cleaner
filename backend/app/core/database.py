@@ -6,14 +6,14 @@ from sqlalchemy.orm import DeclarativeBase
 from collections.abc import AsyncGenerator
 from app.core.config import settings
 from uuid import uuid4  
-from sqlalchemy.pool import QueuePool
+from sqlalchemy.pool import AsyncAdaptedQueuePool
 
 logger = logging.getLogger(__name__)
 
 engine = create_async_engine(
     settings.DATABASE_URL,
     echo=settings.DEBUG,
-    poolclass=QueuePool,
+    poolclass=AsyncAdaptedQueuePool,
     pool_size=10,
     max_overflow=5,
     pool_timeout=10,
