@@ -1,12 +1,14 @@
+import json
 import uuid
 from datetime import datetime, timezone
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
+from fastapi.encoders import jsonable_encoder
 
 from app.domain.models import ActivityType, ActivityVisibility
-from app.domain.schemas import ActivityResponse, UserSearchResult
+from app.domain.schemas import ActivityResponse, FriendRequestResponse, FriendRequestsResponse, UserSearchResult
 from app.repositories.activity_repo import ActivityRepository
 from app.repositories.friend_repo import (
     FriendRequestRepository,
@@ -715,3 +717,64 @@ async def test_send_request_validates_receiver_exists(
 
     with pytest.raises(ValueError, match="not found"):
         await friend_service.send_request(TEST_USER_ID, FriendRequestCreate(receiver_id=uuid.uuid4()))
+
+
+# ─── FriendService.list_pending_requests serialization tests ───
+
+
+@pytest.mark.asyncio
+async def test_list_pending_requests_converts_orm_to_dicts(
+    friend_service: FriendService,
+    friend_request_repo: AsyncMock,
+):
+    sender = _make_user(user_id=uuid.uuid4(), name="Alice")
+    receiver = _make_user(user_id=uuid.uuid4(), name="Me")
+    friend_request_repo.get_received_pending.return_value = [
+        _make_friend_request(sender=sender, receiver=receiver)
+    ]
+    friend_request_repo.get_sent_pending.return_value = [
+        _make_friend_request(sender=receiver, receiver=sender)
+    ]
+
+    result = await friend_service.list_pending_requests(TEST_USER_ID)
+
+    assert isinstance(result["received"][0], FriendRequestResponse)
+    assert isinstance(result["sent"][0], FriendRequestResponse)
+    assert result["received"][0].sender.name == "Alice"
+    assert result["received"][0].receiver.name == "Me"
+    assert result["received"][0].status == "pending"
+    assert result["sent"][0].receiver.name == "Alice"
+
+
+@pytest.mark.asyncio
+async def test_list_pending_requests_serializes_to_json(
+    friend_service: FriendService,
+    friend_request_repo: AsyncMock,
+):
+    sender = _make_user(user_id=uuid.uuid4(), name="Alice")
+    receiver = _make_user(user_id=uuid.uuid4(), name="Me")
+    friend_request_repo.get_received_pending.return_value = [
+        _make_friend_request(sender=sender, receiver=receiver)
+    ]
+    friend_request_repo.get_sent_pending.return_value = [
+        _make_friend_request(sender=receiver, receiver=sender)
+    ]
+
+    result = await friend_service.list_pending_requests(TEST_USER_ID)
+
+    payload = FriendRequestsResponse.model_validate(result)
+    json_str = json.dumps(jsonable_encoder(payload.model_dump()))
+    assert json.loads(json_str)["received"][0]["sender"]["name"] == "Alice"
+
+
+@pytest.mark.asyncio
+async def test_list_pending_requests_empty_lists(
+    friend_service: FriendService,
+    friend_request_repo: AsyncMock,
+):
+    friend_request_repo.get_received_pending.return_value = []
+    friend_request_repo.get_sent_pending.return_value = []
+
+    result = await friend_service.list_pending_requests(TEST_USER_ID)
+
+    assert result == {"received": [], "sent": []}

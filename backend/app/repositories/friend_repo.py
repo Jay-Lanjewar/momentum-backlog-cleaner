@@ -61,7 +61,10 @@ class FriendRequestRepository(BaseRepository[FriendRequest]):
 
         result = await self.db.execute(
             select(FriendRequest)
-            .options(selectinload(FriendRequest.sender))
+            .options(
+                selectinload(FriendRequest.sender),
+                selectinload(FriendRequest.receiver),
+            )
             .where(FriendRequest.receiver_id == user_id, FriendRequest.status == "pending")
             .order_by(FriendRequest.created_at.desc())
         )
@@ -72,7 +75,10 @@ class FriendRequestRepository(BaseRepository[FriendRequest]):
 
         result = await self.db.execute(
             select(FriendRequest)
-            .options(selectinload(FriendRequest.receiver))
+            .options(
+                selectinload(FriendRequest.sender),
+                selectinload(FriendRequest.receiver),
+            )
             .where(FriendRequest.sender_id == user_id, FriendRequest.status == "pending")
             .order_by(FriendRequest.created_at.desc())
         )

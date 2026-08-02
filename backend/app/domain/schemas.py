@@ -395,6 +395,11 @@ class FriendshipResponse(BaseModel):
     since: datetime
 
 
+class FriendRequestsResponse(BaseModel):
+    received: list[FriendRequestResponse]
+    sent: list[FriendRequestResponse]
+
+
 # ─── Activity Schemas ───
 
 class ActivityResponse(BaseModel):

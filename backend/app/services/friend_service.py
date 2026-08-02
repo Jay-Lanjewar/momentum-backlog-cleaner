@@ -4,7 +4,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.domain.models import Friendship, FriendRequest
 from app.repositories.friend_repo import FriendRequestRepository, FriendshipRepository, UserRepository
-from app.domain.schemas import FriendRequestCreate
+from app.domain.schemas import FriendRequestCreate, FriendRequestResponse
 
 
 class FriendService:
@@ -80,4 +80,7 @@ class FriendService:
     async def list_pending_requests(self, user_id: uuid.UUID):
         received = await self.request_repo.get_received_pending(user_id)
         sent = await self.request_repo.get_sent_pending(user_id)
-        return {"received": received, "sent": sent}
+        return {
+            "received": [FriendRequestResponse.model_validate(r) for r in received],
+            "sent": [FriendRequestResponse.model_validate(s) for s in sent],
+        }
