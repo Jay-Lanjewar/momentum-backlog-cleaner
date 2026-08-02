@@ -5,10 +5,20 @@ from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
+from fastapi import FastAPI
 from fastapi.encoders import jsonable_encoder
+from fastapi.testclient import TestClient
 
-from app.domain.models import ActivityType, ActivityVisibility
-from app.domain.schemas import ActivityResponse, FriendRequestResponse, FriendRequestsResponse, UserSearchResult
+from app.api.v1 import friends as friends_api
+from app.domain.models import ActivityType, ActivityVisibility, FriendRequest, Friendship, User
+from app.domain.schemas import (
+    ActivityResponse,
+    FriendRequestResponse,
+    FriendRequestsResponse,
+    FriendUserResponse,
+    FriendshipResponse,
+    UserSearchResult,
+)
 from app.repositories.activity_repo import ActivityRepository
 from app.repositories.friend_repo import (
     FriendRequestRepository,
@@ -778,3 +788,278 @@ async def test_list_pending_requests_empty_lists(
     result = await friend_service.list_pending_requests(TEST_USER_ID)
 
     assert result == {"received": [], "sent": []}
+
+
+# ─── FriendService.accept_request tests ───
+
+
+def _make_accept_service(mock_db: AsyncMock) -> FriendService:
+    service = FriendService.__new__(FriendService)
+    service.db = mock_db
+    service.request_repo = AsyncMock()
+    service.friendship_repo = AsyncMock()
+    service.user_repo = AsyncMock()
+    return service
+
+
+def _make_loaded_friendship(user1_id, user2_id, user1, user2):
+    return SimpleNamespace(
+        id=uuid.uuid4(),
+        user1_id=user1_id,
+        user2_id=user2_id,
+        created_at=datetime.now(timezone.utc),
+        user1=user1,
+        user2=user2,
+    )
+
+
+@pytest.mark.asyncio
+async def test_accept_request_returns_friend_relative_to_current_user(
+    mock_db: AsyncMock,
+):
+    service = _make_accept_service(mock_db)
+
+    me = _make_user(user_id=TEST_USER_ID, name="Me")
+    other = _make_user(user_id=TEST_USER_ID_2, name="Alice")
+    req = _make_friend_request(
+        sender_id=TEST_USER_ID_2, receiver_id=TEST_USER_ID,
+        status="pending", sender=other, receiver=me,
+    )
+    service.request_repo.get = AsyncMock(return_value=req)
+    service.request_repo.update = AsyncMock(return_value=req)
+
+    friendship = SimpleNamespace(id=uuid.uuid4(), created_at=datetime.now(timezone.utc))
+    service.friendship_repo.create = AsyncMock(return_value=friendship)
+
+    loaded = _make_loaded_friendship(TEST_USER_ID, TEST_USER_ID_2, me, other)
+    service.friendship_repo.get_with_users = AsyncMock(return_value=loaded)
+
+    result = await service.accept_request(TEST_USER_ID, req.id)
+
+    assert isinstance(result["friend"], FriendUserResponse)
+    assert result["friend"].id == TEST_USER_ID_2
+    assert result["friend"].name == "Alice"
+    assert result["since"] == friendship.created_at
+
+    validated = FriendshipResponse.model_validate(result)
+    assert validated.friend.id == TEST_USER_ID_2
+    assert validated.since == friendship.created_at
+
+    json_str = json.dumps(jsonable_encoder(validated.model_dump()))
+    assert json.loads(json_str)["friend"]["name"] == "Alice"
+    assert json.loads(json_str)["friend"]["id"] == str(TEST_USER_ID_2)
+
+
+@pytest.mark.asyncio
+async def test_accept_request_marks_request_accepted_and_creates_friendship(
+    mock_db: AsyncMock,
+):
+    service = _make_accept_service(mock_db)
+
+    me = _make_user(user_id=TEST_USER_ID, name="Me")
+    other = _make_user(user_id=TEST_USER_ID_2, name="Alice")
+    req = _make_friend_request(
+        sender_id=TEST_USER_ID_2, receiver_id=TEST_USER_ID,
+        status="pending", sender=other, receiver=me,
+    )
+    service.request_repo.get = AsyncMock(return_value=req)
+
+    def mark_accepted(req_id, **kwargs):
+        if "status" in kwargs:
+            req.status = kwargs["status"]
+        return req
+
+    service.request_repo.update = AsyncMock(side_effect=mark_accepted)
+
+    friendship = SimpleNamespace(id=uuid.uuid4(), created_at=datetime.now(timezone.utc))
+    service.friendship_repo.create = AsyncMock(return_value=friendship)
+    service.friendship_repo.get_with_users = AsyncMock(
+        return_value=_make_loaded_friendship(TEST_USER_ID, TEST_USER_ID_2, me, other)
+    )
+
+    await service.accept_request(TEST_USER_ID, req.id)
+
+    service.request_repo.update.assert_awaited_once_with(req.id, status="accepted")
+    service.friendship_repo.create.assert_awaited_once_with(
+        user1_id=TEST_USER_ID, user2_id=TEST_USER_ID_2
+    )
+    service.friendship_repo.get_with_users.assert_awaited_once_with(friendship.id)
+    assert req.status == "accepted"
+
+
+@pytest.mark.asyncio
+async def test_accept_request_not_found_when_not_receiver(
+    mock_db: AsyncMock,
+):
+    service = _make_accept_service(mock_db)
+
+    req = _make_friend_request(
+        sender_id=TEST_USER_ID, receiver_id=TEST_USER_ID_2, status="pending"
+    )
+    service.request_repo.get = AsyncMock(return_value=req)
+
+    with pytest.raises(ValueError, match="not found"):
+        await service.accept_request(TEST_USER_ID, req.id)
+
+    service.request_repo.update.assert_not_awaited()
+    service.friendship_repo.create.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_accept_request_missing_request_raises(
+    mock_db: AsyncMock,
+):
+    service = _make_accept_service(mock_db)
+    service.request_repo.get = AsyncMock(return_value=None)
+
+    with pytest.raises(ValueError, match="not found"):
+        await service.accept_request(TEST_USER_ID, uuid.uuid4())
+
+    service.friendship_repo.create.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_accept_request_rejects_non_pending(
+    mock_db: AsyncMock,
+):
+    service = _make_accept_service(mock_db)
+
+    req = _make_friend_request(
+        sender_id=TEST_USER_ID_2, receiver_id=TEST_USER_ID, status="accepted"
+    )
+    service.request_repo.get = AsyncMock(return_value=req)
+
+    with pytest.raises(ValueError, match="no longer pending"):
+        await service.accept_request(TEST_USER_ID, req.id)
+
+    service.friendship_repo.create.assert_not_awaited()
+
+
+# ─── HTTP-level accept tests (real FastAPI serialization) ───
+
+
+class _ScalarResult:
+    def __init__(self, value):
+        self._value = value
+
+    def scalar_one_or_none(self):
+        return self._value
+
+
+class _FakeAcceptSession:
+    """Faithful stand-in for an AsyncSession driving the real repositories."""
+
+    def __init__(self, request: FriendRequest, loaded_friendship: Friendship):
+        self.request = request
+        self.loaded_friendship = loaded_friendship
+        self.added = []
+        self.events = []
+
+    def _populate(self, obj):
+        if getattr(obj, "created_at", None) is None:
+            obj.created_at = datetime.now(timezone.utc)
+        if getattr(obj, "id", None) is None:
+            obj.id = uuid.uuid4()
+
+    async def execute(self, statement, *args, **kwargs):
+        self.events.append("execute")
+        entity = statement.column_descriptions[0]["entity"]
+        if entity is FriendRequest:
+            return _ScalarResult(self.request)
+        if entity is Friendship:
+            return _ScalarResult(self.loaded_friendship)
+        raise AssertionError(f"Unexpected entity queried: {entity}")
+
+    def add(self, obj):
+        self.events.append("add")
+        self.added.append(obj)
+
+    async def flush(self):
+        self.events.append("flush")
+        for obj in self.added:
+            self._populate(obj)
+
+    async def refresh(self, obj):
+        self.events.append("refresh")
+        self._populate(obj)
+
+    async def commit(self):
+        self.events.append("commit")
+
+    async def rollback(self):
+        self.events.append("rollback")
+
+    def close(self):
+        self.events.append("close")
+
+
+def _build_accept_app(session: _FakeAcceptSession, current_user: User) -> FastAPI:
+    app = FastAPI()
+    app.include_router(friends_api.router)
+
+    async def override_get_db():
+        yield session
+        await session.commit()
+
+    app.dependency_overrides[friends_api.get_db] = override_get_db
+    app.dependency_overrides[friends_api.get_current_user] = lambda: current_user
+    return app
+
+
+def test_accept_request_returns_http_200_and_commits():
+    now = datetime.now(timezone.utc)
+    me = User(id=TEST_USER_ID, email="me@test.com", name="Me", created_at=now, updated_at=now)
+    other = User(id=TEST_USER_ID_2, email="other@test.com", name="Alice", created_at=now, updated_at=now)
+
+    request = FriendRequest(
+        id=uuid.uuid4(), sender_id=TEST_USER_ID_2, receiver_id=TEST_USER_ID, status="pending"
+    )
+    loaded = Friendship(id=uuid.uuid4(), user1_id=TEST_USER_ID, user2_id=TEST_USER_ID_2)
+    loaded.user1 = me
+    loaded.user2 = other
+
+    session = _FakeAcceptSession(request, loaded)
+    app = _build_accept_app(session, me)
+
+    with TestClient(app) as client:
+        resp = client.post(f"/friends/request/{request.id}/accept")
+
+    assert resp.status_code == 200, resp.text
+    body = resp.json()
+    assert body["friend"]["id"] == str(TEST_USER_ID_2)
+    assert body["friend"]["name"] == "Alice"
+    assert body["since"] is not None
+
+    # friendship persisted (created via repo) and committed, never rolled back
+    assert any(isinstance(obj, Friendship) for obj in session.added)
+    assert session.events.count("add") == 1
+    assert "commit" in session.events
+    assert "rollback" not in session.events
+
+    # pending request transitioned to accepted
+    assert request.status == "accepted"
+
+
+def test_accept_request_response_serializes_as_friendship_response():
+    now = datetime.now(timezone.utc)
+    me = User(id=TEST_USER_ID, email="me@test.com", name="Me", created_at=now, updated_at=now)
+    other = User(id=TEST_USER_ID_2, email="other@test.com", name="Alice", created_at=now, updated_at=now)
+
+    request = FriendRequest(
+        id=uuid.uuid4(), sender_id=TEST_USER_ID_2, receiver_id=TEST_USER_ID, status="pending"
+    )
+    loaded = Friendship(id=uuid.uuid4(), user1_id=TEST_USER_ID, user2_id=TEST_USER_ID_2)
+    loaded.user1 = me
+    loaded.user2 = other
+
+    session = _FakeAcceptSession(request, loaded)
+    app = _build_accept_app(session, me)
+
+    with TestClient(app) as client:
+        resp = client.post(f"/friends/request/{request.id}/accept")
+
+    assert resp.status_code == 200
+    validated = FriendshipResponse.model_validate(resp.json())
+    assert validated.friend.id == TEST_USER_ID_2
+    json_str = json.dumps(jsonable_encoder(validated.model_dump()))
+    assert json.loads(json_str)["friend"]["name"] == "Alice"

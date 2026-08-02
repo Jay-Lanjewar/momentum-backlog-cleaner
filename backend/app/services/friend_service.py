@@ -2,9 +2,9 @@ import uuid
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.domain.models import Friendship, FriendRequest
+from app.domain.models import FriendRequest
 from app.repositories.friend_repo import FriendRequestRepository, FriendshipRepository, UserRepository
-from app.domain.schemas import FriendRequestCreate, FriendRequestResponse
+from app.domain.schemas import FriendRequestCreate, FriendRequestResponse, FriendUserResponse
 
 
 class FriendService:
@@ -33,7 +33,7 @@ class FriendService:
         created = await self.request_repo.create(sender_id=sender_id, receiver_id=data.receiver_id, status="pending")
         return await self.request_repo.get_with_users(created.id)
 
-    async def accept_request(self, user_id: uuid.UUID, request_id: uuid.UUID) -> Friendship:
+    async def accept_request(self, user_id: uuid.UUID, request_id: uuid.UUID):
         req = await self.request_repo.get(request_id)
         if req is None or req.receiver_id != user_id:
             raise ValueError("Friend request not found")
@@ -45,7 +45,12 @@ class FriendService:
         user1 = min(req.sender_id, req.receiver_id, key=lambda x: str(x))
         user2 = max(req.sender_id, req.receiver_id, key=lambda x: str(x))
         friendship = await self.friendship_repo.create(user1_id=user1, user2_id=user2)
-        return friendship
+        loaded = await self.friendship_repo.get_with_users(friendship.id)
+        friend_user = loaded.user2 if loaded.user1_id == user_id else loaded.user1
+        return {
+            "friend": FriendUserResponse.model_validate(friend_user),
+            "since": friendship.created_at,
+        }
 
     async def reject_request(self, user_id: uuid.UUID, request_id: uuid.UUID) -> None:
         req = await self.request_repo.get(request_id)

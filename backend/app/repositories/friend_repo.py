@@ -119,6 +119,16 @@ class FriendshipRepository(BaseRepository[Friendship]):
         )
         return result.scalar_one_or_none()
 
+    async def get_with_users(self, friendship_id: uuid.UUID) -> Friendship | None:
+        from sqlalchemy import select
+
+        result = await self.db.execute(
+            select(Friendship)
+            .options(selectinload(Friendship.user1), selectinload(Friendship.user2))
+            .where(Friendship.id == friendship_id)
+        )
+        return result.scalar_one_or_none()
+
     async def get_friendships_with_users(self, user_id: uuid.UUID) -> Sequence[Friendship]:
         from sqlalchemy import select
 
