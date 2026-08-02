@@ -1,12 +1,15 @@
+import logging
 import uuid
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.dependencies import get_current_user, get_db
-from app.domain.models import User
+from app.domain.models import FriendRequest, User
 from app.domain.schemas import FriendRequestCreate, FriendRequestResponse, FriendshipResponse, FriendUserResponse
 from app.services.friend_service import FriendService
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/friends", tags=["friends"])
 
@@ -23,7 +26,12 @@ async def send_friend_request(
 ):
     try:
         req = await service.send_request(user.id, data)
-        return req
+        logger.info("[DEBUG send_friend_request] type(req)=%s", type(req))
+        logger.info("[DEBUG send_friend_request] repr(req)=%s", repr(req))
+        logger.info("[DEBUG send_friend_request] isinstance(req, FriendRequest)=%s", isinstance(req, FriendRequest))
+        logger.info("[DEBUG send_friend_request] type(req.sender)=%s", type(req.sender))
+        logger.info("[DEBUG send_friend_request] type(req.receiver)=%s", type(req.receiver))
+        return FriendRequestResponse.model_validate(req)
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
 
