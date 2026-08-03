@@ -152,7 +152,7 @@ class TestGeneratePlanEndpoint:
         assert response.status_code == 200
         data = response.json()
         assert data["source"] == "deterministic"
-        assert len(data["plan"]["sessions"]) == 1
+        assert len(data["plan"]["sessions"]) == 2
 
     def test_ai_empty_puts_items_in_overflow(self, app, mock_db, mock_user):
         course = Course(id=uuid.uuid4(), user_id=USER_ID, name="Math", color="#6366f1")

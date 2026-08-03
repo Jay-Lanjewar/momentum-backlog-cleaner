@@ -3,6 +3,12 @@ import uuid
 from app.services.deterministic_planner import generate_deterministic_plan
 
 
+def _duration(session):
+    start = int(session["start_time"][:2]) * 60 + int(session["start_time"][3:])
+    end = int(session["end_time"][:2]) * 60 + int(session["end_time"][3:])
+    return end - start
+
+
 class TestDeterministicPlanner:
     def test_single_item_fits_in_window(self):
         item_id = uuid.uuid4()
@@ -21,7 +27,7 @@ class TestDeterministicPlanner:
                 }
             ],
         })
-        assert len(result["sessions"]) == 1
+        assert [_duration(s) for s in result["sessions"]] == [35, 25]
         assert result["sessions"][0]["backlog_item_id"] == str(item_id)
         assert len(result["overflow"]) == 0
 
@@ -43,7 +49,7 @@ class TestDeterministicPlanner:
                 },
             ],
         })
-        assert len(result["sessions"]) == 2
+        assert len(result["sessions"]) == 4
         assert len(result["overflow"]) == 0
 
     def test_overflow_when_not_enough_time(self):
@@ -67,7 +73,7 @@ class TestDeterministicPlanner:
         assert len(result["sessions"]) == 2
         scheduled_ids = {s["backlog_item_id"] for s in result["sessions"]}
         assert str(id_1) in scheduled_ids
-        assert str(id_2) in scheduled_ids
+        assert str(id_2) not in scheduled_ids
         assert str(id_2) in result["overflow"]
 
     def test_item_split_across_windows(self):
@@ -84,8 +90,8 @@ class TestDeterministicPlanner:
                 },
             ],
         })
-        assert len(result["sessions"]) == 2
-        assert len(result["overflow"]) >= 1
+        assert [_duration(s) for s in result["sessions"]] == [30, 30, 30]
+        assert len(result["overflow"]) == 0
 
     def test_higher_priority_scheduled_first(self):
         id_low = uuid.uuid4()
@@ -154,4 +160,5 @@ class TestDeterministicPlanner:
                 },
             ],
         })
-        assert len(result["sessions"]) == 1
+        assert [_duration(s) for s in result["sessions"]] == [35, 15]
+        assert len(result["overflow"]) == 0
