@@ -6,10 +6,11 @@ import {
   Pencil,
   Trash2,
   Loader2,
-  Moon,
   Clock,
   MoreHorizontal,
   Save,
+  CheckCircle2,
+  XCircle,
 } from "lucide-react"
 import { toast } from "sonner"
 
@@ -122,7 +123,7 @@ function AddBlockModal({
         <form onSubmit={handleSubmit} className="space-y-5 p-6">
           <div className="flex items-center justify-between">
             <h2 id="block-form-modal-title" className="text-lg font-semibold tracking-tight">
-              {initial ? "Edit block" : "Add block"}
+              {initial ? "Edit fixed commitment" : "Add fixed commitment"}
             </h2>
             <button
               type="button"
@@ -135,7 +136,7 @@ function AddBlockModal({
 
           {/* Block Type Grid */}
           <div className="space-y-2">
-            <label className="text-sm font-medium">Type</label>
+            <label className="text-sm font-medium">Category</label>
             <div className="grid grid-cols-4 gap-1.5">
               {BLOCK_TYPES.map((bt) => (
                 <button
@@ -161,7 +162,7 @@ function AddBlockModal({
           {/* Custom Title */}
           <div className="space-y-2">
             <label className="text-sm font-medium">
-              Title <span className="text-muted-foreground font-normal">(optional)</span>
+              Name <span className="text-muted-foreground font-normal">(optional)</span>
             </label>
             <input
               value={title}
@@ -204,7 +205,7 @@ function AddBlockModal({
             </Button>
             <Button type="submit" disabled={!valid || saving} className="flex-1 gap-1.5">
               {saving && <Loader2 className="h-4 w-4 animate-spin" />}
-              {initial ? "Save Changes" : "Add Block"}
+              {initial ? "Save Changes" : "Add Commitment"}
             </Button>
           </div>
         </form>
@@ -234,8 +235,8 @@ function DeleteConfirm({ open, onClose, onConfirm, deleting }: {
         aria-modal="true"
         aria-labelledby="block-delete-modal-title"
       >
-        <h3 id="block-delete-modal-title" className="text-lg font-semibold mb-1">Delete this block?</h3>
-        <p className="text-sm text-muted-foreground mb-6">This will remove the block from your schedule.</p>
+        <h3 id="block-delete-modal-title" className="text-lg font-semibold mb-1">Delete this commitment?</h3>
+        <p className="text-sm text-muted-foreground mb-6">This will remove it from your week. Momentum will just use that time for study sessions instead.</p>
         <div className="flex gap-3">
           <Button variant="outline" onClick={onClose} className="flex-1">Cancel</Button>
           <Button variant="destructive" onClick={onConfirm} disabled={deleting} className="flex-1 gap-1.5">
@@ -395,13 +396,16 @@ function DayCard({
 
         {blocks.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-6 text-center">
-            <Moon className="h-6 w-6 text-muted-foreground/30 mb-2" />
-            <p className="text-xs text-muted-foreground mb-2">No schedule yet</p>
+            <Clock className="h-6 w-6 text-muted-foreground/30 mb-2" />
+            <p className="text-xs text-muted-foreground mb-1">No fixed commitments</p>
+            <p className="text-[10px] text-muted-foreground/70 mb-2">
+              Add busy times like school or coaching.
+            </p>
             <button
               onClick={onAdd}
               className="text-xs font-medium text-primary hover:underline py-2 px-3 -mx-3"
             >
-              + Add Block
+              + Add commitment
             </button>
           </div>
         ) : (
@@ -468,7 +472,7 @@ export function SchedulePage() {
     const blocks = [...(weeklyBlocks[day] ?? [])]
     blocks.splice(blockIndex, 1)
     updateBlocks(day, blocks)
-    toast.success("Block removed")
+    toast.success("Commitment removed")
   }
 
   const handleSaveBlock = (block: WeeklyBlock) => {
@@ -482,16 +486,16 @@ export function SchedulePage() {
     updateBlocks(targetDay, blocks)
     setShowModal(false)
     setEditingTarget(null)
-    toast.success(editingTarget ? "Block updated" : "Block added")
+    toast.success(editingTarget ? "Commitment updated" : "Commitment added")
   }
 
   const handleSaveSchedule = async () => {
     try {
       await saveSchedule.mutateAsync({ schedule: weeklyBlocks } as WeeklyScheduleUpdatePayload)
       setHasChanges(false)
-      toast.success("Schedule saved")
+      toast.success("Changes saved")
     } catch {
-      toast.error("Failed to save schedule")
+      toast.error("Failed to save changes")
     }
   }
 
@@ -518,18 +522,71 @@ export function SchedulePage() {
       <div className="space-y-6 pb-8">
         {/* Header */}
         <FadeIn>
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary/10">
+          <div className="flex items-start justify-between">
+            <div className="flex items-start gap-3">
+              <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary/10 shrink-0">
                 <CalendarDays className="h-5 w-5 text-primary" />
               </div>
               <div>
-                <h1 className="text-xl font-semibold tracking-tight">Weekly Schedule</h1>
-                <p className="text-sm text-muted-foreground">
-                  {totalBlocks} {totalBlocks === 1 ? "block" : "blocks"} across {DAYS.filter((d) => (weeklyBlocks[d]?.length ?? 0) > 0).length} days
+                <h1 className="text-xl font-semibold tracking-tight">Fixed Commitments</h1>
+                <p className="text-sm text-muted-foreground max-w-md">
+                  Add only the parts of your week that are fixed. Momentum will automatically
+                  schedule study sessions around them.
+                </p>
+                <p className="text-xs text-muted-foreground/70 mt-0.5">
+                  {totalBlocks} {totalBlocks === 1 ? "commitment" : "commitments"} across{" "}
+                  {DAYS.filter((d) => (weeklyBlocks[d]?.length ?? 0) > 0).length} days
                 </p>
               </div>
             </div>
+          </div>
+        </FadeIn>
+
+        {/* Helper cards */}
+        <FadeIn delay={0.05}>
+          <div className="grid gap-4 sm:grid-cols-2">
+            <Card className="border-emerald-200/70 bg-emerald-50/40 dark:border-emerald-900/50 dark:bg-emerald-950/20">
+              <CardContent className="p-4 space-y-3">
+                <div className="flex items-center gap-2">
+                  <CheckCircle2 className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
+                  <h2 className="text-sm font-semibold">What should I add?</h2>
+                </div>
+                <div className="flex flex-wrap gap-1.5">
+                  {["School", "Coaching", "Meals", "Sports", "Work", "Sleep"].map((label) => (
+                    <span
+                      key={label}
+                      className="rounded-full border border-emerald-200 dark:border-emerald-800 bg-background px-2.5 py-0.5 text-xs font-medium"
+                    >
+                      {label}
+                    </span>
+                  ))}
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  Anything that happens at the same time every week.
+                </p>
+              </CardContent>
+            </Card>
+            <Card className="border-red-200/70 bg-red-50/40 dark:border-red-900/50 dark:bg-red-950/20">
+              <CardContent className="p-4 space-y-3">
+                <div className="flex items-center gap-2">
+                  <XCircle className="h-4 w-4 text-red-500 dark:text-red-400" />
+                  <h2 className="text-sm font-semibold">What should I NOT add?</h2>
+                </div>
+                <div className="flex flex-wrap gap-1.5">
+                  {["Study time", "Homework", "Flexible free time"].map((label) => (
+                    <span
+                      key={label}
+                      className="rounded-full border border-red-200 dark:border-red-900 bg-background px-2.5 py-0.5 text-xs font-medium text-muted-foreground"
+                    >
+                      {label}
+                    </span>
+                  ))}
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  Momentum plans study sessions for you — you just mark when you're busy.
+                </p>
+              </CardContent>
+            </Card>
           </div>
         </FadeIn>
 
@@ -569,7 +626,7 @@ export function SchedulePage() {
               ) : (
                 <Save className="h-4 w-4" />
               )}
-              Save Schedule
+              Save Changes
             </Button>
           </div>
         </FadeIn>

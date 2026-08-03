@@ -34,7 +34,7 @@ const COURSE_COLORS = [
 const LOADING_MESSAGES = [
   "Understanding your work...",
   "Organizing subjects...",
-  "Planning your study blocks...",
+  "Planning your study time...",
   "Building your study plan...",
   "Almost there...",
 ]
@@ -442,7 +442,11 @@ function Step4Weekday({
         <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-primary/10">
           <School className="h-7 w-7 text-primary" />
         </div>
-        <p className="text-lg font-medium leading-snug max-w-sm">What does a normal weekday look like?</p>
+        <p className="text-lg font-medium leading-snug max-w-sm">What's fixed on a normal weekday?</p>
+        <p className="text-xs text-muted-foreground max-w-xs">
+          Tell us about your busy times — school, coaching, sports. Momentum schedules your
+          study sessions around them.
+        </p>
       </div>
 
       <div className="space-y-2">
