@@ -13,6 +13,7 @@ import {
   Pencil,
   BookOpen,
   ChevronDown,
+  Sparkles,
 } from "lucide-react"
 import { toast } from "sonner"
 
@@ -36,14 +37,18 @@ import type {
   BacklogItemUpdatePayload,
   CourseData,
 } from "@/services/types"
-
-const PRIORITY_LABELS = ["", "Urgent", "High", "Medium", "Low"]
-const PRIORITY_VARIANT: Record<number, "destructive" | "warning" | "secondary" | "outline"> = {
-  1: "destructive",
-  2: "warning",
-  3: "secondary",
-  4: "outline",
-}
+import {
+  DIFFICULTIES,
+  DUE_CHIPS,
+  chipForDate,
+  difficultyFromPriority,
+  difficultyLabel,
+  dueDateForChip,
+  priorityFromDifficulty,
+  type Difficulty,
+  type DueChip,
+} from "@/lib/coaching"
+import { cn } from "@/lib/cn"
 
 const TABS = [
   { value: "all", label: "All" },
@@ -56,6 +61,12 @@ const COURSE_COLORS = [
   "#eab308", "#22c55e", "#14b8a6", "#06b6d4", "#3b82f6",
 ]
 
+const DIFFICULTY_VARIANT: Record<Difficulty, "destructive" | "warning" | "success"> = {
+  hard: "destructive",
+  medium: "warning",
+  easy: "success",
+}
+
 function formatDate(d: string | null) {
   if (!d) return null
   const dt = new Date(d)
@@ -65,6 +76,12 @@ function formatDate(d: string | null) {
 function isOverdue(dueDate: string | null, status: string): boolean {
   if (!dueDate || status === "completed") return false
   return new Date(dueDate) < new Date()
+}
+
+function dueChipLabel(dueDate: string | null): string | null {
+  const chip = chipForDate(dueDate)
+  if (!chip || chip === "custom") return null
+  return DUE_CHIPS.find((c) => c.value === chip)?.label ?? null
 }
 
 /* ---------- Course Selector with Inline Create ---------- */
@@ -126,6 +143,8 @@ function CourseSelector({
       <button
         type="button"
         onClick={() => setOpen(!open)}
+        aria-label="Subject"
+        aria-expanded={open}
         className="flex h-10 w-full items-center justify-between rounded-lg border border-input bg-background px-3 py-2 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
       >
         {selected ? (
@@ -134,7 +153,7 @@ function CourseSelector({
             {selected.name}
           </span>
         ) : (
-          <span className="text-muted-foreground">Select a course</span>
+          <span className="text-muted-foreground">Select a subject</span>
         )}
         <ChevronDown className={`h-4 w-4 text-muted-foreground transition-transform ${open ? "rotate-180" : ""}`} />
       </button>
@@ -161,7 +180,7 @@ function CourseSelector({
                       setNewName("")
                     }
                   }}
-                  placeholder="Course name"
+                  placeholder="Subject name"
                   className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-1 text-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
                 />
                 <div className="flex gap-1.5">
@@ -205,7 +224,7 @@ function CourseSelector({
                     className="flex w-full items-center gap-2 px-3 py-2 text-sm text-primary hover:bg-accent transition-colors font-medium"
                   >
                     <Plus className="h-4 w-4" />
-                    Add Course
+                    Add Subject
                   </button>
                 </div>
               </div>
@@ -213,6 +232,42 @@ function CourseSelector({
           </motion.div>
         )}
       </AnimatePresence>
+    </div>
+  )
+}
+
+/* ---------- Difficulty selector ---------- */
+
+function DifficultySelector({
+  value,
+  onChange,
+}: {
+  value: Difficulty
+  onChange: (d: Difficulty) => void
+}) {
+  return (
+    <div className="flex gap-1.5">
+      {DIFFICULTIES.map((d) => (
+        <button
+          key={d.value}
+          type="button"
+          onClick={() => onChange(d.value)}
+          aria-pressed={value === d.value}
+          className={cn(
+            "flex-1 rounded-lg border px-2 py-2 text-center transition-all",
+            value === d.value
+              ? "border-primary bg-primary/5 shadow-sm"
+              : "border-input hover:border-muted-foreground/30"
+          )}
+        >
+          <span className={cn("block text-sm font-medium", value === d.value ? "text-foreground" : "text-muted-foreground")}>
+            {d.label}
+          </span>
+          <span className="block text-[10px] text-muted-foreground/70 mt-0.5">
+            {d.hint}
+          </span>
+        </button>
+      ))}
     </div>
   )
 }
@@ -238,9 +293,20 @@ function ItemFormModal({
 }) {
   const [title, setTitle] = useState(initial?.title ?? "")
   const [courseId, setCourseId] = useState(initial?.course_id ?? courses[0]?.id ?? "")
-  const [priority, setPriority] = useState(initial?.priority ?? 3)
-  const [estimatedMinutes, setEstimatedMinutes] = useState<number | null>(initial?.estimated_minutes ?? 30)
-  const [dueDate, setDueDate] = useState(initial?.due_date ? initial.due_date.split("T")[0] : "")
+  const [difficulty, setDifficulty] = useState<Difficulty>(
+    difficultyFromPriority(initial?.priority)
+  )
+  const [dueChip, setDueChip] = useState<DueChip | null>(
+    chipForDate(initial?.due_date)
+  )
+  const [customDueDate, setCustomDueDate] = useState(
+    initial?.due_date ? initial.due_date.split("T")[0] : ""
+  )
+  const [showAdvanced, setShowAdvanced] = useState(false)
+  const [estimatedMinutes, setEstimatedMinutes] = useState<number | null>(
+    initial?.estimated_minutes ?? null
+  )
+  const [description, setDescription] = useState(initial?.description ?? "")
 
   if (!open) return null
 
@@ -249,14 +315,25 @@ function ItemFormModal({
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
     if (!valid) return
-    const payload: BacklogItemCreatePayload | BacklogItemUpdatePayload = {
+
+    let dueDate: string | null = null
+    if (dueChip === "custom") {
+      dueDate = customDueDate ? new Date(customDueDate).toISOString() : null
+    } else if (dueChip) {
+      dueDate = new Date(dueDateForChip(dueChip)).toISOString()
+    }
+
+    const estimatedMinutesPayload =
+      initial || showAdvanced ? estimatedMinutes || null : undefined
+
+    onSave({
       title: title.trim(),
       course_id: courseId,
-      priority,
-      estimated_minutes: estimatedMinutes || null,
-      due_date: dueDate ? new Date(dueDate).toISOString() : null,
-    }
-    onSave(payload)
+      priority: priorityFromDifficulty(difficulty),
+      due_date: dueDate,
+      description: description.trim() ? description.trim() : null,
+      estimated_minutes: estimatedMinutesPayload,
+    })
   }
 
   return (
@@ -271,17 +348,20 @@ function ItemFormModal({
         aria-modal="true"
         aria-labelledby="item-form-modal-title"
       >
-        <form onSubmit={handleSubmit} className="space-y-6 p-6">
+        <form onSubmit={handleSubmit} className="space-y-5 p-6 max-h-[90vh] overflow-y-auto">
           <div className="flex items-center justify-between">
-            <h2 id="item-form-modal-title" className="text-lg font-semibold tracking-tight">{initial ? "Edit task" : "New task"}</h2>
+            <h2 id="item-form-modal-title" className="text-lg font-semibold tracking-tight">
+              {initial ? "Edit task" : "New task"}
+            </h2>
             <button type="button" onClick={onClose} className="h-9 px-3 rounded-lg text-sm text-muted-foreground hover:text-foreground hover:bg-muted transition-colors">
               Cancel
             </button>
           </div>
 
           <div className="space-y-2">
-            <label className="text-sm font-medium">Title</label>
+            <label htmlFor="task-title" className="text-sm font-medium">Task name</label>
             <input
+              id="task-title"
               value={title}
               onChange={(e) => setTitle(e.target.value)}
               placeholder="e.g. Complete Chapter 5 exercises"
@@ -292,7 +372,7 @@ function ItemFormModal({
           </div>
 
           <div className="space-y-2">
-            <label className="text-sm font-medium">Course</label>
+            <label className="text-sm font-medium">Subject</label>
             <CourseSelector
               courses={courses}
               value={courseId}
@@ -301,50 +381,96 @@ function ItemFormModal({
             />
           </div>
 
-          <div className="grid grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <label className="text-sm font-medium">Priority</label>
-              <div className="flex gap-1.5">
-                {[1, 2, 3, 4].map((p) => (
-                  <button
-                    key={p}
-                    type="button"
-                    onClick={() => setPriority(p)}
-                    className={`flex-1 h-9 rounded-lg border text-xs font-medium transition-all ${
-                      priority === p
-                        ? "border-primary bg-primary/5 text-foreground shadow-sm"
-                        : "border-input text-muted-foreground hover:border-muted-foreground/30"
-                    }`}
-                  >
-                    {PRIORITY_LABELS[p]}
-                  </button>
-                ))}
-              </div>
-            </div>
-            <div className="space-y-2">
-              <label className="text-sm font-medium">Est. minutes</label>
-              <input
-                type="number"
-                min={5}
-                max={1440}
-                value={estimatedMinutes ?? ""}
-                onChange={(e) => setEstimatedMinutes(e.target.value ? parseInt(e.target.value, 10) : null)}
-                className="flex h-10 w-full rounded-lg border border-input bg-background px-3 py-1 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
-              />
-            </div>
+          <div className="space-y-2">
+            <label className="text-sm font-medium">Difficulty</label>
+            <DifficultySelector value={difficulty} onChange={setDifficulty} />
+            <p className="text-xs text-muted-foreground flex items-center gap-1.5">
+              <Sparkles className="h-3 w-3 text-primary" />
+              Momentum estimates the time for you.
+            </p>
           </div>
 
           <div className="space-y-2">
-            <label className="text-sm font-medium">Due date</label>
-            <input
-              type="date"
-              value={dueDate}
-              onChange={(e) => setDueDate(e.target.value)}
-              className="flex h-10 w-full rounded-lg border border-input bg-background px-3 py-2 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
-            />
+            <label className="text-sm font-medium">Due</label>
+            <div className="flex gap-1.5">
+              {DUE_CHIPS.map((chip) => (
+                <button
+                  key={chip.value}
+                  type="button"
+                  onClick={() => setDueChip(chip.value)}
+                  aria-pressed={dueChip === chip.value}
+                  className={cn(
+                    "flex-1 h-9 rounded-lg border text-xs font-medium transition-all",
+                    dueChip === chip.value
+                      ? "border-primary bg-primary/5 text-foreground shadow-sm"
+                      : "border-input text-muted-foreground hover:border-muted-foreground/30"
+                  )}
+                >
+                  {chip.label}
+                </button>
+              ))}
+            </div>
+            {dueChip === "custom" && (
+              <input
+                type="date"
+                value={customDueDate}
+                onChange={(e) => setCustomDueDate(e.target.value)}
+                className="flex h-10 w-full rounded-lg border border-input bg-background px-3 py-2 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+              />
+            )}
           </div>
 
-          <div className="flex gap-3 pt-2">
+          <div className="border-t pt-1">
+            <button
+              type="button"
+              onClick={() => setShowAdvanced(!showAdvanced)}
+              aria-expanded={showAdvanced}
+              className="flex w-full items-center justify-between rounded-lg px-1 py-2 text-sm text-muted-foreground hover:text-foreground transition-colors"
+            >
+              <span>Advanced</span>
+              <ChevronDown className={`h-4 w-4 transition-transform ${showAdvanced ? "rotate-180" : ""}`} />
+            </button>
+            <AnimatePresence initial={false}>
+              {showAdvanced && (
+                <motion.div
+                  initial={{ opacity: 0, height: 0 }}
+                  animate={{ opacity: 1, height: "auto" }}
+                  exit={{ opacity: 0, height: 0 }}
+                  transition={{ duration: 0.2 }}
+                  className="space-y-4 overflow-hidden"
+                >
+                  <div className="space-y-2 pt-3">
+                    <label htmlFor="est-minutes" className="text-sm font-medium">Est. minutes</label>
+                    <input
+                      id="est-minutes"
+                      type="number"
+                      min={5}
+                      max={1440}
+                      value={estimatedMinutes ?? ""}
+                      onChange={(e) => setEstimatedMinutes(e.target.value ? parseInt(e.target.value, 10) : null)}
+                      placeholder="Leave blank to auto-estimate"
+                      className="flex h-10 w-full rounded-lg border border-input bg-background px-3 py-1 text-sm shadow-sm placeholder:text-muted-foreground/50 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                    />
+                    <p className="text-xs text-muted-foreground">
+                      Leave this blank and Momentum will estimate the time from the task and difficulty.
+                    </p>
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium">Notes</label>
+                    <textarea
+                      value={description}
+                      onChange={(e) => setDescription(e.target.value)}
+                      rows={2}
+                      placeholder="Anything your teacher said (optional)"
+                      className="flex w-full rounded-lg border border-input bg-background px-3 py-2 text-sm shadow-sm placeholder:text-muted-foreground/50 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring resize-none"
+                    />
+                  </div>
+                </motion.div>
+              )}
+            </AnimatePresence>
+          </div>
+
+          <div className="flex gap-3 pt-1">
             <Button type="button" variant="outline" onClick={onClose} className="flex-1">
               Cancel
             </Button>
@@ -469,6 +595,8 @@ function BacklogCard({
   const course = courses.find((c) => c.id === item.course_id)
   const overdue = isOverdue(item.due_date, item.status)
   const completed = item.status === "completed"
+  const difficulty = difficultyFromPriority(item.priority)
+  const dueLabel = dueChipLabel(item.due_date)
 
   return (
     <motion.div
@@ -497,8 +625,8 @@ function BacklogCard({
                 <h3 className={`text-sm font-medium ${completed ? "line-through text-muted-foreground" : ""}`}>
                   {item.title}
                 </h3>
-                <Badge variant={PRIORITY_VARIANT[item.priority]} className="text-[10px] px-1.5 py-0">
-                  {PRIORITY_LABELS[item.priority]}
+                <Badge variant={DIFFICULTY_VARIANT[difficulty]} className="text-[10px] px-1.5 py-0">
+                  {difficultyLabel(difficulty)}
                 </Badge>
               </div>
 
@@ -525,7 +653,7 @@ function BacklogCard({
                 {item.due_date && (
                   <span className={`inline-flex items-center gap-1 ${overdue ? "text-red-500 font-medium" : ""}`}>
                     {overdue ? <AlertCircle className="h-3 w-3" /> : null}
-                    {overdue ? "Overdue" : `Due ${formatDate(item.due_date)}`}
+                    {overdue ? "Overdue" : `Due ${dueLabel ?? formatDate(item.due_date)}`}
                   </span>
                 )}
               </div>
@@ -536,6 +664,55 @@ function BacklogCard({
         </CardContent>
       </Card>
     </motion.div>
+  )
+}
+
+/* ---------- Empty states ---------- */
+
+function EmptyState({
+  activeTab,
+  onAdd,
+}: {
+  activeTab: string
+  onAdd: () => void
+}) {
+  const copy =
+    activeTab === "completed"
+      ? {
+          icon: CheckCircle2,
+          title: "Nothing completed yet.",
+          body: "Finish a focus session and Momentum will track it here.",
+        }
+      : activeTab === "upcoming"
+        ? {
+            icon: BookOpen,
+            title: "No upcoming work.",
+            body: "Add homework and Momentum will plan it for you.",
+          }
+        : {
+            icon: BookOpen,
+            title: "No work yet.",
+            body: "Add your homework and Momentum will automatically build today's study plan.",
+          }
+
+  const Icon = copy.icon
+
+  return (
+    <FadeIn delay={0.1}>
+      <div className="flex flex-col items-center justify-center rounded-xl border border-dashed py-16 px-8 text-center">
+        <div className="mb-4 flex h-16 w-16 items-center justify-center rounded-2xl bg-primary/5">
+          <Icon className="h-8 w-8 text-primary/40" />
+        </div>
+        <h3 className="text-base font-medium mb-1">{copy.title}</h3>
+        <p className="text-sm text-muted-foreground mb-5 max-w-xs">{copy.body}</p>
+        {activeTab !== "completed" && (
+          <Button onClick={onAdd} className="gap-1.5">
+            <Plus className="h-4 w-4" />
+            Add Work
+          </Button>
+        )}
+      </div>
+    </FadeIn>
   )
 }
 
@@ -550,9 +727,7 @@ export function BacklogPage() {
   const { data: courses = [], isLoading: coursesLoading } = useCourses()
   const createCourse = useCreateCourse()
 
-  const isUpcoming = activeTab === "upcoming"
-  const statusParam = activeTab === "completed" ? "completed" : isUpcoming ? undefined : undefined
-  const { data: allItems = [], isLoading: itemsLoading } = useBacklogItems(statusParam)
+  const { data: allItems = [], isLoading: itemsLoading } = useBacklogItems()
 
   const items = useMemo(() => {
     if (activeTab === "all") return allItems
@@ -619,7 +794,7 @@ export function BacklogPage() {
               <div>
                 <h1 className="text-xl font-semibold tracking-tight">Pending Work</h1>
                 <p className="text-sm text-muted-foreground">
-                  {items.length} {activeTab === "all" ? "total" : activeTab}
+                  Momentum turns these into study sessions automatically.
                 </p>
               </div>
             </div>
@@ -657,24 +832,7 @@ export function BacklogPage() {
             ))}
           </div>
         ) : items.length === 0 ? (
-          <FadeIn delay={0.1}>
-            <div className="flex flex-col items-center justify-center rounded-xl border border-dashed py-16 px-8 text-center">
-              <div className="mb-4 flex h-16 w-16 items-center justify-center rounded-2xl bg-primary/5">
-                <BookOpen className="h-8 w-8 text-primary/40" />
-              </div>
-              <h3 className="text-base font-medium mb-1">No pending work</h3>
-              <p className="text-sm text-muted-foreground mb-5 max-w-xs">
-                Add your first task to get started. Track assignments, readings, and study goals.
-              </p>
-              <Button
-                onClick={() => { setEditingItem(null); setShowForm(true) }}
-                className="gap-1.5"
-              >
-                <Plus className="h-4 w-4" />
-                Add Work
-              </Button>
-            </div>
-          </FadeIn>
+          <EmptyState activeTab={activeTab} onAdd={() => { setEditingItem(null); setShowForm(true) }} />
         ) : (
           <AnimatePresence mode="popLayout">
             <div className="space-y-2">

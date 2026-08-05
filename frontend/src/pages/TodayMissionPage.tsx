@@ -1,94 +1,48 @@
-import { useEffect, useMemo, useState } from "react"
+import { useEffect, useMemo } from "react"
 import { motion } from "framer-motion"
 import {
   Play,
-  Clock,
-  Target,
-  AlertTriangle,
   CheckCircle2,
-  Sprout,
+  BookOpen,
+  Plus,
+  ChevronRight,
 } from "lucide-react"
-import { toast } from "sonner"
 import { useNavigate } from "react-router-dom"
 
-import {
-  useDashboard,
-  useUpdateBacklogItem,
-} from "@/services/hooks"
+import { useDashboard } from "@/services/hooks"
 import { Layout } from "@/components/layout"
 import { Button } from "@/components/ui/button"
 import { Skeleton } from "@/components/ui/skeleton"
-import { Badge } from "@/components/ui/badge"
-import { Progress } from "@/components/ui/progress"
 import { FadeIn } from "@/components/ui/fade-in"
+import { CoachMessage } from "@/components/coach/coach-message"
+import { RecommendedNextCard } from "@/components/coach/recommended-next"
+import { ProgressOverview } from "@/components/progress-overview"
 import {
-  MomentumStreak,
   RecoveryTokens,
   SubjectStreaksCard,
-  BalanceScoreCard,
 } from "@/components/streak-display"
 import type {
   PlanSession,
   PrioritizedBacklogItem,
   BacklogHealth,
 } from "@/services/types"
+import {
+  buildCoachingLine,
+  buildRecommendationReason,
+  daysUntilDue,
+  estimateTimeSaved,
+  formatMinutes,
+  formatShortDate,
+  formatTimeDisplay,
+  getGreeting,
+  minutesBetween,
+  scheduleConfidence,
+} from "@/lib/coaching"
 
 /* ─── Helpers ─── */
 
-function getDifficulty(priority: number): {
-  label: string
-  variant: "destructive" | "warning" | "success"
-} {
-  if (priority <= 2) return { label: "Hard", variant: "destructive" }
-  if (priority === 3) return { label: "Medium", variant: "warning" }
-  return { label: "Easy", variant: "success" }
-}
-
-function getMinutesBetween(start: string, end: string): number {
-  const [sh, sm] = start.split(":").map(Number)
-  const [eh, em] = end.split(":").map(Number)
-  return eh * 60 + em - (sh * 60 + sm)
-}
-
-function formatTimeDisplay(t: string): string {
-  const [h, m] = t.split(":").map(Number)
-  const period = h >= 12 ? "PM" : "AM"
-  const hour = h % 12 || 12
-  return `${hour}:${m.toString().padStart(2, "0")} ${period}`
-}
-
-function formatDate(dateStr: string | null): string | null {
-  if (!dateStr) return null
-  return new Date(dateStr).toLocaleDateString("en-US", {
-    month: "short",
-    day: "numeric",
-  })
-}
-
-function getStatusMessage(
-  health: BacklogHealth | undefined,
-  overdueMinutes: number
-): { message: string; variant: "success" | "warning" | "destructive" } {
-  if (!health) return { message: "You are on track.", variant: "success" }
-  if (health.health_score === "good") {
-    if (health.estimated_completion_date && health.pending_items > 0) {
-      return {
-        message: `You'll finish everything by ${formatDate(health.estimated_completion_date)}.`,
-        variant: "success",
-      }
-    }
-    return { message: "You are on track.", variant: "success" }
-  }
-  if (overdueMinutes > 0) {
-    const hours = Math.ceil(overdueMinutes / 60)
-    return {
-      message: `You're ${hours} hour${hours > 1 ? "s" : ""} behind.`,
-      variant: "destructive",
-    }
-  }
-  if (health.health_score === "fair")
-    return { message: "You're slightly behind.", variant: "warning" }
-  return { message: "You're behind schedule.", variant: "destructive" }
+function topicFromSession(session: PlanSession): string {
+  return session.reason.replace(/^Work on\s+/, "")
 }
 
 function computeOverdueMinutes(
@@ -99,729 +53,6 @@ function computeOverdueMinutes(
     .filter((item) => item.overdue)
     .reduce((sum, item) => sum + (item.estimated_minutes || 30), 0)
 }
-
-/* ─── Greeting + Status ─── */
-
-function Greeting({
-  name,
-  status,
-}: {
-  name: string | null
-  status: { message: string; variant: "success" | "warning" | "destructive" }
-}) {
-  const now = new Date()
-  const hour = now.getHours()
-  let greeting: string
-  if (hour < 12) greeting = "Good morning"
-  else if (hour < 17) greeting = "Good afternoon"
-  else greeting = "Good evening"
-
-  const displayName = name ? `, ${name}` : ""
-
-  const statusColors = {
-    success: "text-emerald-600 dark:text-emerald-400",
-    warning: "text-amber-600 dark:text-amber-400",
-    destructive: "text-red-600 dark:text-red-400",
-  }
-
-  const StatusIcon =
-    status.variant === "success" ? CheckCircle2 : AlertTriangle
-
-  return (
-    <div className="space-y-3">
-      <motion.h1
-        initial={{ opacity: 0, y: -8 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.2, ease: "easeOut" }}
-        className="text-2xl font-semibold tracking-tight"
-      >
-        {greeting}
-        {displayName}
-      </motion.h1>
-      <motion.div
-        initial={{ opacity: 0 }}
-        animate={{ opacity: 1 }}
-        transition={{ duration: 0.2, delay: 0.08 }}
-        className="flex items-center gap-2"
-      >
-        <StatusIcon
-          className={`h-4 w-4 ${statusColors[status.variant]}`}
-        />
-        <span
-          className={`text-sm font-medium ${statusColors[status.variant]}`}
-        >
-          {status.message}
-        </span>
-      </motion.div>
-    </div>
-  )
-}
-
-/* ─── Today's Progress ─── */
-
-function TodayProgress({
-  sessions,
-  completedIds,
-  profile,
-}: {
-  sessions: PlanSession[]
-  completedIds: Set<string>
-  profile: { daily_target_minutes: number | null } | undefined | null
-}) {
-  const completedMinutes = sessions
-    .filter((s) => completedIds.has(s.backlog_item_id))
-    .reduce(
-      (sum, s) => sum + getMinutesBetween(s.start_time, s.end_time),
-      0
-    )
-
-  const uniqueTasks = new Set(sessions.map((s) => s.backlog_item_id)).size
-  const completedTasks = new Set(
-    sessions
-      .filter((s) => completedIds.has(s.backlog_item_id))
-      .map((s) => s.backlog_item_id)
-  ).size
-
-  const progress = uniqueTasks > 0 ? Math.round((completedTasks / uniqueTasks) * 100) : 0
-
-  if (uniqueTasks === 0) return null
-
-  const dailyTarget = profile?.daily_target_minutes ?? 180
-  const targetProgress = Math.min(100, Math.round((completedMinutes / dailyTarget) * 100))
-
-  return (
-    <div className="rounded-xl border bg-card p-5 space-y-4">
-      <div className="flex items-center justify-between">
-        <span className="text-sm font-medium">Today's Progress</span>
-        <span className="text-sm font-semibold">{progress}%</span>
-      </div>
-
-      <Progress value={progress} className="h-2" />
-
-      <div className="grid grid-cols-3 gap-3">
-        <div className="rounded-lg bg-muted/50 p-3 text-center">
-          <div className="text-lg font-semibold tracking-tight">
-            {completedMinutes}
-          </div>
-          <div className="text-[11px] text-muted-foreground">Minutes</div>
-        </div>
-        <div className="rounded-lg bg-muted/50 p-3 text-center">
-          <div className="text-lg font-semibold tracking-tight">
-            {completedTasks}/{uniqueTasks}
-          </div>
-          <div className="text-[11px] text-muted-foreground">Tasks</div>
-        </div>
-        <div className="rounded-lg bg-muted/50 p-3 text-center">
-          <div className="text-lg font-semibold tracking-tight">
-            {targetProgress}%
-          </div>
-          <div className="text-[11px] text-muted-foreground">Daily Target</div>
-        </div>
-      </div>
-    </div>
-  )
-}
-
-/* ─── Mission Card ─── */
-
-function MissionCard({
-  item,
-  courseColor,
-  isCurrent,
-  isCompleted,
-  onStart,
-  onMarkComplete,
-}: {
-  item: { session: PlanSession; backlogItem?: PrioritizedBacklogItem }
-  courseColor: string
-  isCurrent: boolean
-  isCompleted: boolean
-  onStart?: () => void
-  onMarkComplete?: () => void
-}) {
-  const duration = getMinutesBetween(
-    item.session.start_time,
-    item.session.end_time
-  )
-  const difficulty = getDifficulty(item.backlogItem?.priority ?? 3)
-  const subject = item.backlogItem?.course_name ?? "Study"
-  const topic = item.session.reason.replace(/^Work on\s+/, "")
-  const remaining = item.session.remaining_minutes
-
-  return (
-    <motion.div
-      layout
-      whileHover={isCompleted ? undefined : { scale: 1.01 }}
-      transition={{ duration: 0.15, ease: "easeOut" }}
-      className={`relative overflow-hidden rounded-2xl border bg-card shadow-sm transition-all ${
-        isCompleted ? "opacity-60" : ""
-      }`}
-    >
-      <div
-        className="absolute inset-y-0 left-0 w-1"
-        style={{ backgroundColor: isCompleted ? "#22c55e" : courseColor }}
-      />
-
-      <div className="p-5 sm:p-6">
-        <div className="space-y-4">
-          <div className="flex items-center justify-between">
-            {isCurrent && !isCompleted ? (
-              <div className="flex items-center gap-2">
-                <div className="relative flex h-2 w-2">
-                  <div className="absolute inline-flex h-full w-full animate-ping rounded-full bg-primary/75 opacity-75" />
-                  <div className="relative inline-flex h-2 w-2 rounded-full bg-primary" />
-                </div>
-                <span className="text-xs font-medium text-primary">
-                  Now Studying
-                </span>
-              </div>
-            ) : isCompleted ? (
-              <div className="flex items-center gap-2">
-                <CheckCircle2 className="h-4 w-4 text-emerald-500" />
-                <span className="text-xs font-medium text-emerald-600 dark:text-emerald-400">
-                  Completed
-                </span>
-              </div>
-            ) : (
-              <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                <Clock className="h-3.5 w-3.5" />
-                <span>Up Next</span>
-              </div>
-            )}
-            {item.backlogItem?.due_date && (
-              <Badge variant={item.backlogItem.overdue ? "destructive" : "outline"} className="text-[10px]">
-                Due {formatDate(item.backlogItem.due_date)}
-              </Badge>
-            )}
-          </div>
-
-          <div className="flex items-center gap-2 flex-wrap">
-            <span
-              className="inline-flex items-center rounded-md px-2 py-0.5 text-xs font-medium"
-              style={{
-                backgroundColor: courseColor + "20",
-                color: courseColor,
-              }}
-            >
-              {subject}
-            </span>
-            <Badge variant={difficulty.variant}>{difficulty.label}</Badge>
-          </div>
-
-          <div className="space-y-1">
-            <h2 className="text-lg font-semibold leading-snug tracking-tight break-words">
-              {topic}
-            </h2>
-            <div className="flex flex-wrap items-center gap-3 text-sm text-muted-foreground">
-              <div className="flex items-center gap-1.5">
-                <Clock className="h-3.5 w-3.5" />
-                <span>{duration} min</span>
-              </div>
-              {remaining > 0 && (
-                <span className="text-xs text-muted-foreground/70">
-                  · {remaining} min remaining after
-                </span>
-              )}
-              {!isCompleted && (
-                <div className="flex items-center gap-1.5">
-                  <Target className="h-3.5 w-3.5" />
-                  <span>by {formatTimeDisplay(item.session.end_time)}</span>
-                </div>
-              )}
-            </div>
-          </div>
-
-          {!isCompleted && (
-            <div className="flex gap-3">
-              {isCurrent && onStart && (
-                <motion.div
-                  whileTap={{ scale: 0.98 }}
-                  className="flex-1"
-                >
-                  <Button
-                    onClick={onStart}
-                    size="lg"
-                    className="w-full gap-2 h-12 text-sm font-semibold rounded-xl"
-                  >
-                    <Play className="h-4 w-4 fill-current" />
-                    Start Focus
-                  </Button>
-                </motion.div>
-              )}
-              {onMarkComplete && (
-                <Button
-                  onClick={onMarkComplete}
-                  variant="outline"
-                  size="lg"
-                  className="gap-2 h-12 text-sm rounded-xl"
-                >
-                  <CheckCircle2 className="h-4 w-4" />
-                  Mark Complete
-                </Button>
-              )}
-            </div>
-          )}
-        </div>
-      </div>
-    </motion.div>
-  )
-}
-
-/* ─── Upcoming Session Card ─── */
-
-function UpcomingSessionCard({
-  session,
-  backlogItem,
-  isCompleted,
-  onMarkComplete,
-}: {
-  session: PlanSession
-  backlogItem?: PrioritizedBacklogItem
-  isCompleted: boolean
-  onMarkComplete?: () => void
-}) {
-  const duration = getMinutesBetween(session.start_time, session.end_time)
-  const courseColor = backlogItem?.course_color ?? "#888"
-  const topic = session.reason.replace(/^Work on\s+/, "")
-
-  return (
-    <motion.div
-      layout
-      whileHover={{ x: 4 }}
-      transition={{ duration: 0.15, ease: "easeOut" }}
-      className={`flex items-center gap-3 rounded-xl border bg-card px-4 py-3 transition-all ${
-        isCompleted ? "opacity-60" : ""
-      }`}
-    >
-      <button
-        onClick={onMarkComplete}
-        className="shrink-0 mt-0.5 h-10 w-10 flex items-center justify-center rounded-lg"
-      >
-        {isCompleted ? (
-          <CheckCircle2 className="h-5 w-5 text-emerald-500" />
-        ) : (
-          <div className="h-5 w-5 rounded-full border-2 border-muted-foreground/30 hover:border-emerald-500 transition-colors" />
-        )}
-      </button>
-
-      <div
-        className="h-2.5 w-2.5 shrink-0 rounded-full"
-        style={{ backgroundColor: courseColor }}
-      />
-
-      <div className="flex-1 min-w-0">
-        <p className={`text-sm font-medium truncate ${isCompleted ? "line-through text-muted-foreground" : ""}`}>
-          {topic}
-        </p>
-      </div>
-
-      <div className="flex items-center gap-2 text-xs text-muted-foreground shrink-0">
-        <span>{formatTimeDisplay(session.start_time)}</span>
-        <span className="text-muted-foreground/40">·</span>
-        <span>{duration} min</span>
-        {session.remaining_minutes > 0 && (
-          <span className="text-muted-foreground/60 text-[10px]">
-            ({session.remaining_minutes} left)
-          </span>
-        )}
-      </div>
-    </motion.div>
-  )
-}
-
-/* ─── Empty State ─── */
-
-function EmptyState() {
-  return (
-    <motion.div
-      initial={{ opacity: 0, scale: 0.95 }}
-      animate={{ opacity: 1, scale: 1 }}
-      transition={{ duration: 0.3 }}
-      className="flex flex-col items-center justify-center rounded-2xl border border-dashed py-16 px-8 text-center"
-    >
-      <div className="mb-4 text-4xl">🎉</div>
-      <h3 className="text-base font-semibold mb-1">You're done for today.</h3>
-      <p className="text-sm text-muted-foreground max-w-xs">
-        Enjoy your evening. Your plan is ready for tomorrow.
-      </p>
-    </motion.div>
-  )
-}
-
-/* ─── Backlog Health ─── */
-
-function BacklogHealthCard({
-  health,
-}: {
-  health: BacklogHealth | undefined
-}) {
-  if (!health) return null
-
-  const isGood = health.health_score === "good"
-  const isFair = health.health_score === "fair"
-  const borderClass = isGood
-    ? "border-emerald-200 dark:border-emerald-900"
-    : isFair
-      ? "border-amber-200 dark:border-amber-900"
-      : "border-red-200 dark:border-red-900"
-  const dotClass = isGood ? "bg-emerald-500" : isFair ? "bg-amber-500" : "bg-red-500"
-  const labelClass = isGood
-    ? "text-emerald-600 dark:text-emerald-400"
-    : isFair
-      ? "text-amber-600 dark:text-amber-400"
-      : "text-red-600 dark:text-red-400"
-  const healthLabel = isGood ? "Comfortable" : isFair ? "Manageable" : "Falling behind"
-  const completionDate = formatDate(health.estimated_completion_date)
-  const daysUntilCompletion = health.estimated_completion_date
-    ? Math.max(
-        1,
-        Math.ceil(
-          (new Date(health.estimated_completion_date).getTime() - Date.now()) /
-            (1000 * 60 * 60 * 24)
-        )
-      )
-    : 1
-  const avgHoursPerDay =
-    health.pending_items > 0 && health.estimated_completion_date
-      ? (health.pending_items * 30) / daysUntilCompletion / 60
-      : 0
-
-  return (
-    <div className={`rounded-xl border ${borderClass} bg-card p-5`}>
-      <div className="space-y-4">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <div className={`h-2 w-2 rounded-full ${dotClass}`} />
-            <span className="text-sm font-medium">Backlog Health</span>
-          </div>
-          <span className={`text-xs font-medium ${labelClass}`}>
-            {healthLabel}
-          </span>
-        </div>
-        <div className="grid grid-cols-3 gap-3">
-          <div className="rounded-lg bg-muted/50 p-3 text-center">
-            <div className="text-lg font-semibold tracking-tight">
-              {health.pending_items}
-            </div>
-            <div className="text-[11px] text-muted-foreground">
-              Pending topics
-            </div>
-          </div>
-          <div className="rounded-lg bg-muted/50 p-3 text-center">
-            <div className="text-lg font-semibold tracking-tight">
-              {completionDate ?? "—"}
-            </div>
-            <div className="text-[11px] text-muted-foreground">
-              Est. completion
-            </div>
-          </div>
-          <div className="rounded-lg bg-muted/50 p-3 text-center">
-            <div className="text-lg font-semibold tracking-tight">
-              {avgHoursPerDay > 0 ? `${avgHoursPerDay.toFixed(1)}h` : "—"}
-            </div>
-            <div className="text-[11px] text-muted-foreground">Avg hrs/day</div>
-          </div>
-        </div>
-      </div>
-    </div>
-  )
-}
-
-/* ─── Today's Insight ─── */
-
-function TodayInsight({
-  insight,
-}: {
-  insight: { title: string; message: string } | undefined
-}) {
-  if (!insight) return null
-  return (
-    <motion.div
-      initial={{ opacity: 0, y: 12 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.2, ease: "easeOut" }}
-      className="rounded-xl border bg-card p-5"
-    >
-      <div className="flex items-start gap-3">
-        <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-primary/10">
-          <Sprout className="h-4 w-4 text-primary" />
-        </div>
-        <div className="space-y-1.5">
-          <span className="text-xs font-medium text-muted-foreground">
-            Today's Insight
-          </span>
-          <p className="text-sm font-medium leading-snug text-card-foreground">
-            {insight.title}
-          </p>
-          <p className="text-sm leading-relaxed text-card-foreground/70">
-            {insight.message}
-          </p>
-        </div>
-      </div>
-    </motion.div>
-  )
-}
-
-/* ─── Main Page ─── */
-
-export function TodayMissionPage() {
-  const navigate = useNavigate()
-  const {
-    data: dashboard,
-    isLoading,
-    error,
-    refetch,
-  } = useDashboard()
-  const updateItem = useUpdateBacklogItem()
-
-  const profile = dashboard?.profile
-  const preview = dashboard?.planning
-  const planData = dashboard?.plan
-  const streaks = dashboard?.streaks
-  const balanceScore = dashboard?.balance
-  const insight = dashboard?.insight
-
-  const onboarded = localStorage.getItem("momentum_onboarded") === "true"
-
-  useEffect(() => {
-    if (!onboarded) {
-      navigate("/onboarding", { replace: true })
-      return
-    }
-    if (isLoading) return
-    if (!dashboard?.profile?.class_name) {
-      navigate("/onboarding", { replace: true })
-    }
-  }, [onboarded, isLoading, dashboard, navigate])
-
-  const [completedSessionIds, setCompletedSessionIds] = useState<Set<string>>(
-    new Set()
-  )
-
-  const backlogItemMap = useMemo(() => {
-    if (!preview?.prioritized_backlog)
-      return new Map<string, PrioritizedBacklogItem>()
-    return new Map(
-      preview.prioritized_backlog.map((item) => [item.id, item])
-    )
-  }, [preview])
-
-  const plan = planData?.plan
-  const sessions = plan?.sessions ?? []
-
-  const allCompleted = useMemo(() => {
-    if (sessions.length === 0) return false
-    const uniqueIds = new Set(sessions.map((s) => s.backlog_item_id))
-    return [...uniqueIds].every((id) => completedSessionIds.has(id))
-  }, [sessions, completedSessionIds])
-
-  const currentSession = useMemo(
-    () => (plan?.sessions ? getCurrentSession(plan.sessions) : null),
-    [plan]
-  )
-  const nextSession = useMemo(
-    () => (plan?.sessions ? getNextSession(plan.sessions) : null),
-    [plan]
-  )
-
-  const missionSession = currentSession || nextSession
-  const missionBacklogItem = missionSession
-    ? backlogItemMap.get(missionSession.backlog_item_id)
-    : undefined
-
-  const otherSessions = useMemo(() => {
-    const now = new Date()
-    const currentMinutes = now.getHours() * 60 + now.getMinutes()
-    return sessions.filter((s) => {
-      if (s.backlog_item_id === currentSession?.backlog_item_id) return false
-      if (s.backlog_item_id === nextSession?.backlog_item_id) return false
-      const [eh, em] = s.end_time.split(":").map(Number)
-      if (eh * 60 + em <= currentMinutes) return false
-      return true
-    })
-  }, [sessions, currentSession, nextSession])
-
-  const overdueMinutes = useMemo(
-    () => computeOverdueMinutes(preview?.prioritized_backlog),
-    [preview]
-  )
-  const statusMessage = useMemo(
-    () => getStatusMessage(preview?.backlog_health, overdueMinutes),
-    [preview, overdueMinutes]
-  )
-
-  const handleRefresh = () => {
-    refetch()
-  }
-
-  const handleStartStudy = () => {
-    if (!currentSession || !plan) return
-    navigate("/focus", {
-      state: { session: currentSession, sessions, plan },
-    })
-  }
-
-  const handleMarkComplete = (backlogItemId: string) => {
-    setCompletedSessionIds((prev) => new Set([...prev, backlogItemId]))
-    updateItem.mutateAsync({
-      id: backlogItemId,
-      payload: { status: "completed" },
-    })
-    toast.success("Task marked complete")
-  }
-
-  if (isLoading) {
-    return (
-      <Layout>
-        <div className="space-y-5 max-w-lg mx-auto">
-          <Skeleton className="h-12 w-56" />
-          <Skeleton className="h-32 w-full rounded-xl" />
-          <Skeleton className="h-48 w-full rounded-2xl" />
-          <Skeleton className="h-16 w-full rounded-xl" />
-        </div>
-      </Layout>
-    )
-  }
-
-  if (error) {
-    return (
-      <Layout>
-        <div className="max-w-lg mx-auto space-y-5">
-          <Greeting
-            name={profile?.name ?? null}
-            status={statusMessage}
-          />
-          <div className="flex flex-col items-center justify-center rounded-2xl border border-dashed p-12 text-center">
-            <p className="text-sm text-muted-foreground mb-4">
-              Couldn't load your plan
-            </p>
-            <Button onClick={handleRefresh} variant="outline" size="sm">
-              Try again
-            </Button>
-          </div>
-        </div>
-      </Layout>
-    )
-  }
-
-  const allDone = allCompleted || sessions.length === 0
-
-  return (
-    <Layout>
-      <div className="max-w-lg mx-auto space-y-6 pb-8">
-        <FadeIn delay={0}>
-          <Greeting
-            name={profile?.name ?? null}
-            status={statusMessage}
-          />
-        </FadeIn>
-
-        {streaks?.momentum && (
-          <FadeIn delay={0.03}>
-            <MomentumStreak
-              currentStreak={streaks.momentum.current_streak}
-              lastCompletedDate={streaks.momentum.last_completed_date}
-              streakProtectedToday={
-                streaks.momentum.streak_protected_today
-              }
-            />
-          </FadeIn>
-        )}
-
-        {streaks?.momentum &&
-          streaks.momentum.recovery_tokens_earned > 0 && (
-            <FadeIn delay={0.04}>
-              <RecoveryTokens
-                current={streaks.momentum.recovery_tokens_current}
-                earned={streaks.momentum.recovery_tokens_earned}
-                used={streaks.momentum.recovery_tokens_used}
-              />
-            </FadeIn>
-          )}
-
-        <FadeIn delay={0.08}>
-          <TodayProgress
-            sessions={sessions}
-            completedIds={completedSessionIds}
-            profile={profile}
-          />
-        </FadeIn>
-
-        <FadeIn delay={0.1}>
-          {allDone ? (
-            <EmptyState />
-          ) : missionSession ? (
-            <MissionCard
-              item={{ session: missionSession, backlogItem: missionBacklogItem }}
-              courseColor={missionBacklogItem?.course_color ?? "#888"}
-              isCurrent={!!currentSession}
-              isCompleted={completedSessionIds.has(
-                missionSession.backlog_item_id
-              )}
-              onStart={handleStartStudy}
-              onMarkComplete={() =>
-                handleMarkComplete(missionSession.backlog_item_id)
-              }
-            />
-          ) : (
-            <EmptyState />
-          )}
-        </FadeIn>
-
-        {otherSessions.length > 0 && (
-          <FadeIn delay={0.12}>
-            <div className="space-y-3">
-              <h3 className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
-                Upcoming Today
-              </h3>
-              <div className="space-y-2">
-                {otherSessions.map((session) => (
-                  <UpcomingSessionCard
-                    key={`${session.backlog_item_id}-${session.start_time}`}
-                    session={session}
-                    backlogItem={backlogItemMap.get(
-                      session.backlog_item_id
-                    )}
-                    isCompleted={completedSessionIds.has(
-                      session.backlog_item_id
-                    )}
-                    onMarkComplete={() =>
-                      handleMarkComplete(session.backlog_item_id)
-                    }
-                  />
-                ))}
-              </div>
-            </div>
-          </FadeIn>
-        )}
-
-        {sessions.length > 0 && (
-          <FadeIn delay={0.15}>
-            <BacklogHealthCard health={preview?.backlog_health} />
-          </FadeIn>
-        )}
-
-        {balanceScore && (
-          <FadeIn delay={0.18}>
-            <BalanceScoreCard data={balanceScore} />
-          </FadeIn>
-        )}
-
-        {streaks?.subjects && streaks.subjects.length > 0 && (
-          <FadeIn delay={0.2}>
-            <SubjectStreaksCard subjects={streaks.subjects} />
-          </FadeIn>
-        )}
-
-        <FadeIn delay={0.22}>
-          <TodayInsight insight={insight} />
-        </FadeIn>
-      </div>
-    </Layout>
-  )
-}
-
-/* ─── Local session helpers ─── */
 
 function getCurrentSession(sessions: PlanSession[]): PlanSession | null {
   const now = new Date()
@@ -845,4 +76,472 @@ function getNextSession(sessions: PlanSession[]): PlanSession | null {
     })
     .sort((a, b) => a.start_time.localeCompare(b.start_time))
   return upcoming[0] ?? null
+}
+
+/* ─── Greeting ─── */
+
+function Greeting({ name }: { name: string | null }) {
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: -8 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.2, ease: "easeOut" }}
+      className="space-y-1"
+    >
+      <h1 className="text-2xl font-semibold tracking-tight">
+        {getGreeting()}
+        {name ? `, ${name}` : ""}
+      </h1>
+      <p className="text-sm text-muted-foreground">
+        Here's your next best move.
+      </p>
+    </motion.div>
+  )
+}
+
+/* ─── Up Next ─── */
+
+function UpNextRow({
+  session,
+  item,
+  completed,
+  onStart,
+}: {
+  session: PlanSession
+  item?: PrioritizedBacklogItem
+  completed: boolean
+  onStart: () => void
+}) {
+  const duration = minutesBetween(session.start_time, session.end_time)
+  const topic = topicFromSession(session)
+  const color = item?.course_color ?? "#888"
+  const subject = item?.course_name ?? "Study"
+
+  return (
+    <motion.div
+      layout
+      whileHover={completed ? undefined : { x: 3 }}
+      transition={{ duration: 0.15, ease: "easeOut" }}
+      className={`flex items-center gap-3 rounded-xl border bg-card px-4 py-3 transition-all ${
+        completed ? "opacity-55" : ""
+      }`}
+    >
+      {completed ? (
+        <CheckCircle2 className="h-5 w-5 shrink-0 text-emerald-500" />
+      ) : (
+        <div className="h-9 w-14 shrink-0 rounded-lg bg-muted/70 flex items-center justify-center">
+          <span className="text-[11px] font-medium text-muted-foreground">
+            {formatTimeDisplay(session.start_time)}
+          </span>
+        </div>
+      )}
+
+      <div
+        className="h-2.5 w-2.5 shrink-0 rounded-full"
+        style={{ backgroundColor: color }}
+      />
+
+      <div className="flex-1 min-w-0">
+        <p
+          className={`text-sm font-medium truncate ${
+            completed ? "line-through text-muted-foreground" : ""
+          }`}
+        >
+          {topic}
+        </p>
+        <p className="text-xs text-muted-foreground truncate">
+          {subject} · {duration} min
+        </p>
+      </div>
+
+      {!completed && (
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={onStart}
+          aria-label={`Start ${topic}`}
+          className="gap-1.5 shrink-0"
+        >
+          <Play className="h-3.5 w-3.5 fill-current" />
+          Start
+        </Button>
+      )}
+    </motion.div>
+  )
+}
+
+/* ─── Empty states ─── */
+
+function NoWorkEmptyState({ onAdd }: { onAdd: () => void }) {
+  return (
+    <motion.div
+      initial={{ opacity: 0, scale: 0.97 }}
+      animate={{ opacity: 1, scale: 1 }}
+      transition={{ duration: 0.25 }}
+      className="flex flex-col items-center justify-center rounded-2xl border border-dashed py-14 px-8 text-center"
+    >
+      <div className="mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-primary/5">
+        <BookOpen className="h-7 w-7 text-primary/50" />
+      </div>
+      <h3 className="text-base font-semibold mb-1">No work yet.</h3>
+      <p className="text-sm text-muted-foreground mb-5 max-w-xs">
+        Add your homework and Momentum will automatically build today's study
+        plan.
+      </p>
+      <Button onClick={onAdd} className="gap-1.5">
+        <Plus className="h-4 w-4" />
+        Add Work
+      </Button>
+    </motion.div>
+  )
+}
+
+function AllDoneEmptyState() {
+  return (
+    <motion.div
+      initial={{ opacity: 0, scale: 0.97 }}
+      animate={{ opacity: 1, scale: 1 }}
+      transition={{ duration: 0.25 }}
+      className="flex flex-col items-center justify-center rounded-2xl border border-dashed py-14 px-8 text-center"
+    >
+      <div className="mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-emerald-500/10">
+        <CheckCircle2 className="h-7 w-7 text-emerald-500" />
+      </div>
+      <h3 className="text-base font-semibold mb-1">All caught up for today.</h3>
+      <p className="text-sm text-muted-foreground max-w-xs">
+        Momentum is lining up your next mission. Check back tomorrow to keep
+        your streak alive.
+      </p>
+    </motion.div>
+  )
+}
+
+/* ─── Main Page ─── */
+
+export function TodayMissionPage() {
+  const navigate = useNavigate()
+  const { data: dashboard, isLoading, error, refetch } = useDashboard()
+
+  const profile = dashboard?.profile
+  const preview = dashboard?.planning
+  const planData = dashboard?.plan
+  const streaks = dashboard?.streaks
+
+  const onboarded = localStorage.getItem("momentum_onboarded") === "true"
+
+  useEffect(() => {
+    if (!onboarded) {
+      navigate("/onboarding", { replace: true })
+      return
+    }
+    if (isLoading) return
+    if (!dashboard?.profile?.class_name) {
+      navigate("/onboarding", { replace: true })
+    }
+  }, [onboarded, isLoading, dashboard, navigate])
+
+  const backlogItemMap = useMemo(() => {
+    if (!preview?.prioritized_backlog)
+      return new Map<string, PrioritizedBacklogItem>()
+    return new Map(
+      preview.prioritized_backlog.map((item) => [item.id, item])
+    )
+  }, [preview])
+
+  const sessions = planData?.plan?.sessions ?? []
+  const health: BacklogHealth | undefined = preview?.backlog_health
+
+  const isSessionCompleted = (s: PlanSession): boolean =>
+    backlogItemMap.get(s.backlog_item_id)?.status === "completed"
+
+  const activeSessions = useMemo(
+    () => sessions.filter((s) => !isSessionCompleted(s)),
+    [sessions, backlogItemMap]
+  )
+
+  const currentSession = useMemo(
+    () => getCurrentSession(activeSessions),
+    [activeSessions]
+  )
+  const nextSession = useMemo(
+    () => getNextSession(activeSessions),
+    [activeSessions]
+  )
+  const missionSession = currentSession || nextSession
+  const missionBacklogItem = missionSession
+    ? backlogItemMap.get(missionSession.backlog_item_id)
+    : undefined
+
+  const upcomingSessions = useMemo(() => {
+    const missionId = missionSession?.backlog_item_id
+    return activeSessions.filter(
+      (s) => s.backlog_item_id !== missionId
+    )
+  }, [activeSessions, missionSession])
+
+  const overdueMinutes = useMemo(
+    () => computeOverdueMinutes(preview?.prioritized_backlog),
+    [preview]
+  )
+
+  const coachingLine = useMemo(
+    () =>
+      buildCoachingLine({
+        healthScore: health?.health_score,
+        overdueMinutes,
+        estimatedCompletionDate: health?.estimated_completion_date,
+      }),
+    [health, overdueMinutes]
+  )
+
+  const recommendationReason = useMemo(() => {
+    if (!missionSession) return null
+    const item = missionBacklogItem
+    return buildRecommendationReason({
+      subject: item?.course_name ?? "Study",
+      topic: topicFromSession(missionSession),
+      overdue: item?.overdue ?? false,
+      dueDate: item?.due_date ?? null,
+      isCurrent: !!currentSession,
+      healthScore: health?.health_score,
+    })
+  }, [missionSession, missionBacklogItem, currentSession, health])
+
+  const progress = useMemo(() => {
+    const uniqueIds = new Set(sessions.map((s) => s.backlog_item_id))
+    const uniqueTasks = uniqueIds.size
+    const completedTasks = [...uniqueIds].filter((id) => {
+      const item = backlogItemMap.get(id)
+      return item?.status === "completed"
+    }).length
+    const studyMinutes = sessions
+      .filter((s) => backlogItemMap.get(s.backlog_item_id)?.status === "completed")
+      .reduce((sum, s) => sum + minutesBetween(s.start_time, s.end_time), 0)
+    const dailyTarget = profile?.daily_target_minutes ?? 180
+
+    const activeItems = activeSessions
+      .map((s) => backlogItemMap.get(s.backlog_item_id))
+      .filter((i): i is PrioritizedBacklogItem => !!i && !!i.due_date && !i.overdue)
+      .sort((a, b) => (a.due_date ?? "").localeCompare(b.due_date ?? ""))
+    const nextDeadline = activeItems[0]
+    const deadline = nextDeadline
+      ? {
+          label: nextDeadline.course_name,
+          dateText:
+            daysUntilDue(nextDeadline.due_date) === 0
+              ? "Today"
+              : daysUntilDue(nextDeadline.due_date) === 1
+                ? "Tomorrow"
+                : formatShortDate(nextDeadline.due_date) ?? "",
+        }
+      : null
+
+    const sorted = [...sessions].sort((a, b) =>
+      a.start_time.localeCompare(b.start_time)
+    )
+    const timeline = sorted.map((s) => {
+      const [sh, sm] = s.start_time.split(":").map(Number)
+      const [eh, em] = s.end_time.split(":").map(Number)
+      const item = backlogItemMap.get(s.backlog_item_id)
+      return {
+        color: item?.course_color ?? "#888",
+        startMinutes: sh * 60 + sm,
+        endMinutes: eh * 60 + em,
+        completed: item?.status === "completed",
+        label: topicFromSession(s),
+      }
+    })
+
+    return {
+      uniqueTasks,
+      completedTasks,
+      studyMinutes,
+      dailyTarget,
+      deadline,
+      timeline,
+    }
+  }, [sessions, activeSessions, backlogItemMap, profile])
+
+  const handleRefresh = () => {
+    refetch()
+  }
+
+  const handleStartStudy = (session: PlanSession) => {
+    if (!planData?.plan) return
+    navigate("/focus", {
+      state: {
+        session,
+        sessions,
+        plan: planData.plan,
+      },
+    })
+  }
+
+  if (isLoading) {
+    return (
+      <Layout>
+        <div className="space-y-5 max-w-lg mx-auto">
+          <Skeleton className="h-12 w-64" />
+          <Skeleton className="h-64 w-full rounded-2xl" />
+          <Skeleton className="h-40 w-full rounded-xl" />
+          <Skeleton className="h-24 w-full rounded-xl" />
+        </div>
+      </Layout>
+    )
+  }
+
+  if (error) {
+    return (
+      <Layout>
+        <div className="max-w-lg mx-auto space-y-5">
+          <Greeting name={profile?.name ?? null} />
+          <div className="flex flex-col items-center justify-center rounded-2xl border border-dashed p-12 text-center">
+            <p className="text-sm text-muted-foreground mb-4">
+              Couldn't load your plan
+            </p>
+            <Button onClick={handleRefresh} variant="outline" size="sm">
+              Try again
+            </Button>
+          </div>
+        </div>
+      </Layout>
+    )
+  }
+
+  const hasWork = (preview?.prioritized_backlog?.length ?? 0) > 0
+  const allDone =
+    activeSessions.length === 0 && sessions.length > 0
+
+  const coachingTone =
+    health?.health_score === "critical"
+      ? "destructive"
+      : health?.health_score === "fair"
+        ? "warning"
+        : "success"
+
+  const missionDuration = missionSession
+    ? minutesBetween(missionSession.start_time, missionSession.end_time)
+    : 0
+  const timeSaved =
+    missionSession && missionBacklogItem
+      ? estimateTimeSaved(
+          missionBacklogItem.estimated_minutes,
+          missionDuration
+        )
+      : null
+  const confidence = scheduleConfidence(health?.health_score)
+
+  return (
+    <Layout>
+      <div className="max-w-lg mx-auto space-y-5 pb-8">
+        <FadeIn delay={0}>
+          <Greeting name={profile?.name ?? null} />
+        </FadeIn>
+
+        {!hasWork ? (
+          <FadeIn delay={0.05}>
+            <NoWorkEmptyState onAdd={() => navigate("/backlog")} />
+          </FadeIn>
+        ) : allDone ? (
+          <FadeIn delay={0.05}>
+            <AllDoneEmptyState />
+          </FadeIn>
+        ) : missionSession ? (
+          <FadeIn delay={0.05}>
+            <RecommendedNextCard
+              task={topicFromSession(missionSession)}
+              subject={missionBacklogItem?.course_name ?? "Study"}
+              courseColor={missionBacklogItem?.course_color ?? "#6366f1"}
+              durationLabel={formatMinutes(missionDuration)}
+              reason={recommendationReason ?? missionSession.reason}
+              eyebrow="Today's Mission"
+              bestTime={formatTimeDisplay(missionSession.start_time)}
+              finishTime={formatTimeDisplay(missionSession.end_time)}
+              timeSaved={timeSaved}
+              confidence={confidence}
+              ctaLabel="Start Focus Session"
+              onStart={() => handleStartStudy(missionSession)}
+            />
+          </FadeIn>
+        ) : null}
+
+        {hasWork && !allDone && (
+          <FadeIn delay={0.1}>
+            <CoachMessage tone={coachingTone}>{coachingLine}</CoachMessage>
+          </FadeIn>
+        )}
+
+        {sessions.length > 0 && (
+          <FadeIn delay={0.15}>
+            <ProgressOverview
+              tasksDone={progress.completedTasks}
+              tasksTotal={progress.uniqueTasks}
+              studyMinutes={progress.studyMinutes}
+              targetMinutes={progress.dailyTarget}
+              streakDays={streaks?.momentum.current_streak ?? null}
+              deadlineLabel={progress.deadline?.label ?? null}
+              deadlineDate={progress.deadline?.dateText ?? null}
+              timeline={progress.timeline}
+            />
+          </FadeIn>
+        )}
+
+        {upcomingSessions.length > 0 && (
+          <FadeIn delay={0.2}>
+            <div className="space-y-2.5">
+              <div className="flex items-center justify-between">
+                <h3 className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
+                  Up Next Today
+                </h3>
+                <span className="text-xs text-muted-foreground">
+                  {upcomingSessions.length} session
+                  {upcomingSessions.length !== 1 ? "s" : ""}
+                </span>
+              </div>
+              <div className="space-y-2">
+                {upcomingSessions.map((session) => (
+                  <UpNextRow
+                    key={`${session.backlog_item_id}-${session.start_time}`}
+                    session={session}
+                    item={backlogItemMap.get(session.backlog_item_id)}
+                    completed={isSessionCompleted(session)}
+                    onStart={() => handleStartStudy(session)}
+                  />
+                ))}
+              </div>
+            </div>
+          </FadeIn>
+        )}
+
+        {streaks?.momentum &&
+          streaks.momentum.recovery_tokens_earned > 0 && (
+            <FadeIn delay={0.25}>
+              <RecoveryTokens
+                current={streaks.momentum.recovery_tokens_current}
+                earned={streaks.momentum.recovery_tokens_earned}
+                used={streaks.momentum.recovery_tokens_used}
+              />
+            </FadeIn>
+          )}
+
+        {streaks?.subjects && streaks.subjects.length > 0 && (
+          <FadeIn delay={0.3}>
+            <SubjectStreaksCard subjects={streaks.subjects} />
+          </FadeIn>
+        )}
+
+        {hasWork && sessions.length > 0 && (
+          <FadeIn delay={0.35}>
+            <button
+              onClick={() => navigate("/backlog")}
+              className="flex w-full items-center justify-center gap-1 rounded-lg px-3 py-2.5 text-sm text-muted-foreground hover:text-foreground hover:bg-muted/60 transition-colors"
+            >
+              <span>View all pending work</span>
+              <ChevronRight className="h-4 w-4" />
+            </button>
+          </FadeIn>
+        )}
+      </div>
+    </Layout>
+  )
 }

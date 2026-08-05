@@ -2,7 +2,6 @@ import { useState, useEffect, useRef, useMemo } from "react"
 import { motion, AnimatePresence } from "framer-motion"
 import { useNavigate, useLocation } from "react-router-dom"
 import { useQueryClient } from "@tanstack/react-query"
-import { toast } from "sonner"
 import {
   Play,
   Pause,
@@ -11,11 +10,21 @@ import {
   Sparkles,
   ArrowRight,
   RotateCcw,
+  Zap,
 } from "lucide-react"
 
 import { useProfile, useUpdateBacklogItem } from "@/services/hooks"
 import { Button } from "@/components/ui/button"
+import { CoachMessage } from "@/components/coach/coach-message"
+import { RecommendedNextCard } from "@/components/coach/recommended-next"
 import { cn } from "@/lib/cn"
+import {
+  focusCoachMessage,
+  formatMinutes,
+  formatTimeDisplay,
+  minutesBetween,
+  nextSessionAfter,
+} from "@/lib/coaching"
 import type { PlanSession, GeneratedPlan } from "@/services/types"
 
 /* ─── Helpers ─── */
@@ -31,61 +40,11 @@ function formatDuration(totalSeconds: number) {
   return `${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`
 }
 
-function formatTimeDisplay(t: string) {
-  const [h, m] = t.split(":").map(Number)
-  const period = h >= 12 ? "PM" : "AM"
-  const hour = h % 12 || 12
-  return `${hour}:${m.toString().padStart(2, "0")} ${period}`
+function topicFromSession(session: PlanSession): string {
+  return session.reason.replace(/^Work on\s+/, "")
 }
 
-/* ─── Confetti ─── */
-
-const CONFETTI_COLORS = ["#6366f1", "#22c55e", "#f59e0b", "#ef4444", "#8b5cf6", "#14b8a6", "#ec4899"]
-
-function Confetti() {
-  const pieces = useMemo(() =>
-    Array.from({ length: 40 }).map((_, i) => ({
-      id: i,
-      x: Math.random() * 100,
-      y: -10 - Math.random() * 20,
-      color: CONFETTI_COLORS[i % CONFETTI_COLORS.length],
-      size: 6 + Math.random() * 8,
-      rotation: Math.random() * 360,
-      delay: Math.random() * 0.5,
-      duration: 1.5 + Math.random() * 1.5,
-    })),
-  [])
-
-  return (
-    <div className="fixed inset-0 pointer-events-none overflow-hidden z-50">
-      {pieces.map((p) => (
-        <motion.div
-          key={p.id}
-          className="absolute rounded-sm"
-          style={{
-            left: `${p.x}%`,
-            top: `${p.y}%`,
-            width: p.size,
-            height: p.size,
-            backgroundColor: p.color,
-          }}
-          initial={{ opacity: 1, rotate: 0, y: 0, x: 0 }}
-          animate={{
-            opacity: [1, 1, 0],
-            rotate: p.rotation,
-            y: ["0vh", "100vh"],
-            x: [0, (Math.random() - 0.5) * 200],
-          }}
-          transition={{
-            duration: p.duration,
-            delay: p.delay,
-            ease: "easeIn",
-          }}
-        />
-      ))}
-    </div>
-  )
-}
+const FOCUS_COACH_TONE = "default"
 
 /* ─── Main ─── */
 
@@ -142,12 +101,11 @@ export function FocusModePage() {
     setPhase("focus")
   }
 
-  const handleComplete = () => {
+  const completeSession = () => {
     clearInterval(intervalRef.current)
     setPhase("complete")
     if (session) {
       updateBacklogItem.mutate({ id: session.backlog_item_id, payload: { status: "completed" } })
-      toast.success("Task marked complete")
     }
   }
 
@@ -158,6 +116,7 @@ export function FocusModePage() {
   }
 
   const handleBack = () => {
+    queryClient.invalidateQueries({ queryKey: ["dashboard"] })
     queryClient.invalidateQueries({ queryKey: ["planning"] })
     queryClient.invalidateQueries({ queryKey: ["plans"] })
     navigate("/", { replace: true })
@@ -182,82 +141,97 @@ export function FocusModePage() {
   }
 
   const progressPercent = totalSeconds > 0 ? (elapsed / totalSeconds) * 100 : 0
-  const otherSessions = (state?.sessions ?? []).filter(
-    (s) => s.backlog_item_id !== session.backlog_item_id
-  )
+  const sessionMinutes = minutesBetween(session.start_time, session.end_time)
   const savedMinutes = Math.floor(elapsed / 60)
 
   if (phase === "complete") {
+    const next = nextSessionAfter(
+      state?.sessions ?? [],
+      session.backlog_item_id,
+      session.start_time
+    )
+
     return (
-      <>
-        <Confetti />
-        <div className="min-h-screen bg-background flex flex-col items-center justify-center p-4">
+      <div className="min-h-screen bg-background flex flex-col items-center justify-center p-4">
+        <motion.div
+          initial={{ opacity: 0, scale: 0.8 }}
+          animate={{ opacity: 1, scale: 1 }}
+          transition={{ duration: 0.4, ease: "easeOut" }}
+          className="w-full max-w-sm mx-auto text-center space-y-6"
+        >
           <motion.div
-            initial={{ opacity: 0, scale: 0.8 }}
-            animate={{ opacity: 1, scale: 1 }}
-            transition={{ duration: 0.5, ease: "easeOut" }}
-            className="w-full max-w-sm mx-auto text-center space-y-6"
+            initial={{ scale: 0 }}
+            animate={{ scale: 1 }}
+            transition={{ type: "spring", stiffness: 180, damping: 16, delay: 0.15 }}
+            className="mx-auto flex h-20 w-20 items-center justify-center rounded-full bg-emerald-500/10"
           >
-            <motion.div
-              initial={{ scale: 0 }}
-              animate={{ scale: 1 }}
-              transition={{ type: "spring", stiffness: 200, delay: 0.2 }}
-              className="mx-auto flex h-20 w-20 items-center justify-center rounded-full bg-emerald-100 dark:bg-emerald-900/30"
-            >
-              <CheckCircle2 className="h-10 w-10 text-emerald-500" />
-            </motion.div>
+            <CheckCircle2 className="h-10 w-10 text-emerald-500" />
+          </motion.div>
 
-            <div className="space-y-1">
-              <h1 className="text-2xl font-bold tracking-tight">Great work{profile?.name ? `, ${profile.name}` : ""}!</h1>
-              <p className="text-sm text-muted-foreground">
-                One study block done!
-              </p>
+          <div className="space-y-1">
+            <h1 className="text-2xl font-bold tracking-tight">
+              Nice work{profile?.name ? `, ${profile.name}` : ""}!
+            </h1>
+            <p className="text-sm text-muted-foreground">
+              You finished a focused session.
+            </p>
+          </div>
+
+          <div className="rounded-xl border bg-card p-5 space-y-3 text-left">
+            <div className="flex items-start gap-3">
+              <CheckCircle2 className="h-5 w-5 text-emerald-500 shrink-0 mt-0.5" />
+              <div>
+                <p className="text-sm font-medium break-words">{topicFromSession(session)}</p>
+                <p className="text-xs text-muted-foreground">
+                  {formatTimeDisplay(session.start_time)} – {formatTimeDisplay(session.end_time)} · {sessionMinutes} min
+                </p>
+              </div>
             </div>
-
-            <div className="rounded-xl border bg-card p-5 space-y-4 text-left">
+            {savedMinutes > 0 && (
               <div className="flex items-start gap-3">
-                <CheckCircle2 className="h-5 w-5 text-emerald-500 shrink-0 mt-0.5" />
+                <Sparkles className="h-5 w-5 text-primary shrink-0 mt-0.5" />
                 <div>
-                  <p className="text-sm font-medium break-words">{session.reason}</p>
+                  <p className="text-sm font-medium">One less thing to worry about</p>
                   <p className="text-xs text-muted-foreground">
-                    {formatTimeDisplay(session.start_time)} – {formatTimeDisplay(session.end_time)}
+                    Future You will thank you.
                   </p>
                 </div>
               </div>
+            )}
+          </div>
 
-              {savedMinutes > 0 && (
-                <div className="flex items-start gap-3">
-                  <Sparkles className="h-5 w-5 text-primary shrink-0 mt-0.5" />
-                  <div>
-                    <p className="text-sm font-medium">One less thing to worry about</p>
-                    <p className="text-xs text-muted-foreground">
-                      Future You will thank you.
-                    </p>
-                  </div>
-                </div>
-              )}
-
-              {otherSessions.length > 0 && (
-                <div className="flex items-start gap-3">
-                  <Clock className="h-5 w-5 text-amber-500 shrink-0 mt-0.5" />
-                  <div>
-                    <p className="text-sm font-medium">{otherSessions.length} topic{otherSessions.length !== 1 ? "s" : ""} still to go</p>
-                    <p className="text-xs text-muted-foreground line-clamp-2 break-words">
-                      {otherSessions.slice(0, 3).map((s) => s.reason).join(" · ")}
-                      {otherSessions.length > 3 && ` · +${otherSessions.length - 3} more`}
-                    </p>
-                  </div>
-                </div>
-              )}
+          {next ? (
+            <div className="text-left">
+              <RecommendedNextCard
+                task={topicFromSession(next)}
+                durationLabel={formatMinutes(minutesBetween(next.start_time, next.end_time))}
+                reason="Up next in today's plan. Starting now keeps your momentum."
+                bestTime={formatTimeDisplay(next.start_time)}
+                finishTime={formatTimeDisplay(next.end_time)}
+                ctaLabel="Start Next Session"
+                onStart={() =>
+                  navigate("/focus", {
+                    replace: true,
+                    state: { session: next, sessions: state?.sessions, plan: state?.plan },
+                  })
+                }
+              />
             </div>
+          ) : (
+            <div className="rounded-xl border border-dashed bg-card/40 p-5 text-center space-y-1">
+              <p className="text-sm font-medium">You're all caught up for today.</p>
+              <p className="text-xs text-muted-foreground">
+                Momentum will line up your next mission for tomorrow.
+              </p>
+            </div>
+          )}
 
-            <Button onClick={handleBack} size="lg" className="w-full gap-2 h-12 rounded-xl">
-              Back to Today
-              <ArrowRight className="h-4 w-4" />
-            </Button>
-          </motion.div>
-        </div>
-      </>
+          <Button onClick={handleBack} size="lg" className="w-full gap-2 h-12 rounded-xl">
+            Back to Today
+            <ArrowRight className="h-4 w-4" />
+          </Button>
+        </motion.div>
+      </div>
     )
   }
 
@@ -265,23 +239,29 @@ export function FocusModePage() {
 
   return (
     <div className="min-h-screen bg-background flex flex-col items-center justify-center p-4">
-      <div className="w-full max-w-sm mx-auto text-center space-y-8">
+      <div className="w-full max-w-sm mx-auto text-center space-y-6">
         {/* Task title */}
         <motion.div
           initial={{ opacity: 0, y: -10 }}
           animate={{ opacity: 1, y: 0 }}
           className="space-y-1"
         >
-          <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Study Mode</p>
-          <h1 className="text-lg font-semibold leading-snug break-words">{session.reason}</h1>
+          <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+            Focus Session
+          </p>
+          <h1 className="text-lg font-semibold leading-snug break-words">
+            {topicFromSession(session)}
+          </h1>
           {profile?.name && (
-            <p className="text-sm text-muted-foreground">Let's finish this one, {profile.name}.</p>
+            <p className="text-sm text-muted-foreground">
+              {isPaused ? "Paused — the timer is waiting for you." : `Let's finish this one, ${profile.name}.`}
+            </p>
           )}
         </motion.div>
 
         {/* Timer */}
         <div className="relative">
-          <svg className="w-64 h-64 mx-auto -rotate-90" viewBox="0 0 256 256">
+          <svg className="w-64 h-64 mx-auto -rotate-90" viewBox="0 0 256 256" aria-hidden="true">
             <circle
               cx="128"
               cy="128"
@@ -312,6 +292,7 @@ export function FocusModePage() {
               key={remaining}
               initial={{ opacity: 0.6, scale: 0.95 }}
               animate={{ opacity: 1, scale: 1 }}
+              aria-live="polite"
               className={cn(
                 "text-5xl font-bold tracking-tight tabular-nums",
                 isPaused && "text-muted-foreground"
@@ -324,6 +305,11 @@ export function FocusModePage() {
             </span>
           </div>
         </div>
+
+        {/* Coaching */}
+        <CoachMessage tone={FOCUS_COACH_TONE} label="Momentum">
+          {focusCoachMessage(progressPercent)}
+        </CoachMessage>
 
         {/* Controls */}
         <div className="flex items-center justify-center gap-4">
@@ -339,6 +325,7 @@ export function FocusModePage() {
                   onClick={handleResume}
                   size="lg"
                   className="h-16 w-16 rounded-full shadow-lg"
+                  aria-label="Resume timer"
                 >
                   <Play className="h-6 w-6 ml-0.5" />
                 </Button>
@@ -355,6 +342,7 @@ export function FocusModePage() {
                   variant="secondary"
                   size="lg"
                   className="h-16 w-16 rounded-full shadow-lg"
+                  aria-label="Pause timer"
                 >
                   <Pause className="h-6 w-6" />
                 </Button>
@@ -363,12 +351,12 @@ export function FocusModePage() {
           </AnimatePresence>
 
           <Button
-            onClick={handleComplete}
+            onClick={completeSession}
             variant="outline"
             className="h-12 px-6 rounded-full gap-2"
           >
-            <CheckCircle2 className="h-5 w-5" />
-            Complete
+            <Zap className="h-5 w-5" />
+            Finish Early
           </Button>
         </div>
 

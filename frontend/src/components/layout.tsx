@@ -46,7 +46,7 @@ export function Sidebar() {
   const navigate = useNavigate()
 
   return (
-    <aside className="hidden md:flex md:w-56 lg:w-64 md:flex-col md:fixed md:inset-y-0 z-50 border-r bg-card">
+    <aside className="hidden md:flex md:w-56 lg:w-64 md:flex-col md:fixed md:inset-y-0 md:left-0 z-50 border-r bg-card">
       <div className="flex h-14 items-center gap-2 border-b px-6">
         <Sparkles className="h-5 w-5 text-primary" />
         <span className="font-semibold tracking-tight">Momentum</span>
