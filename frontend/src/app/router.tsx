@@ -7,6 +7,7 @@ import { TodayMissionPage } from "@/pages/TodayMissionPage";
 import { LoginPage } from "@/pages/LoginPage";
 import { RegisterPage } from "@/pages/RegisterPage";
 import { ForgotPasswordPage } from "@/pages/ForgotPasswordPage";
+import { VerifyEmailPage } from "@/pages/VerifyEmailPage";
 
 const OnboardingPage = lazy(() => import("@/pages/OnboardingPage").then((m) => ({ default: m.OnboardingPage })));
 const FocusModePage = lazy(() => import("@/pages/FocusModePage").then((m) => ({ default: m.FocusModePage })));
@@ -54,6 +55,14 @@ export const router = createBrowserRouter([
     element: (
       <PublicOnlyRoute>
         <ForgotPasswordPage />
+      </PublicOnlyRoute>
+    ),
+  },
+  {
+    path: "/verify-email",
+    element: (
+      <PublicOnlyRoute>
+        <VerifyEmailPage />
       </PublicOnlyRoute>
     ),
   },

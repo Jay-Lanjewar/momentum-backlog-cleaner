@@ -296,6 +296,10 @@ class ForgotPasswordRequest(BaseModel):
     email: str
 
 
+class ResendVerificationRequest(BaseModel):
+    email: str
+
+
 class AuthMeResponse(BaseModel):
     id: uuid.UUID
     email: str

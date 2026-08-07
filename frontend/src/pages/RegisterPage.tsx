@@ -1,19 +1,22 @@
 import { useState } from "react";
 import { motion } from "framer-motion";
-import { Link } from "react-router-dom";
-import { Sparkles, Eye, EyeOff, Loader2, AlertCircle, CheckCircle2 } from "lucide-react";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
+import { Sparkles, Eye, EyeOff, Loader2, AlertCircle } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { FadeIn } from "@/components/ui/fade-in";
+import { AuthError, useAuth } from "@/hooks/useAuth";
 
 export function RegisterPage() {
+  const [searchParams] = useSearchParams();
+  const { signup } = useAuth();
+  const navigate = useNavigate();
   const [name, setName] = useState("");
-  const [email, setEmail] = useState("");
+  const [email, setEmail] = useState(searchParams.get("email") ?? "");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState("");
-  const [success, setSuccess] = useState(false);
   const [loading, setLoading] = useState(false);
 
   const getPasswordStrength = (pw: string): { label: string; color: string; width: string } => {
@@ -42,70 +45,24 @@ export function RegisterPage() {
 
     setLoading(true);
     try {
-      const { api } = await import("@/services/api");
-
-      const { data: signupData, error: signupError } = await api.post<import("@/services/types").AuthResponse>("/api/v1/auth/signup", {
-        email,
-        password,
-        name: name || null,
+      await signup(email, password, name);
+      navigate("/verify-email", {
+        state: { email, reason: "signup" },
+        replace: true,
       });
-
-      if (signupError) {
-        if (signupError.toLowerCase().includes("already registered") || signupError.toLowerCase().includes("already exists") || signupError.toLowerCase().includes("duplicate")) {
-          throw new Error("An account with this email already exists");
-        }
-        throw new Error(signupError);
-      }
-
-      if (signupData?.access_token) {
-        const { supabase } = await import("@/services/supabase");
-        await supabase.auth.setSession({
-          access_token: signupData.access_token,
-          refresh_token: "",
-        });
-      }
-
-      setSuccess(true);
     } catch (err) {
-      const msg = err instanceof Error ? err.message : "Something went wrong";
-      if (msg.toLowerCase().includes("already registered") || msg.toLowerCase().includes("already exists") || msg.toLowerCase().includes("duplicate")) {
-        setError("An account with this email already exists");
-      } else if (msg.toLowerCase().includes("weak password")) {
-        setError("Password is too weak. Use at least 6 characters.");
-      } else {
-        setError(msg);
+      if (err instanceof AuthError && err.code === "email_not_confirmed") {
+        navigate("/verify-email", {
+          state: { email, reason: "login" },
+          replace: true,
+        });
+        return;
       }
+      setError(err instanceof Error ? err.message : "Something went wrong");
     } finally {
       setLoading(false);
     }
   };
-
-  if (success) {
-    return (
-      <div className="flex min-h-screen flex-col items-center justify-center bg-background p-4">
-        <div className="w-full max-w-sm text-center space-y-4">
-          <FadeIn>
-            <div className="flex flex-col items-center gap-3">
-              <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-emerald-500/10">
-                <CheckCircle2 className="h-7 w-7 text-emerald-500" />
-              </div>
-              <h1 className="text-xl font-semibold tracking-tight">Check your email</h1>
-              <p className="text-sm text-muted-foreground">
-                We sent a confirmation link to <strong className="text-foreground">{email}</strong>
-              </p>
-            </div>
-          </FadeIn>
-          <FadeIn delay={0.05}>
-            <Link to="/login">
-              <Button variant="outline" className="w-full rounded-lg">
-                Back to sign in
-              </Button>
-            </Link>
-          </FadeIn>
-        </div>
-      </div>
-    );
-  }
 
   return (
     <div className="flex min-h-screen flex-col items-center justify-center bg-background p-4">

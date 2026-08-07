@@ -1,24 +1,28 @@
 import { useState } from "react";
 import { motion } from "framer-motion";
 import { Link } from "react-router-dom";
-import { Sparkles, Eye, EyeOff, Loader2, AlertCircle } from "lucide-react";
+import { Sparkles, Eye, EyeOff, Loader2, AlertCircle, RefreshCw, CheckCircle2 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { FadeIn } from "@/components/ui/fade-in";
-import { useAuth } from "@/hooks/useAuth";
+import { AuthError, useAuth } from "@/hooks/useAuth";
 
 export function LoginPage() {
-  const { login, signInWithGoogle } = useAuth();
+  const { login, signInWithGoogle, resendVerificationEmail } = useAuth();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const [googleLoading, setGoogleLoading] = useState(false);
+  const [unverified, setUnverified] = useState(false);
+  const [resending, setResending] = useState(false);
+  const [resendMessage, setResendMessage] = useState("");
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError("");
+    setUnverified(false);
 
     if (!email.trim()) { setError("Please enter your email"); return; }
     if (!password) { setError("Please enter your password"); return; }
@@ -27,9 +31,29 @@ export function LoginPage() {
     try {
       await login(email, password);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Something went wrong");
+      if (err instanceof AuthError && err.code === "email_not_confirmed") {
+        setUnverified(true);
+      } else {
+        setError(err instanceof Error ? err.message : "Something went wrong");
+      }
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleResend = async () => {
+    if (!email || resending) return;
+    setResending(true);
+    setResendMessage("");
+    try {
+      await resendVerificationEmail(email);
+      setResendMessage("We sent another verification email. Check your inbox.");
+    } catch (err) {
+      setError(
+        err instanceof Error ? err.message : "Couldn't resend the email. Please try again in a minute."
+      );
+    } finally {
+      setResending(false);
     }
   };
 
@@ -100,6 +124,34 @@ export function LoginPage() {
                 </button>
               </div>
             </div>
+
+            {unverified && (
+              <motion.div
+                initial={{ opacity: 0, y: -4 }}
+                animate={{ opacity: 1, y: 0 }}
+                className="rounded-lg bg-amber-500/10 px-3 py-3 space-y-2"
+              >
+                <p className="text-sm font-semibold">Please verify your email first.</p>
+                <p className="text-sm text-muted-foreground">We already sent a verification email.</p>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={handleResend}
+                  disabled={resending}
+                  className="w-full rounded-lg gap-2"
+                >
+                  {resending ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
+                  {resending ? "Sending..." : "Resend verification email"}
+                </Button>
+                {resendMessage && (
+                  <div className="flex items-center gap-2 text-sm text-emerald-600 dark:text-emerald-400">
+                    <CheckCircle2 className="h-4 w-4 shrink-0" />
+                    <span>{resendMessage}</span>
+                  </div>
+                )}
+              </motion.div>
+            )}
 
             {error && (
               <motion.div

@@ -93,10 +93,22 @@ class AuthService:
 
         user = await self._get_or_create_user(supabase_id, supabase_email, name)
 
-        token_result = await self._supabase_request(
-            "token?grant_type=password",
-            {"email": email, "password": password},
-        )
+        try:
+            token_result = await self._supabase_request(
+                "token?grant_type=password",
+                {"email": email, "password": password},
+            )
+        except ValueError as e:
+            if "email not confirmed" in str(e).lower():
+                # The account was created but still needs email verification.
+                # Treat signup as successful so the app can show the
+                # "Verify your email" screen instead of a confusing error.
+                return {
+                    "user": user,
+                    "access_token": "",
+                    "refresh_token": "",
+                }
+            raise
 
         return {
             "user": user,
@@ -128,4 +140,32 @@ class AuthService:
             "email": email,
             "data": {"redirect_to": redirect_to},
         })
+
+    async def resend_verification(self, email: str) -> None:
+        """Ask Supabase to send a fresh signup verification email."""
+        await self._supabase_request(
+            "resend",
+            {"type": "signup", "email": email},
+            use_service_key=True,
+        )
+
+    async def get_user_by_email(self, email: str) -> dict | None:
+        """Look up a user on the Supabase admin API by email (exact match)."""
+        result = await self._supabase_request(
+            "admin/users",
+            {"filter": email, "per_page": "1"},
+            method="GET",
+            use_service_key=True,
+        )
+        users = result.get("users") or []
+        for user in users:
+            if (user.get("email") or "").lower() == email.lower():
+                return user
+        return None
+
+    async def is_email_verified(self, email: str) -> bool:
+        user = await self.get_user_by_email(email)
+        if not user:
+            return False
+        return bool(user.get("email_confirmed_at") or user.get("confirmed_at"))
 

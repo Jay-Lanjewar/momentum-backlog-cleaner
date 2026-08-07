@@ -3,6 +3,7 @@ const API_BASE = import.meta.env.VITE_API_BASE_URL || "";
 interface ApiResponse<T> {
   data: T;
   error: string | null;
+  errorCode: string | null;
 }
 
 function getSessionToken(): string | null {
@@ -43,22 +44,32 @@ async function request<T>(
 
     if (!response.ok) {
       const errorBody = await response.text();
-      let detail = errorBody || response.statusText;
+      let detail: string = errorBody || response.statusText;
+      let errorCode: string | null = null;
       try {
         const parsed = JSON.parse(errorBody);
-        detail = parsed.detail || detail;
+        const d = parsed?.detail;
+        if (typeof d === "string") {
+          detail = d;
+        } else if (d && typeof d === "object") {
+          detail = typeof d.message === "string" ? d.message : detail;
+          errorCode = typeof d.code === "string" ? d.code : errorCode;
+        } else if (parsed && typeof parsed.message === "string") {
+          detail = parsed.message;
+        }
       } catch {
         // use raw text
       }
-      return { data: null as T, error: detail };
+      return { data: null as T, error: detail, errorCode };
     }
 
     const data = await response.json();
-    return { data, error: null };
+    return { data, error: null, errorCode: null };
   } catch (error) {
     return {
       data: null as T,
       error: error instanceof Error ? error.message : "Network error",
+      errorCode: null,
     };
   }
 }

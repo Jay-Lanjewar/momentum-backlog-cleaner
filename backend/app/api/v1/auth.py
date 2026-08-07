@@ -12,6 +12,7 @@ from app.domain.schemas import (
     AuthResponse,
     AuthMeResponse,
     ForgotPasswordRequest,
+    ResendVerificationRequest,
     UserResponse,
     StudentProfileResponse,
     StudyStreakResponse,
@@ -40,9 +41,47 @@ async def signup(
             user=UserResponse.model_validate(user),
         )
     except ValueError as e:
+        msg = str(e).lower()
+        if "weak password" in msg or "at least 6 characters" in msg:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail={
+                    "code": "weak_password",
+                    "message": "Password is too weak. Use at least 6 characters.",
+                },
+            )
+        if any(
+            token in msg
+            for token in ("already registered", "already exists", "duplicate")
+        ):
+            # The account already exists. If it is still unverified, guide the
+            # student to the Verify Email screen instead of showing an error.
+            try:
+                verified = await service.is_email_verified(data.email)
+            except ValueError:
+                verified = False
+            if verified:
+                raise HTTPException(
+                    status_code=status.HTTP_409_CONFLICT,
+                    detail={
+                        "code": "account_exists",
+                        "message": "An account with this email already exists",
+                    },
+                )
+            try:
+                await service.resend_verification(data.email)
+            except ValueError:
+                pass
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail={
+                    "code": "email_not_confirmed",
+                    "message": "Please verify your email first",
+                },
+            )
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=str(e),
+            detail="Something went wrong. Please try again.",
         )
 
 
@@ -61,16 +100,36 @@ async def login(
         )
     except ValueError as e:
         msg = str(e).lower()
+        if "email not confirmed" in msg:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail={
+                    "code": "email_not_confirmed",
+                    "message": "Please verify your email first",
+                },
+            )
         if "invalid login credentials" in msg or "invalid grant" in msg:
-            detail = "Incorrect email or password"
-        elif "email not confirmed" in msg:
-            detail = "Please confirm your email before logging in"
-        else:
-            detail = str(e)
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Incorrect email or password",
+            )
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail=detail,
+            detail="Something went wrong. Please try again.",
         )
+
+
+@router.post("/resend-verification", status_code=status.HTTP_200_OK)
+async def resend_verification(
+    data: ResendVerificationRequest,
+    service: AuthService = Depends(get_auth_service),
+):
+    try:
+        await service.resend_verification(data.email)
+    except ValueError:
+        # Always answer the same way so we never leak account details.
+        pass
+    return {"message": "Verification email sent"}
 
 
 @router.post("/forgot-password", status_code=status.HTTP_200_OK)
