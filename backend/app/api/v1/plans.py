@@ -75,6 +75,7 @@ async def generate_plan(
 
     validated = None
     source = "deterministic"
+    fallback_reason = None
     if raw_plan is not None:
         validated = validator.validate(
             raw=raw_plan,
@@ -83,9 +84,14 @@ async def generate_plan(
         )
         if validated is not None:
             source = "ai"
+            logger.info("Using Gemini planner")
+        else:
+            fallback_reason = "AI plan failed validation"
+    else:
+        fallback_reason = "AI planner unavailable or returned no plan"
 
     if validated is None:
-        logger.info("AI plan invalid or unavailable, using deterministic fallback")
+        logger.info("Falling back to deterministic planner (%s)", fallback_reason)
         daily_capacity = profile.daily_target_minutes if profile and profile.daily_target_minutes else None
         fallback = generate_deterministic_plan(planning_data, daily_capacity_minutes=daily_capacity)
         validated = fallback

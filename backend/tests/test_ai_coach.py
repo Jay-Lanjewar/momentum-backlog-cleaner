@@ -28,7 +28,7 @@ from app.ai_coach.fallback import (
     generate_template_summary,
 )
 
-TODAY = date(2026, 8, 3)
+TODAY = date.today()
 
 
 def make_item(**overrides):

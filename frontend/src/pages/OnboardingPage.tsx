@@ -122,7 +122,7 @@ function Step1Name({ onNext, onBack }: { onNext: (name: string) => void; onBack:
         </div>
         <p className="text-lg font-medium leading-snug">What should I call you?</p>
         <p className="text-sm text-muted-foreground max-w-xs">
-          This makes Momentum feel a little more personal.
+          We'll use this name throughout Momentum. You can change it later.
         </p>
       </div>
 
@@ -131,7 +131,7 @@ function Step1Name({ onNext, onBack }: { onNext: (name: string) => void; onBack:
           value={value}
           onChange={(e) => setValue(e.target.value)}
           onKeyDown={(e) => { if (e.key === "Enter" && isValid) { e.preventDefault(); onNext(trimmed) } }}
-          placeholder="e.g. Priyani"
+          placeholder="Your name"
           maxLength={25}
           autoFocus
           className="w-full h-12 rounded-xl border border-input bg-background px-4 text-base text-center focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring transition-all"
