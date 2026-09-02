@@ -170,6 +170,20 @@ class TestGeminiAIService:
         assert service.model == settings.GEMINI_MODEL
         assert service.model == "gemini-3.7-flash"
 
+    @pytest.mark.asyncio
+    async def test_network_error_returns_none(self):
+        service = GeminiAIService(api_key="fake", model="gemini-3.7-flash")
+        request = httpx.Request(
+            "POST",
+            "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.7-flash:generateContent",
+        )
+        with patch("app.services.ai_service.httpx.AsyncClient") as mock_client:
+            mock_client.return_value.__aenter__.return_value.post = AsyncMock(
+                side_effect=httpx.ConnectError("Connection refused")
+            )
+            result = await service.generate_plan("test prompt")
+        assert result is None
+
 
 class TestOtherServices:
     @pytest.mark.asyncio

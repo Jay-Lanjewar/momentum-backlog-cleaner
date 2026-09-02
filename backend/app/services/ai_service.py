@@ -169,7 +169,7 @@ class GeminiAIService(AIService):
                 logger.error("Gemini API error: %s - %s", e.response.status_code, e.response.text)
             return None
         except httpx.RequestError as e:
-            logger.error("Gemini request failed: %s", e)
+            logger.error("Gemini request failed (%s): %s", type(e).__name__, e)
             return None
         except Exception as e:
             logger.error("Unexpected Gemini error: %s", e)
