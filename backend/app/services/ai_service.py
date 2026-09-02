@@ -1,3 +1,4 @@
+import asyncio
 import json
 import logging
 import uuid
@@ -145,35 +146,47 @@ class GeminiAIService(AIService):
             },
         }
 
-        try:
-            async with httpx.AsyncClient(timeout=30) as client:
-                response = await client.post(url, json=payload)
-                response.raise_for_status()
-                data = response.json()
+        max_retries = 2
+        for attempt in range(max_retries + 1):
+            try:
+                async with httpx.AsyncClient(timeout=30) as client:
+                    response = await client.post(url, json=payload)
+                    response.raise_for_status()
+                    data = response.json()
 
-            candidates = data.get("candidates", [])
-            if not candidates:
-                logger.error("Gemini returned no candidates")
+                candidates = data.get("candidates", [])
+                if not candidates:
+                    logger.error("Gemini returned no candidates")
+                    return None
+
+                text = candidates[0].get("content", {}).get("parts", [{}])[0].get("text", "")
+                return self._parse_response(text)
+            except httpx.HTTPStatusError as e:
+                if e.response.status_code == 503 and attempt < max_retries:
+                    delay = 2 ** attempt
+                    logger.warning(
+                        "Gemini overloaded (503), retry %d/%d in %ds",
+                        attempt + 1, max_retries, delay,
+                    )
+                    await asyncio.sleep(delay)
+                    continue
+                if e.response.status_code == 404:
+                    logger.error(
+                        "Gemini model not found (HTTP 404): '%s'. "
+                        "Check GEMINI_MODEL; falling back to the deterministic planner.",
+                        self.model,
+                    )
+                else:
+                    logger.error("Gemini API error: %s - %s", e.response.status_code, e.response.text)
+                return None
+            except httpx.RequestError as e:
+                logger.error("Gemini request failed (%s): %s", type(e).__name__, e)
+                return None
+            except Exception as e:
+                logger.error("Unexpected Gemini error: %s", e)
                 return None
 
-            text = candidates[0].get("content", {}).get("parts", [{}])[0].get("text", "")
-            return self._parse_response(text)
-        except httpx.HTTPStatusError as e:
-            if e.response.status_code == 404:
-                logger.error(
-                    "Gemini model not found (HTTP 404): '%s'. "
-                    "Check GEMINI_MODEL; falling back to the deterministic planner.",
-                    self.model,
-                )
-            else:
-                logger.error("Gemini API error: %s - %s", e.response.status_code, e.response.text)
-            return None
-        except httpx.RequestError as e:
-            logger.error("Gemini request failed (%s): %s", type(e).__name__, e)
-            return None
-        except Exception as e:
-            logger.error("Unexpected Gemini error: %s", e)
-            return None
+        return None
 
     def _parse_response(self, text: str) -> dict | None:
         text = text.strip()

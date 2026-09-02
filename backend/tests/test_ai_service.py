@@ -11,6 +11,7 @@ from app.services.ai_service import (
     OpenAIService,
     OllamaService,
     create_ai_service,
+    GEMINI_API_URL,
 )
 from app.core.config import settings
 
@@ -182,6 +183,46 @@ class TestGeminiAIService:
                 side_effect=httpx.ConnectError("Connection refused")
             )
             result = await service.generate_plan("test prompt")
+        assert result is None
+
+    @pytest.mark.asyncio
+    async def test_503_retries_then_succeeds(self):
+        service = GeminiAIService(api_key="fake", model="gemini-3.7-flash")
+        request = httpx.Request(
+            "POST",
+            f"{GEMINI_API_URL}/gemini-3.7-flash:generateContent",
+        )
+        overload_response = httpx.Response(503, request=request, text='{"error": "overloaded"}')
+        success_response = httpx.Response(
+            200,
+            request=request,
+            json={"candidates": [{"content": {"parts": [{"text": '{"sessions": [], "daily_message": "ok", "overflow": []}'}]}}]},
+        )
+        with patch("app.services.ai_service.httpx.AsyncClient") as mock_client:
+            mock_client.return_value.__aenter__.return_value.post = AsyncMock(
+                side_effect=[
+                    httpx.HTTPStatusError("503", request=request, response=overload_response),
+                    success_response,
+                ]
+            )
+            with patch("app.services.ai_service.asyncio.sleep", new_callable=AsyncMock):
+                result = await service.generate_plan("test prompt")
+        assert result == {"sessions": [], "daily_message": "ok", "overflow": []}
+
+    @pytest.mark.asyncio
+    async def test_503_retries_exhausted_returns_none(self):
+        service = GeminiAIService(api_key="fake", model="gemini-3.7-flash")
+        request = httpx.Request(
+            "POST",
+            f"{GEMINI_API_URL}/gemini-3.7-flash:generateContent",
+        )
+        overload_response = httpx.Response(503, request=request, text='{"error": "overloaded"}')
+        with patch("app.services.ai_service.httpx.AsyncClient") as mock_client:
+            mock_client.return_value.__aenter__.return_value.post = AsyncMock(
+                side_effect=httpx.HTTPStatusError("503", request=request, response=overload_response)
+            )
+            with patch("app.services.ai_service.asyncio.sleep", new_callable=AsyncMock):
+                result = await service.generate_plan("test prompt")
         assert result is None
 
 
