@@ -1,6 +1,8 @@
 import uuid
 from datetime import date, datetime
+from unittest.mock import AsyncMock, patch
 
+import httpx
 import pytest
 
 from app.services.ai_service import (
@@ -144,6 +146,29 @@ class TestGeminiAIService:
         service = GeminiAIService(api_key="fake")
         result = service._parse_response("not json at all")
         assert result is None
+
+    @pytest.mark.asyncio
+    async def test_model_not_found_404_returns_none(self):
+        service = GeminiAIService(api_key="fake", model="gemini-does-not-exist")
+        request = httpx.Request(
+            "POST",
+            "https://generativelanguage.googleapis.com/v1beta/models/gemini-does-not-exist:generateContent",
+        )
+        response = httpx.Response(404, request=request, text='{"error": "model not found"}')
+        with patch("app.services.ai_service.httpx.AsyncClient") as mock_client:
+            mock_client.return_value.__aenter__.return_value.post = AsyncMock(
+                side_effect=httpx.HTTPStatusError(
+                    "404 Not Found", request=request, response=response
+                )
+            )
+            result = await service.generate_plan("test prompt")
+        assert result is None
+
+    @pytest.mark.asyncio
+    async def test_uses_latest_flash_model_by_default(self):
+        service = GeminiAIService(api_key="fake")
+        assert service.model == settings.GEMINI_MODEL
+        assert service.model == "gemini-3.7-flash"
 
 
 class TestOtherServices:

@@ -159,7 +159,14 @@ class GeminiAIService(AIService):
             text = candidates[0].get("content", {}).get("parts", [{}])[0].get("text", "")
             return self._parse_response(text)
         except httpx.HTTPStatusError as e:
-            logger.error("Gemini API error: %s - %s", e.response.status_code, e.response.text)
+            if e.response.status_code == 404:
+                logger.error(
+                    "Gemini model not found (HTTP 404): '%s'. "
+                    "Check GEMINI_MODEL; falling back to the deterministic planner.",
+                    self.model,
+                )
+            else:
+                logger.error("Gemini API error: %s - %s", e.response.status_code, e.response.text)
             return None
         except httpx.RequestError as e:
             logger.error("Gemini request failed: %s", e)
