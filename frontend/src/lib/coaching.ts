@@ -272,42 +272,102 @@ export function buildBacklogStatusSummary(ctx: BacklogStatusContext): {
   return { remainingTasks, remainingHours, overdueCount, clearEstimate }
 }
 
+/* ─── Hero subtitle ─── */
+
+export function buildHeroSubtitle(
+  backlogCount: number,
+  _name: string | null
+): string {
+  const count = backlogCount
+  if (count === 0) {
+    return "All caught up for today."
+  }
+  const noun = count === 1 ? "unfinished task" : "unfinished tasks"
+  return `You have ${count} ${noun}. Momentum picked the best place to start.`
+}
+
 /* ─── Coaching explanation ─── */
 
-export function buildCoachingExplanation(ctx: {
+export interface CoachingExplanationContext {
   backlogTotal: number
   overdueCount: number
   isOverdue: boolean
   subject: string
   healthScore?: string | null
-  estimatedCompletionDate?: string | null
-}): string {
-  const { backlogTotal, overdueCount, isOverdue, subject, healthScore } = ctx
-  const parts: string[] = []
+  estimatedMinutes?: number | null
+  sessionMinutes?: number
+  dueDate?: string | null
+  daysUntilDue?: number | null
+  priority?: number | null
+  isCurrentSession?: boolean
+  totalAvailableMinutes?: number
+}
 
-  if (backlogTotal > 0) {
-    parts.push(
-      `You're carrying ${backlogTotal} unfinished task${backlogTotal !== 1 ? "s" : ""}.`
-    )
-  }
+export function buildCoachingExplanation(
+  ctx: CoachingExplanationContext
+): string {
+  const {
+    isOverdue,
+    healthScore,
+    estimatedMinutes,
+    sessionMinutes,
+    dueDate,
+    daysUntilDue: daysUntilDueProp,
+    priority,
+    isCurrentSession,
+  } = ctx
+
+  const until = daysUntilDueProp ?? (dueDate != null ? daysUntilDue(dueDate) : null)
 
   if (isOverdue) {
+    const parts: string[] = ["This is overdue"]
+    if (estimatedMinutes && sessionMinutes && estimatedMinutes <= sessionMinutes) {
+      parts.push(`and fits into one ${sessionMinutes}-minute session`)
+    }
     parts.push(
-      `This is an overdue ${subject} task. Finishing it now puts you back on schedule.`
+      parts.length === 1
+        ? "Starting now puts you back on schedule."
+        : "Starting now puts you back on schedule."
     )
-  } else if (overdueCount > 0) {
-    parts.push(
-      `This is the oldest overdue item and fits into one focused session.`
-    )
-  } else if (healthScore === "critical") {
-    parts.push("You're behind schedule. Starting now is the fastest way to catch up.")
-  } else if (healthScore === "fair") {
-    parts.push("Starting now keeps you from falling further behind.")
-  } else {
-    parts.push("This is your highest-impact task right now.")
+    return `${parts[0]}${parts.length > 1 ? `, ${parts[1]}` : ""}.`
   }
 
-  return parts.join(" ")
+  if (until != null && until <= 1) {
+    return `This is due ${until === 0 ? "today" : "tomorrow"} and is the highest priority right now.`
+  }
+
+  if (until != null && until <= 3) {
+    return `This is due in ${until} day${until !== 1 ? "s" : ""} and deserves your focus now.`
+  }
+
+  if (until != null && until <= 7) {
+    if (estimatedMinutes && sessionMinutes && estimatedMinutes <= sessionMinutes) {
+      return `This is due this week and fits perfectly into a ${sessionMinutes}-minute session.`
+    }
+    return `This is due this week. Starting now keeps you ahead.`
+  }
+
+  if (
+    priority != null &&
+    (priority === 1 || priority === 2) &&
+    healthScore !== "good"
+  ) {
+    return "This is one of your hardest tasks. Tackling it now means the rest of the day gets easier."
+  }
+
+  if (isCurrentSession) {
+    return "This is up next in today's plan. Starting now keeps things moving."
+  }
+
+  if (healthScore === "critical") {
+    return "You're behind schedule. Starting now is the fastest way to catch up."
+  }
+
+  if (healthScore === "fair") {
+    return "Starting now keeps you from falling further behind."
+  }
+
+  return "This is your highest-impact task right now."
 }
 
 /* ─── Next session ─── */

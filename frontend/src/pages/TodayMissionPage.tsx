@@ -28,6 +28,7 @@ import type {
 import {
   buildBacklogStatusSummary,
   buildCoachingExplanation,
+  buildHeroSubtitle,
   buildRecommendationReason,
   daysUntilDue,
   formatMinutes,
@@ -69,7 +70,7 @@ function getNextSession(sessions: PlanSession[]): PlanSession | null {
 
 /* ─── Greeting ─── */
 
-function Greeting({ name }: { name: string | null }) {
+function Greeting({ name, subtitle }: { name: string | null; subtitle: string }) {
   return (
     <motion.div
       initial={{ opacity: 0, y: -8 }}
@@ -81,9 +82,7 @@ function Greeting({ name }: { name: string | null }) {
         {getGreeting()}
         {name ? `, ${name}` : ""}
       </h1>
-      <p className="text-sm text-muted-foreground">
-        Here's your next best move.
-      </p>
+      <p className="text-sm text-muted-foreground">{subtitle}</p>
     </motion.div>
   )
 }
@@ -374,15 +373,24 @@ export function TodayMissionPage() {
     const item = missionBacklogItem
     const backlogTotal = preview?.prioritized_backlog?.length ?? 0
     const overdueCount = preview?.backlog_health?.overdue_items ?? 0
+    const sessionMinutes = minutesBetween(
+      missionSession.start_time,
+      missionSession.end_time
+    )
     return buildCoachingExplanation({
       backlogTotal,
       overdueCount,
       isOverdue: item?.overdue ?? false,
       subject: item?.course_name ?? "Study",
       healthScore: health?.health_score,
-      estimatedCompletionDate: health?.estimated_completion_date,
+      estimatedMinutes: item?.estimated_minutes ?? null,
+      sessionMinutes,
+      dueDate: item?.due_date ?? null,
+      priority: item?.priority ?? null,
+      isCurrentSession: !!currentSession,
+      totalAvailableMinutes: preview?.total_available_minutes ?? 0,
     })
-  }, [missionSession, missionBacklogItem, preview, health])
+  }, [missionSession, missionBacklogItem, preview, health, currentSession])
 
   const coachingTone =
     health?.health_score === "critical"
@@ -478,10 +486,10 @@ export function TodayMissionPage() {
     return (
       <Layout>
         <div className="max-w-lg mx-auto space-y-5">
-          <Greeting name={profile?.name ?? null} />
+          <Greeting name={profile?.name ?? null} subtitle="Couldn't load your plan." />
           <div className="flex flex-col items-center justify-center rounded-2xl border border-dashed p-12 text-center">
             <p className="text-sm text-muted-foreground mb-4">
-              Couldn't load your plan
+              Something went wrong loading your dashboard.
             </p>
             <Button onClick={handleRefresh} variant="outline" size="sm">
               Try again
@@ -496,6 +504,12 @@ export function TodayMissionPage() {
   const allDone =
     activeSessions.length === 0 && sessions.length > 0
 
+  const heroSubtitle = useMemo(
+    () =>
+      buildHeroSubtitle(preview?.prioritized_backlog?.length ?? 0, profile?.name ?? null),
+    [preview, profile]
+  )
+
   const missionDuration = missionSession
     ? minutesBetween(missionSession.start_time, missionSession.end_time)
     : 0
@@ -504,7 +518,7 @@ export function TodayMissionPage() {
     <Layout>
       <div className="max-w-lg mx-auto space-y-5 pb-8">
         <FadeIn delay={0}>
-          <Greeting name={profile?.name ?? null} />
+          <Greeting name={profile?.name ?? null} subtitle={heroSubtitle} />
         </FadeIn>
 
         {!hasWork ? (

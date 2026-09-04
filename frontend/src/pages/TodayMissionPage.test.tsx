@@ -138,31 +138,29 @@ describe("TodayMissionPage", () => {
     state.dashboard = buildDashboard()
   })
 
-  it("shows a greeting and the mission hero as the primary action", () => {
+  it("shows a greeting with dynamic backlog count subtitle", () => {
     renderDashboard()
     expect(
       screen.getByText(/Good (morning|afternoon|evening), Alex/)
     ).toBeInTheDocument()
-    expect(screen.getAllByText("Your Next Move").length).toBeGreaterThan(0)
     expect(
-      screen.getByRole("heading", { name: "Chemistry Revision" })
+      screen.getByText(/You have 2 unfinished tasks/)
     ).toBeInTheDocument()
     expect(
-      screen.getByRole("button", { name: /start focus session/i })
-    ).toBeInTheDocument()
-  })
-
-  it("explains why Momentum picked this task", () => {
-    renderDashboard()
-    expect(
-      screen.getByText("This task is overdue. Finishing it now puts you back on schedule.")
+      screen.getByText(/Momentum picked the best place to start/)
     ).toBeInTheDocument()
   })
 
-  it("shows a coaching explanation answering why this task now", () => {
+  it("explains why Momentum picked this task with decision factors", () => {
     renderDashboard()
     const coach = screen.getByRole("status", { name: "Why this task?" })
-    expect(coach).toHaveTextContent(/unfinished task/)
+    expect(coach).toHaveTextContent(/overdue/)
+    expect(coach).toHaveTextContent(/puts you back on schedule/)
+  })
+
+  it("shows a coaching explanation with decision factors", () => {
+    renderDashboard()
+    const coach = screen.getByRole("status", { name: "Why this task?" })
     expect(coach).toHaveTextContent(/overdue/)
   })
 
@@ -226,5 +224,93 @@ describe("TodayMissionPage", () => {
     state.dashboard!.plan.plan.sessions = []
     renderDashboard()
     expect(screen.queryByText("Backlog Status")).not.toBeInTheDocument()
+  })
+
+  it("shows singular subtitle for one unfinished task", () => {
+    state.dashboard = buildDashboard()
+    state.dashboard!.planning.prioritized_backlog = [
+      state.dashboard!.planning.prioritized_backlog[0],
+    ]
+    state.dashboard!.plan.plan.sessions = [
+      state.dashboard!.plan.plan.sessions[0],
+    ]
+    state.dashboard!.planning.backlog_health = {
+      ...state.dashboard!.planning.backlog_health!,
+      total_items: 1,
+      pending_items: 1,
+      overdue_items: 1,
+    }
+    renderDashboard()
+    expect(
+      screen.getByText(/You have 1 unfinished task/)
+    ).toBeInTheDocument()
+  })
+
+  it("shows all caught up subtitle when there are no tasks", () => {
+    state.dashboard = buildDashboard()
+    state.dashboard!.planning.prioritized_backlog = []
+    state.dashboard!.plan.plan.sessions = []
+    renderDashboard()
+    expect(screen.getByText("All caught up for today.")).toBeInTheDocument()
+  })
+
+  it("explains due-soon task with day count", () => {
+    state.dashboard = buildDashboard()
+    const tomorrow = new Date(Date.now() + 1 * 24 * 60 * 60 * 1000)
+    const tomorrowStr = `${tomorrow.getFullYear()}-${String(tomorrow.getMonth() + 1).padStart(2, "0")}-${String(tomorrow.getDate()).padStart(2, "0")}T12:00:00.000Z`
+    state.dashboard!.planning.prioritized_backlog[1].due_date = tomorrowStr
+    state.dashboard!.planning.prioritized_backlog[1].overdue = false
+    state.dashboard!.planning.prioritized_backlog[0].status = "completed"
+    state.dashboard!.planning.backlog_health = {
+      ...state.dashboard!.planning.backlog_health!,
+      overdue_items: 0,
+    }
+    const fmt = (d: Date) =>
+      `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`
+    const now = Date.now()
+    const start = new Date(now + 30 * 60 * 1000)
+    state.dashboard!.plan.plan.sessions = [
+      {
+        backlog_item_id: "b2",
+        start_time: fmt(start),
+        end_time: fmt(new Date(start.getTime() + 30 * 60 * 1000)),
+        reason: "Work on Maths Practice",
+        remaining_minutes: 0,
+      },
+    ]
+    renderDashboard()
+    const coach = screen.getByRole("status", { name: "Why this task?" })
+    expect(coach).toHaveTextContent(/due/)
+  })
+
+  it("explains fair-health task with schedule warning", () => {
+    state.dashboard = buildDashboard()
+    const nextWeek = new Date(Date.now() + 10 * 24 * 60 * 60 * 1000)
+    const nextWeekStr = `${nextWeek.getFullYear()}-${String(nextWeek.getMonth() + 1).padStart(2, "0")}-${String(nextWeek.getDate()).padStart(2, "0")}T12:00:00.000Z`
+    state.dashboard!.planning.prioritized_backlog.forEach((item) => {
+      item.overdue = false
+      item.due_date = nextWeekStr
+    })
+    state.dashboard!.planning.backlog_health = {
+      ...state.dashboard!.planning.backlog_health!,
+      overdue_items: 0,
+      health_score: "fair",
+    }
+    const fmt = (d: Date) =>
+      `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`
+    const now = Date.now()
+    const start = new Date(now + 30 * 60 * 1000)
+    state.dashboard!.plan.plan.sessions = [
+      {
+        backlog_item_id: "b1",
+        start_time: fmt(start),
+        end_time: fmt(new Date(start.getTime() + 25 * 60 * 1000)),
+        reason: "Work on Chemistry Revision",
+        remaining_minutes: 0,
+      },
+    ]
+    renderDashboard()
+    const coach = screen.getByRole("status", { name: "Why this task?" })
+    expect(coach).toHaveTextContent(/falling further behind/)
   })
 })
