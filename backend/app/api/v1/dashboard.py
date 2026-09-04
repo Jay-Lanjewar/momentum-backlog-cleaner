@@ -23,10 +23,8 @@ from app.domain.schemas import (
     StudentProfileResponse,
     TimeBlock,
 )
-from app.services.ai_service import PromptBuilder, create_ai_service
 from app.services.deterministic_planner import generate_deterministic_plan
 from app.services.motivation_service import MotivationService
-from app.services.plan_validator import PlanValidator
 from app.services.planning_engine import PlanningEngine
 from app.services.streak_service import StreakService
 
@@ -89,40 +87,8 @@ async def get_dashboard(
         backlog_health=BacklogHealth(**planning_data["backlog_health"]),
     )
 
-    valid_backlog_ids = {
-        item["id"]
-        for item in planning_data.get("prioritized_backlog", [])
-    }
-
-    ai_service = create_ai_service()
-    prompt_builder = PromptBuilder()
-    validator = PlanValidator()
-
-    prompt = prompt_builder.build(planning_data, target_date=target)
-    raw_plan = await ai_service.generate_plan(prompt)
-
-    validated = None
-    source = "deterministic"
-    fallback_reason = None
-    if raw_plan is not None:
-        validated = validator.validate(
-            raw=raw_plan,
-            valid_backlog_ids=valid_backlog_ids,
-            available_windows=planning_data.get("available_windows", []),
-        )
-        if validated is not None:
-            source = "ai"
-            logger.info("Using Gemini planner")
-        else:
-            fallback_reason = "AI plan failed validation"
-    else:
-        fallback_reason = "AI planner unavailable or returned no plan"
-
-    if validated is None:
-        logger.info("Falling back to deterministic planner (%s)", fallback_reason)
-        daily_capacity = profile.daily_target_minutes if profile and profile.daily_target_minutes else None
-        fallback = generate_deterministic_plan(planning_data, daily_capacity_minutes=daily_capacity)
-        validated = fallback
+    daily_capacity = profile.daily_target_minutes if profile and profile.daily_target_minutes else None
+    validated = generate_deterministic_plan(planning_data, daily_capacity_minutes=daily_capacity)
 
     plan = PlanGenerateResponse(
         plan=GeneratedPlan(
@@ -130,7 +96,7 @@ async def get_dashboard(
             daily_message=validated["daily_message"],
             overflow=[uuid.UUID(oid) for oid in validated["overflow"]],
         ),
-        source=source,
+        source="deterministic",
     )
 
     streak_service = StreakService(db)
