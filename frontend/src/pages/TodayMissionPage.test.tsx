@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react"
+import { act, render, screen } from "@testing-library/react"
 import { MemoryRouter } from "react-router-dom"
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query"
 import { beforeEach, describe, expect, it, vi } from "vitest"
@@ -8,12 +8,13 @@ import type { DashboardData } from "@/services/types"
 
 const state = vi.hoisted(() => ({
   dashboard: undefined as DashboardData | undefined,
+  isLoading: false,
 }))
 
 vi.mock("@/services/hooks", () => ({
   useDashboard: () => ({
     data: state.dashboard,
-    isLoading: false,
+    isLoading: state.isLoading,
     error: null,
     refetch: vi.fn(),
   }),
@@ -124,18 +125,20 @@ function renderDashboard() {
     defaultOptions: { queries: { retry: false } },
   })
   localStorage.setItem("momentum_onboarded", "true")
-  return render(
+  const result = render(
     <QueryClientProvider client={queryClient}>
       <MemoryRouter>
         <TodayMissionPage />
       </MemoryRouter>
     </QueryClientProvider>
   )
+  return result
 }
 
 describe("TodayMissionPage", () => {
   beforeEach(() => {
     state.dashboard = buildDashboard()
+    state.isLoading = false
   })
 
   it("shows a greeting with dynamic backlog count subtitle", () => {
@@ -312,5 +315,37 @@ describe("TodayMissionPage", () => {
     renderDashboard()
     const coach = screen.getByRole("status", { name: "Why this task?" })
     expect(coach).toHaveTextContent(/falling further behind/)
+  })
+
+  it("survives isLoading→loaded transition without hook order crash", () => {
+    state.dashboard = undefined
+    state.isLoading = true
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+    const { rerender } = render(
+      <QueryClientProvider client={queryClient}>
+        <MemoryRouter>
+          <TodayMissionPage />
+        </MemoryRouter>
+      </QueryClientProvider>
+    )
+
+    expect(screen.queryByText(/Good (morning|afternoon|evening)/)).not.toBeInTheDocument()
+
+    state.isLoading = false
+    state.dashboard = buildDashboard()
+    act(() => {
+      rerender(
+        <QueryClientProvider client={queryClient}>
+          <MemoryRouter>
+            <TodayMissionPage />
+          </MemoryRouter>
+        </QueryClientProvider>
+      )
+    })
+
+    expect(
+      screen.getByText(/Good (morning|afternoon|evening)/)
+    ).toBeInTheDocument()
+    expect(screen.getByText(/You have 2 unfinished tasks/)).toBeInTheDocument()
   })
 })

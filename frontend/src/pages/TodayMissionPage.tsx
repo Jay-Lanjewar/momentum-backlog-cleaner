@@ -469,6 +469,12 @@ export function TodayMissionPage() {
     })
   }
 
+  const heroSubtitle = useMemo(
+    () =>
+      buildHeroSubtitle(preview?.prioritized_backlog?.length ?? 0, profile?.name ?? null),
+    [preview, profile]
+  )
+
   if (isLoading) {
     return (
       <Layout>
@@ -503,12 +509,6 @@ export function TodayMissionPage() {
   const hasWork = (preview?.prioritized_backlog?.length ?? 0) > 0
   const allDone =
     activeSessions.length === 0 && sessions.length > 0
-
-  const heroSubtitle = useMemo(
-    () =>
-      buildHeroSubtitle(preview?.prioritized_backlog?.length ?? 0, profile?.name ?? null),
-    [preview, profile]
-  )
 
   const missionDuration = missionSession
     ? minutesBetween(missionSession.start_time, missionSession.end_time)
