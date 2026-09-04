@@ -12,7 +12,7 @@ jobs:
   diagnose:
     runs-on: ubuntu-latest
     steps:
-      - name: Test Gemini API connectivity
+      - name: Test minimal Gemini request
         env:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
           MODEL: ${{ inputs.model || 'gemini-3.7-flash' }}
@@ -22,18 +22,15 @@ jobs:
           echo "model: $MODEL"
           echo ""
 
-          # Validate secret exists
           if [ -z "$GEMINI_API_KEY" ]; then
             echo "ERROR: GEMINI_API_KEY secret is not set."
             echo "Add it in: GitHub repo > Settings > Secrets and variables > Actions"
             exit 1
           fi
 
-          # Build URL (never print key)
           API_URL="https://generativelanguage.googleapis.com/v1beta/models/${MODEL}:generateContent"
 
           echo "Sending minimal generateContent request..."
-
           START=$(date +%s%N)
           HTTP_CODE=$(curl -s -o /tmp/gemini_response.json -w "%{http_code}" \
             -X POST "${API_URL}?key=${GEMINI_API_KEY}" \
@@ -46,22 +43,17 @@ jobs:
           ELAPSED_S=$(echo "scale=2; $ELAPSED_MS / 1000" | bc)
 
           echo ""
-          echo "=== Results ==="
+          echo "=== Minimal Request Results ==="
           echo "model:        $MODEL"
           echo "http_status:  $HTTP_CODE"
           echo "latency:      ${ELAPSED_S}s (${ELAPSED_MS}ms)"
 
           if [ "$HTTP_CODE" -ge 200 ] && [ "$HTTP_CODE" -lt 300 ]; then
             echo "result:       OK"
-            # Show body without exposing anything sensitive
-            cat /tmp/gemini_response.json | python3 -m json.tool 2>/dev/null || cat /tmp/gemini_response.json
           else
             echo "result:       FAILED"
-            echo ""
-            echo "=== Error Details ==="
-            # Sanitize: show only error message, not any embedded key fragments
             python3 -c "
-          import json, sys
+          import json
           try:
               data = json.load(open('/tmp/gemini_response.json'))
               err = data.get('error', {})
@@ -73,5 +65,123 @@ jobs:
           "
           fi
 
+      - name: Test production-shaped Gemini request
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          MODEL: ${{ inputs.model || 'gemini-3.7-flash' }}
+        run: |
+          set -e
           echo ""
-          echo "=== Diagnostic Complete ==="
+          echo "============================================"
+          echo "=== Production-Shaped Request Diagnostic ==="
+          echo "============================================"
+          echo "model: $MODEL"
+          echo ""
+
+          API_URL="https://generativelanguage.googleapis.com/v1beta/models/${MODEL}:generateContent"
+
+          python3 -c "
+          import json, subprocess, time, sys
+
+          prompt = \"\"\"You are a study planner for a student. Create a daily study plan for 2026-08-14.
+
+          AVAILABLE STUDY TIME:
+            1. 09:00-11:30 (150 min, energy: high)
+            2. 14:00-16:00 (120 min, energy: medium)
+            3. 19:00-21:00 (120 min, energy: low)
+
+          BACKLOG ITEMS (sorted by priority):
+            1. [Mathematics] Derivatives homework (OVERDUE) - 45 min - priority 1, due: 2026-08-12
+            2. [Physics] Wave mechanics worksheet - 60 min - priority 2, due: 2026-08-16
+            3. [English] Essay draft - 90 min - priority 2, due: 2026-08-18
+            4. [Chemistry] Lab report - 75 min - priority 3, due: 2026-08-20
+            5. [History] Chapter review - 40 min - priority 3
+            6. [Biology] Flashcard set - 30 min - priority 4
+
+          BACKLOG HEALTH:
+            pending_items: 6, overdue_items: 1, health_score: fair
+
+          TOTALS:
+            total_available_minutes: 390, total_required_minutes: 340, estimated_days_to_clear: 2
+
+          TASK:
+          Create a study plan that schedules as many backlog items as possible within the available time windows.
+          - Each session must fit entirely within one available time window.
+          - Sessions cannot overlap.
+          - Respect the estimated_minutes for each item.
+          - Allocate more time to higher-priority items.
+
+          OUTPUT FORMAT:
+          Return ONLY valid JSON with this exact structure:
+          {
+              "sessions": [
+                  {
+                      "backlog_item_id": "<uuid>",
+                      "start_time": "HH:MM",
+                      "end_time": "HH:MM",
+                      "reason": "Brief explanation"
+                  }
+              ],
+              "daily_message": "A short encouraging message for the student",
+              "overflow": ["<uuid>"]
+          }
+
+          - backlog_item_id must be one of the IDs listed above.
+          - overflow contains IDs of items that could not be scheduled.
+          - Times must be in 24-hour format within the available windows above.
+          - Respond with ONLY the JSON object, no other text.\"\"\"
+
+          payload = {
+              "contents": [{"parts": [{"text": prompt}]}],
+              "generationConfig": {
+                  "temperature": 0.2,
+                  "topP": 0.8,
+                  "topK": 40,
+                  "maxOutputTokens": 2048
+              }
+          }
+
+          api_url = "$API_URL"
+          api_key = "$GEMINI_API_KEY"
+
+          t0 = time.monotonic()
+          try:
+              import urllib.request, urllib.error
+              req = urllib.request.Request(
+                  f\"{api_url}?key={api_key}\",
+                  data=json.dumps(payload).encode(),
+                  headers={"Content-Type": "application/json"},
+                  method="POST"
+              )
+              resp = urllib.request.urlopen(req, timeout=30)
+              latency = time.monotonic() - t0
+              status = resp.status
+              body = resp.read().decode()
+              print(f\"model:        $MODEL\")
+              print(f\"http_status:  {status}\")
+              print(f\"latency:      {latency:.2f}s\")
+              print(f\"result:       OK\")
+          except urllib.error.HTTPError as e:
+              latency = time.monotonic() - t0
+              body = e.read().decode()
+              print(f\"model:        $MODEL\")
+              print(f\"http_status:  {e.code}\")
+              print(f\"latency:      {latency:.2f}s\")
+              print(f\"result:       FAILED\")
+              try:
+                  err = json.loads(body).get('error', {})
+                  print(f\"error_code:    {err.get('code', 'unknown')}\")
+                  print(f\"error_message: {err.get('message', 'unknown')}\")
+                  print(f\"error_status:  {err.get('status', 'unknown')}\")
+              except Exception:
+                  print(f\"error:        {body[:200]}\")
+          except Exception as e:
+              latency = time.monotonic() - t0
+              print(f\"model:        $MODEL\")
+              print(f\"latency:      {latency:.2f}s\")
+              print(f\"result:       FAILED\")
+              print(f\"error:        {type(e).__name__}: {e}\")
+          "
+
+          echo ""
+          echo "=== Production-Shaped Diagnostic Complete ==="
