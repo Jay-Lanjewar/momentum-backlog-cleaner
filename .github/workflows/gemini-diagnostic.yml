@@ -78,7 +78,7 @@ jobs:
           echo "model: $MODEL"
           echo ""
 
-          API_URL="https://generativelanguage.googleapis.com/v1beta/models/${MODEL}:generateContent"
+          export API_URL="https://generativelanguage.googleapis.com/v1beta/models/${MODEL}:generateContent"
 
           cat > /tmp/gemini_prod_test.py << 'PYEOF'
           import json, time, urllib.request, urllib.error, os
