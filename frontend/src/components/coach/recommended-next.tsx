@@ -1,15 +1,6 @@
 import { motion } from "framer-motion"
-import {
-  Sparkles,
-  Clock,
-  Flag,
-  Zap,
-  ShieldCheck,
-  Play,
-  ArrowRight,
-} from "lucide-react"
+import { Clock, Play, AlertTriangle } from "lucide-react"
 import { Button } from "@/components/ui/button"
-import { formatTimeDisplay } from "@/lib/coaching"
 
 export interface RecommendedNextCardProps {
   task: string
@@ -20,8 +11,7 @@ export interface RecommendedNextCardProps {
   eyebrow?: string
   bestTime?: string
   finishTime?: string
-  timeSaved?: number | null
-  confidence?: { label: string; detail: string } | null
+  overdue?: boolean
   onStart?: () => void
   ctaLabel?: string
   className?: string
@@ -33,13 +23,12 @@ export function RecommendedNextCard({
   courseColor = "#6366f1",
   durationLabel,
   reason,
-  eyebrow = "Recommended Next",
+  eyebrow = "Your Next Move",
   bestTime,
   finishTime,
-  timeSaved,
-  confidence,
+  overdue = false,
   onStart,
-  ctaLabel = "Start this session",
+  ctaLabel = "Start Focus Session",
   className,
 }: RecommendedNextCardProps) {
   return (
@@ -54,11 +43,18 @@ export function RecommendedNextCard({
         style={{ backgroundColor: courseColor }}
       />
       <div className="p-5 space-y-4">
-        <div className="flex items-center gap-2">
-          <Sparkles className="h-4 w-4 text-primary" />
-          <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-            {eyebrow}
-          </span>
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+              {eyebrow}
+            </span>
+          </div>
+          {overdue && (
+            <span className="inline-flex items-center gap-1 rounded-full bg-red-500/10 px-2 py-0.5 text-[10px] font-semibold text-red-500 dark:text-red-400">
+              <AlertTriangle className="h-3 w-3" />
+              Overdue
+            </span>
+          )}
         </div>
 
         <div className="space-y-2">
@@ -73,7 +69,7 @@ export function RecommendedNextCard({
               {subject}
             </span>
           )}
-          <h3 className="text-lg font-semibold leading-snug tracking-tight break-words">
+          <h3 className="text-xl font-semibold leading-snug tracking-tight break-words">
             {task}
           </h3>
           <p className="text-sm text-card-foreground/70 leading-relaxed">
@@ -81,46 +77,20 @@ export function RecommendedNextCard({
           </p>
         </div>
 
-        <div className="grid grid-cols-2 gap-2">
+        <div className="flex items-center gap-3 text-xs text-muted-foreground">
           {durationLabel && (
-            <div className="rounded-lg bg-muted/50 px-3 py-2">
-              <div className="flex items-center gap-1.5 text-[10px] uppercase tracking-wider text-muted-foreground">
-                <Clock className="h-3 w-3" /> Focus Time
-              </div>
-              <p className="mt-0.5 text-sm font-semibold">{durationLabel}</p>
-            </div>
+            <span className="flex items-center gap-1">
+              <Clock className="h-3.5 w-3.5" />
+              {durationLabel}
+            </span>
           )}
-          {bestTime && (
-            <div className="rounded-lg bg-muted/50 px-3 py-2">
-              <div className="flex items-center gap-1.5 text-[10px] uppercase tracking-wider text-muted-foreground">
-                <Clock className="h-3 w-3" /> Best Time
-              </div>
-              <p className="mt-0.5 text-sm font-semibold">{bestTime}</p>
-            </div>
+          {bestTime && finishTime && (
+            <span className="text-muted-foreground/60">·</span>
           )}
-          {finishTime && (
-            <div className="rounded-lg bg-muted/50 px-3 py-2">
-              <div className="flex items-center gap-1.5 text-[10px] uppercase tracking-wider text-muted-foreground">
-                <Flag className="h-3 w-3" /> Est. Finish
-              </div>
-              <p className="mt-0.5 text-sm font-semibold">{finishTime}</p>
-            </div>
-          )}
-          {timeSaved != null && (
-            <div className="rounded-lg bg-muted/50 px-3 py-2">
-              <div className="flex items-center gap-1.5 text-[10px] uppercase tracking-wider text-muted-foreground">
-                <Zap className="h-3 w-3" /> Time Saved
-              </div>
-              <p className="mt-0.5 text-sm font-semibold">{timeSaved} min</p>
-            </div>
-          )}
-          {confidence && (
-            <div className="rounded-lg bg-muted/50 px-3 py-2">
-              <div className="flex items-center gap-1.5 text-[10px] uppercase tracking-wider text-muted-foreground">
-                <ShieldCheck className="h-3 w-3" /> Schedule Confidence
-              </div>
-              <p className="mt-0.5 text-sm font-semibold">{confidence.label}</p>
-            </div>
+          {bestTime && finishTime && (
+            <span>
+              {bestTime} – {finishTime}
+            </span>
           )}
         </div>
 
@@ -132,15 +102,9 @@ export function RecommendedNextCard({
           >
             <Play className="h-4 w-4 fill-current" />
             {ctaLabel}
-            <ArrowRight className="h-4 w-4" />
           </Button>
         )}
       </div>
     </motion.div>
   )
-}
-
-export function bestTimeLabel(startTime: string | undefined): string | undefined {
-  if (!startTime) return undefined
-  return formatTimeDisplay(startTime)
 }

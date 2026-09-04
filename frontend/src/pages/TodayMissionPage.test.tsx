@@ -143,7 +143,7 @@ describe("TodayMissionPage", () => {
     expect(
       screen.getByText(/Good (morning|afternoon|evening), Alex/)
     ).toBeInTheDocument()
-    expect(screen.getAllByText("Today's Mission").length).toBeGreaterThan(0)
+    expect(screen.getAllByText("Your Next Move").length).toBeGreaterThan(0)
     expect(
       screen.getByRole("heading", { name: "Chemistry Revision" })
     ).toBeInTheDocument()
@@ -152,20 +152,32 @@ describe("TodayMissionPage", () => {
     ).toBeInTheDocument()
   })
 
-  it("explains why the AI picked this task and coaches actionably", () => {
+  it("explains why Momentum picked this task", () => {
     renderDashboard()
     expect(
       screen.getByText("This task is overdue. Finishing it now puts you back on schedule.")
     ).toBeInTheDocument()
-    const coach = screen.getByRole("status", { name: "AI Coach" })
-    expect(coach).toHaveTextContent(/Starting now puts you back on schedule/)
   })
 
-  it("does NOT offer a Mark Complete shortcut on the dashboard", () => {
+  it("shows a coaching explanation answering why this task now", () => {
     renderDashboard()
-    expect(
-      screen.queryByRole("button", { name: /mark complete/i })
-    ).not.toBeInTheDocument()
+    const coach = screen.getByRole("status", { name: "Why this task?" })
+    expect(coach).toHaveTextContent(/unfinished task/)
+    expect(coach).toHaveTextContent(/overdue/)
+  })
+
+  it("shows overdue badge on the mission card when task is overdue", () => {
+    renderDashboard()
+    expect(screen.getByText("Overdue")).toBeInTheDocument()
+  })
+
+  it("shows backlog status with remaining tasks and study time", () => {
+    renderDashboard()
+    expect(screen.getByText("Backlog Status")).toBeInTheDocument()
+    expect(screen.getByText("2 tasks")).toBeInTheDocument()
+    expect(screen.getByText("remaining")).toBeInTheDocument()
+    expect(screen.getByText("1 overdue")).toBeInTheDocument()
+    expect(screen.getByText("needs attention")).toBeInTheDocument()
   })
 
   it("shows meaningful progress instead of empty statistics", () => {
@@ -198,5 +210,21 @@ describe("TodayMissionPage", () => {
       )
     ).toBeInTheDocument()
     expect(screen.getByRole("button", { name: /add work/i })).toBeInTheDocument()
+  })
+
+  it("shows all caught up message when all tasks are completed", () => {
+    state.dashboard = buildDashboard()
+    state.dashboard!.planning.prioritized_backlog[0].status = "completed"
+    state.dashboard!.planning.prioritized_backlog[1].status = "completed"
+    renderDashboard()
+    expect(screen.getByText("All caught up for today.")).toBeInTheDocument()
+  })
+
+  it("hides backlog status when there are no tasks", () => {
+    state.dashboard = buildDashboard()
+    state.dashboard!.planning.prioritized_backlog = []
+    state.dashboard!.plan.plan.sessions = []
+    renderDashboard()
+    expect(screen.queryByText("Backlog Status")).not.toBeInTheDocument()
   })
 })

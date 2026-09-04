@@ -1,9 +1,9 @@
 import { motion } from "framer-motion"
-import { Sparkles } from "lucide-react"
+import { Lightbulb } from "lucide-react"
 
 export function CoachMessage({
   children,
-  label = "AI Coach",
+  label = "Why this task?",
   tone = "default",
   className,
 }: {
@@ -39,7 +39,7 @@ export function CoachMessage({
       <div
         className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-lg ${iconTone[tone]}`}
       >
-        <Sparkles className="h-4 w-4" />
+        <Lightbulb className="h-4 w-4" />
       </div>
       <div className="space-y-1 min-w-0">
         <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">

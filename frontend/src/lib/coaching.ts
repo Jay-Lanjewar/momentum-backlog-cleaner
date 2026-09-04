@@ -241,6 +241,75 @@ export function estimateTimeSaved(
   return estimatedMinutes - sessionMinutes
 }
 
+/* ─── Backlog status ─── */
+
+export interface BacklogStatusContext {
+  totalItems: number
+  overdueItems: number
+  pendingItems: number
+  totalRequiredMinutes: number
+  estimatedDaysToClear: number | null
+}
+
+export function buildBacklogStatusSummary(ctx: BacklogStatusContext): {
+  remainingTasks: number
+  remainingHours: string
+  overdueCount: number
+  clearEstimate: string | null
+} {
+  const remainingTasks = ctx.pendingItems
+  const totalHours = Math.ceil(ctx.totalRequiredMinutes / 60)
+  const remainingHours = totalHours <= 0 ? "< 1 hour" : `${totalHours} hours`
+  const overdueCount = ctx.overdueItems
+  const clearEstimate =
+    ctx.estimatedDaysToClear != null
+      ? ctx.estimatedDaysToClear <= 0.5
+        ? "Today"
+        : ctx.estimatedDaysToClear <= 1
+          ? "Tomorrow"
+          : `~${Math.ceil(ctx.estimatedDaysToClear)} days`
+      : null
+  return { remainingTasks, remainingHours, overdueCount, clearEstimate }
+}
+
+/* ─── Coaching explanation ─── */
+
+export function buildCoachingExplanation(ctx: {
+  backlogTotal: number
+  overdueCount: number
+  isOverdue: boolean
+  subject: string
+  healthScore?: string | null
+  estimatedCompletionDate?: string | null
+}): string {
+  const { backlogTotal, overdueCount, isOverdue, subject, healthScore } = ctx
+  const parts: string[] = []
+
+  if (backlogTotal > 0) {
+    parts.push(
+      `You're carrying ${backlogTotal} unfinished task${backlogTotal !== 1 ? "s" : ""}.`
+    )
+  }
+
+  if (isOverdue) {
+    parts.push(
+      `This is an overdue ${subject} task. Finishing it now puts you back on schedule.`
+    )
+  } else if (overdueCount > 0) {
+    parts.push(
+      `This is the oldest overdue item and fits into one focused session.`
+    )
+  } else if (healthScore === "critical") {
+    parts.push("You're behind schedule. Starting now is the fastest way to catch up.")
+  } else if (healthScore === "fair") {
+    parts.push("Starting now keeps you from falling further behind.")
+  } else {
+    parts.push("This is your highest-impact task right now.")
+  }
+
+  return parts.join(" ")
+}
+
 /* ─── Next session ─── */
 
 export function nextSessionAfter(

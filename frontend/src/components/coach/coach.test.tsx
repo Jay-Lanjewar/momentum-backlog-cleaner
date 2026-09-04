@@ -6,9 +6,9 @@ import { CoachMessage } from "@/components/coach/coach-message"
 import { RecommendedNextCard } from "@/components/coach/recommended-next"
 
 describe("CoachMessage", () => {
-  it("renders as a status region labelled AI Coach", () => {
+  it("renders as a status region labelled Why this task?", () => {
     render(<CoachMessage>Starting now puts you back on schedule.</CoachMessage>)
-    const status = screen.getByRole("status", { name: "AI Coach" })
+    const status = screen.getByRole("status", { name: "Why this task?" })
     expect(status).toBeInTheDocument()
     expect(
       screen.getByText("Starting now puts you back on schedule.")
@@ -30,43 +30,42 @@ describe("RecommendedNextCard", () => {
     bestTime: "4:00 PM",
     finishTime: "4:25 PM",
     durationLabel: "25 min",
-    timeSaved: 15,
-    confidence: { label: "High", detail: "Your plan is comfortably on track." },
   }
 
-  it("renders the recommendation with all AI meta fields", () => {
+  it("renders the recommendation with task details", () => {
     render(<RecommendedNextCard {...baseProps} />)
-    expect(screen.getByText("Recommended Next")).toBeInTheDocument()
+    expect(screen.getByText("Your Next Move")).toBeInTheDocument()
     expect(screen.getByRole("heading", { name: "Chemistry Revision" })).toBeInTheDocument()
     expect(screen.getByText(baseProps.reason)).toBeInTheDocument()
-    expect(screen.getByText("Focus Time")).toBeInTheDocument()
     expect(screen.getByText("25 min")).toBeInTheDocument()
-    expect(screen.getByText("Best Time")).toBeInTheDocument()
-    expect(screen.getByText("4:00 PM")).toBeInTheDocument()
-    expect(screen.getByText("Est. Finish")).toBeInTheDocument()
-    expect(screen.getByText("4:25 PM")).toBeInTheDocument()
-    expect(screen.getByText("Time Saved")).toBeInTheDocument()
-    expect(screen.getByText("15 min")).toBeInTheDocument()
-    expect(screen.getByText("Schedule Confidence")).toBeInTheDocument()
-    expect(screen.getByText("High")).toBeInTheDocument()
+    expect(screen.getByText(/4:00 PM/)).toBeInTheDocument()
+    expect(screen.getByText(/4:25 PM/)).toBeInTheDocument()
   })
 
   it("uses the eyebrow label when provided", () => {
     render(<RecommendedNextCard {...baseProps} eyebrow="Today's Mission" />)
     expect(screen.getByText("Today's Mission")).toBeInTheDocument()
-    expect(screen.queryByText("Recommended Next")).not.toBeInTheDocument()
+    expect(screen.queryByText("Your Next Move")).not.toBeInTheDocument()
   })
 
-  it("hides optional meta chips when not provided", () => {
+  it("hides optional time info when not provided", () => {
     render(
       <RecommendedNextCard
         task="Maths Practice"
         reason="Up next in today's plan."
       />
     )
-    expect(screen.queryByText("Focus Time")).not.toBeInTheDocument()
-    expect(screen.queryByText("Best Time")).not.toBeInTheDocument()
-    expect(screen.queryByText("Schedule Confidence")).not.toBeInTheDocument()
+    expect(screen.queryByText("Your Next Move")).toBeInTheDocument()
+  })
+
+  it("shows overdue badge when task is overdue", () => {
+    render(<RecommendedNextCard {...baseProps} overdue />)
+    expect(screen.getByText("Overdue")).toBeInTheDocument()
+  })
+
+  it("hides overdue badge when task is not overdue", () => {
+    render(<RecommendedNextCard {...baseProps} />)
+    expect(screen.queryByText("Overdue")).not.toBeInTheDocument()
   })
 
   it("fires onStart when the CTA is pressed", async () => {
