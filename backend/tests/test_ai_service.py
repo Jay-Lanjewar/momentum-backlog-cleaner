@@ -224,6 +224,35 @@ class TestGeminiAIService:
             with patch("app.services.ai_service.asyncio.sleep", new_callable=AsyncMock):
                 result = await service.generate_plan("test prompt")
         assert result is None
+        assert mock_client.return_value.__aenter__.return_value.post.call_count == 2
+
+    @pytest.mark.asyncio
+    async def test_timeout_returns_none(self):
+        service = GeminiAIService(api_key="fake", model="gemini-3.7-flash")
+        with patch("app.services.ai_service.httpx.AsyncClient") as mock_client:
+            mock_client.return_value.__aenter__.return_value.post = AsyncMock(
+                side_effect=httpx.ReadTimeout("Read timed out")
+            )
+            result = await service.generate_plan("test prompt")
+        assert result is None
+        assert mock_client.return_value.__aenter__.return_value.post.call_count == 1
+
+    @pytest.mark.asyncio
+    async def test_uses_15_second_timeout(self):
+        service = GeminiAIService(api_key="fake", model="gemini-3.7-flash")
+        request = httpx.Request(
+            "POST",
+            f"{GEMINI_API_URL}/gemini-3.7-flash:generateContent",
+        )
+        success_response = httpx.Response(
+            200,
+            request=request,
+            json={"candidates": [{"content": {"parts": [{"text": '{"sessions": [], "daily_message": "ok", "overflow": []}'}]}}]},
+        )
+        with patch("app.services.ai_service.httpx.AsyncClient") as mock_client:
+            mock_client.return_value.__aenter__.return_value.post = AsyncMock(return_value=success_response)
+            await service.generate_plan("test prompt")
+            mock_client.assert_called_with(timeout=15)
 
 
 class TestOtherServices:

@@ -146,10 +146,10 @@ class GeminiAIService(AIService):
             },
         }
 
-        max_retries = 2
+        max_retries = 1
         for attempt in range(max_retries + 1):
             try:
-                async with httpx.AsyncClient(timeout=30) as client:
+                async with httpx.AsyncClient(timeout=15) as client:
                     response = await client.post(url, json=payload)
                     response.raise_for_status()
                     data = response.json()
