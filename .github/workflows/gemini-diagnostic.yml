@@ -1,0 +1,77 @@
+name: Gemini Connectivity Diagnostic
+
+on:
+  workflow_dispatch:
+    inputs:
+      model:
+        description: "Gemini model to test"
+        required: false
+        default: "gemini-3.7-flash"
+
+jobs:
+  diagnose:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Test Gemini API connectivity
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          MODEL: ${{ inputs.model || 'gemini-3.7-flash' }}
+        run: |
+          set -e
+          echo "=== Gemini Connectivity Diagnostic ==="
+          echo "model: $MODEL"
+          echo ""
+
+          # Validate secret exists
+          if [ -z "$GEMINI_API_KEY" ]; then
+            echo "ERROR: GEMINI_API_KEY secret is not set."
+            echo "Add it in: GitHub repo > Settings > Secrets and variables > Actions"
+            exit 1
+          fi
+
+          # Build URL (never print key)
+          API_URL="https://generativelanguage.googleapis.com/v1beta/models/${MODEL}:generateContent"
+
+          echo "Sending minimal generateContent request..."
+
+          START=$(date +%s%N)
+          HTTP_CODE=$(curl -s -o /tmp/gemini_response.json -w "%{http_code}" \
+            -X POST "${API_URL}?key=${GEMINI_API_KEY}" \
+            -H "Content-Type: application/json" \
+            -d '{"contents":[{"parts":[{"text":"Return only: {\"ok\": true}"}]}],"generationConfig":{"maxOutputTokens":20}}' \
+            --max-time 30)
+          END=$(date +%s%N)
+
+          ELAPSED_MS=$(( (END - START) / 1000000 ))
+          ELAPSED_S=$(echo "scale=2; $ELAPSED_MS / 1000" | bc)
+
+          echo ""
+          echo "=== Results ==="
+          echo "model:        $MODEL"
+          echo "http_status:  $HTTP_CODE"
+          echo "latency:      ${ELAPSED_S}s (${ELAPSED_MS}ms)"
+
+          if [ "$HTTP_CODE" -ge 200 ] && [ "$HTTP_CODE" -lt 300 ]; then
+            echo "result:       OK"
+            # Show body without exposing anything sensitive
+            cat /tmp/gemini_response.json | python3 -m json.tool 2>/dev/null || cat /tmp/gemini_response.json
+          else
+            echo "result:       FAILED"
+            echo ""
+            echo "=== Error Details ==="
+            # Sanitize: show only error message, not any embedded key fragments
+            python3 -c "
+          import json, sys
+          try:
+              data = json.load(open('/tmp/gemini_response.json'))
+              err = data.get('error', {})
+              print(f'error_code:    {err.get(\"code\", \"unknown\")}')
+              print(f'error_message: {err.get(\"message\", \"unknown\")}')
+              print(f'error_status:  {err.get(\"status\", \"unknown\")}')
+          except Exception:
+              print('Could not parse error response')
+          "
+          fi
+
+          echo ""
+          echo "=== Diagnostic Complete ==="
