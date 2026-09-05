@@ -218,6 +218,7 @@ class TestSchedulingBehaviourUnchanged:
             "sessions": [
                 {
                     "backlog_item_id": str(first),
+                    "session_id": f"{first}:s1",
                     "start_time": "06:00",
                     "end_time": "06:35",
                     "reason": "Work on Homework",
@@ -225,6 +226,7 @@ class TestSchedulingBehaviourUnchanged:
                 },
                 {
                     "backlog_item_id": str(first),
+                    "session_id": f"{first}:s2",
                     "start_time": "06:35",
                     "end_time": "07:00",
                     "reason": "Work on Homework",
@@ -232,6 +234,7 @@ class TestSchedulingBehaviourUnchanged:
                 },
                 {
                     "backlog_item_id": str(second),
+                    "session_id": f"{second}:s1",
                     "start_time": "07:00",
                     "end_time": "07:25",
                     "reason": "Work on Reading",
@@ -239,6 +242,7 @@ class TestSchedulingBehaviourUnchanged:
                 },
                 {
                     "backlog_item_id": str(second),
+                    "session_id": f"{second}:s2",
                     "start_time": "07:25",
                     "end_time": "07:30",
                     "reason": "Work on Reading",
@@ -277,6 +281,7 @@ class TestSchedulingBehaviourUnchanged:
         assert set(result.keys()) == {"sessions", "daily_message", "overflow"}
         assert set(result["sessions"][0].keys()) == {
             "backlog_item_id",
+            "session_id",
             "start_time",
             "end_time",
             "reason",

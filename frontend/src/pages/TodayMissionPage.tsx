@@ -1,4 +1,4 @@
-import { useEffect, useMemo } from "react"
+import { useEffect, useMemo, useState } from "react"
 import { motion } from "framer-motion"
 import {
   Play,
@@ -10,7 +10,7 @@ import {
   Clock,
   AlertTriangle,
 } from "lucide-react"
-import { useNavigate } from "react-router-dom"
+import { useNavigate, useLocation } from "react-router-dom"
 
 import { useDashboard } from "@/services/hooks"
 import { Layout } from "@/components/layout"
@@ -20,10 +20,12 @@ import { FadeIn } from "@/components/ui/fade-in"
 import { CoachMessage } from "@/components/coach/coach-message"
 import { RecommendedNextCard } from "@/components/coach/recommended-next"
 import { ProgressOverview } from "@/components/progress-overview"
+import { ScheduleChangePanel } from "@/components/schedule-change-panel"
 import type {
   PlanSession,
   PrioritizedBacklogItem,
   BacklogHealth,
+  AdaptivePlanResponse,
 } from "@/services/types"
 import {
   buildBacklogStatusSummary,
@@ -296,7 +298,10 @@ function AllDoneEmptyState() {
 
 export function TodayMissionPage() {
   const navigate = useNavigate()
+  const location = useLocation()
   const { data: dashboard, isLoading, error, refetch } = useDashboard()
+
+  const adaptiveResponse = (location.state as { adaptiveResponse?: AdaptivePlanResponse })?.adaptiveResponse ?? null
 
   const profile = dashboard?.profile
   const preview = dashboard?.planning
@@ -465,6 +470,7 @@ export function TodayMissionPage() {
         session,
         sessions,
         plan: planData.plan,
+        plan_snapshot_id: planData.snapshot_id,
       },
     })
   }
@@ -474,6 +480,16 @@ export function TodayMissionPage() {
       buildHeroSubtitle(preview?.prioritized_backlog?.length ?? 0, profile?.name ?? null),
     [preview, profile]
   )
+
+  const [showAdaptiveChanges, setShowAdaptiveChanges] = useState(!!adaptiveResponse)
+
+  useEffect(() => {
+    if (adaptiveResponse) {
+      setShowAdaptiveChanges(true)
+      // Clear the route state to prevent showing on refresh
+      window.history.replaceState({}, "")
+    }
+  }, [adaptiveResponse])
 
   if (isLoading) {
     return (
@@ -520,6 +536,15 @@ export function TodayMissionPage() {
         <FadeIn delay={0}>
           <Greeting name={profile?.name ?? null} subtitle={heroSubtitle} />
         </FadeIn>
+
+        {showAdaptiveChanges && adaptiveResponse && adaptiveResponse.changes.length > 0 && (
+          <FadeIn delay={0.02}>
+            <ScheduleChangePanel
+              changes={adaptiveResponse.changes}
+              onDismiss={() => setShowAdaptiveChanges(false)}
+            />
+          </FadeIn>
+        )}
 
         {!hasWork ? (
           <FadeIn delay={0.05}>

@@ -333,6 +333,7 @@ class DeterministicSchedulerStage(Stage):
         sessions = []
         overflow_ids = set()
         time_used = 0
+        item_session_counter: dict[str, int] = {}
 
         for item in context.backlog:
             if time_used >= capacity or time_used >= total_span:
@@ -357,8 +358,11 @@ class DeterministicSchedulerStage(Stage):
                     break
 
                 _, _, slot_start, slot_end, used = slot
+                session_num = item_session_counter.get(item_id, 0) + 1
+                item_session_counter[item_id] = session_num
                 sessions.append({
                     "backlog_item_id": item_id,
+                    "session_id": f"{item_id}:s{session_num}",
                     "start_time": _format_time(slot_start),
                     "end_time": _format_time(slot_end),
                     "reason": f"Work on {item['title']}",

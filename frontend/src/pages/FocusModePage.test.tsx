@@ -28,10 +28,20 @@ const mocks = vi.hoisted(() => ({
 vi.mock("@/services/hooks", () => ({
   useProfile: () => ({ data: mocks.profile }),
   useUpdateBacklogItem: () => ({ mutate: mocks.updateItem }),
+  useCompleteSession: () => ({
+    mutate: vi.fn((_payload: { session_id: string; actual_minutes: number }, options: { onSuccess?: (data: unknown) => void }) => {
+      options.onSuccess?.({
+        plan: { sessions: [], daily_message: "", overflow: [] },
+        changes: [],
+        snapshot_id: "snap-1",
+      })
+    }),
+  }),
 }))
 
 const session: PlanSession = {
   backlog_item_id: "b1",
+  session_id: "b1:s1",
   start_time: "16:00",
   end_time: "16:25",
   reason: "Work on Chemistry Revision",
@@ -40,6 +50,7 @@ const session: PlanSession = {
 
 const nextSession: PlanSession = {
   backlog_item_id: "b2",
+  session_id: "b2:s1",
   start_time: "18:00",
   end_time: "18:30",
   reason: "Work on Maths Practice",
@@ -104,10 +115,6 @@ describe("FocusModePage", () => {
     fireEvent.click(screen.getByRole("button", { name: /finish early/i }))
 
     expect(screen.getByText(/Nice work, Alex!/)).toBeInTheDocument()
-    expect(mocks.updateItem).toHaveBeenCalledWith({
-      id: "b1",
-      payload: { status: "completed" },
-    })
   })
 
   it("recommends the next task with a Start Next Session action", () => {

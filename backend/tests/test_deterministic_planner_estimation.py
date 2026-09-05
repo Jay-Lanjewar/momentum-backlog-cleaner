@@ -148,6 +148,7 @@ class TestSchedulesUnchanged:
             "sessions": [
                 {
                     "backlog_item_id": str(first),
+                    "session_id": f"{first}:s1",
                     "start_time": "06:00",
                     "end_time": "06:35",
                     "reason": "Work on Homework",
@@ -155,6 +156,7 @@ class TestSchedulesUnchanged:
                 },
                 {
                     "backlog_item_id": str(first),
+                    "session_id": f"{first}:s2",
                     "start_time": "06:35",
                     "end_time": "07:00",
                     "reason": "Work on Homework",
@@ -162,6 +164,7 @@ class TestSchedulesUnchanged:
                 },
                 {
                     "backlog_item_id": str(second),
+                    "session_id": f"{second}:s1",
                     "start_time": "07:00",
                     "end_time": "07:25",
                     "reason": "Work on Reading",
@@ -169,6 +172,7 @@ class TestSchedulesUnchanged:
                 },
                 {
                     "backlog_item_id": str(second),
+                    "session_id": f"{second}:s2",
                     "start_time": "07:25",
                     "end_time": "07:30",
                     "reason": "Work on Reading",

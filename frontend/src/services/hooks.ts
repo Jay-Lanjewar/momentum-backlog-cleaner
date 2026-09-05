@@ -27,6 +27,8 @@ import type {
   UserSearchResult,
   FriendRequestsResponse,
   ActivityFeedItem,
+  AdaptivePlanResponse,
+  SessionCompletionPayload,
 } from "@/services/types"
 
 export function usePlanningPreview() {
@@ -322,6 +324,21 @@ export function useUpdateBacklogItem() {
       return result.data
     },
     onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["backlog"] })
+    },
+  })
+}
+
+export function useCompleteSession() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: async (payload: SessionCompletionPayload) => {
+      const result = await api.post<AdaptivePlanResponse>("/api/v1/planning/complete-session", payload)
+      if (result.error) throw new Error(result.error)
+      return result.data
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["dashboard"] })
       queryClient.invalidateQueries({ queryKey: ["backlog"] })
     },
   })

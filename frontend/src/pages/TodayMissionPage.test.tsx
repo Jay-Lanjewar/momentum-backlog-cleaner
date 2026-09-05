@@ -31,6 +31,7 @@ function buildDashboard(): DashboardData {
   const start1 = new Date(now + 30 * MIN)
   const session1 = {
     backlog_item_id: "b1",
+    session_id: "b1:s1",
     start_time: fmt(start1),
     end_time: fmt(new Date(start1.getTime() + 25 * MIN)),
     reason: "Work on Chemistry Revision",
@@ -39,6 +40,7 @@ function buildDashboard(): DashboardData {
   const start2 = new Date(now + 120 * MIN)
   const session2 = {
     backlog_item_id: "b2",
+    session_id: "b2:s1",
     start_time: fmt(start2),
     end_time: fmt(new Date(start2.getTime() + 30 * MIN)),
     reason: "Work on Maths Practice",
@@ -275,6 +277,7 @@ describe("TodayMissionPage", () => {
     state.dashboard!.plan.plan.sessions = [
       {
         backlog_item_id: "b2",
+        session_id: "b2:s1",
         start_time: fmt(start),
         end_time: fmt(new Date(start.getTime() + 30 * 60 * 1000)),
         reason: "Work on Maths Practice",
@@ -306,6 +309,7 @@ describe("TodayMissionPage", () => {
     state.dashboard!.plan.plan.sessions = [
       {
         backlog_item_id: "b1",
+        session_id: "b1:s1",
         start_time: fmt(start),
         end_time: fmt(new Date(start.getTime() + 25 * 60 * 1000)),
         reason: "Work on Chemistry Revision",

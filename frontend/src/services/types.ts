@@ -40,6 +40,7 @@ export interface PlanningPreview {
 
 export interface PlanSession {
   backlog_item_id: string
+  session_id: string
   start_time: string
   end_time: string
   reason: string
@@ -55,6 +56,30 @@ export interface GeneratedPlan {
 export interface PlanGenerateResponse {
   plan: GeneratedPlan
   source: "ai" | "deterministic"
+  snapshot_id?: string
+}
+
+export interface PlanChange {
+  session_id: string
+  backlog_item_id: string
+  title: string
+  change_type: "rescheduled" | "moved_to_overflow" | "removed" | "shortened"
+  previous_start: string | null
+  previous_end: string | null
+  new_start: string | null
+  new_end: string | null
+  reason: string
+}
+
+export interface AdaptivePlanResponse {
+  plan: GeneratedPlan
+  changes: PlanChange[]
+  snapshot_id: string
+}
+
+export interface SessionCompletionPayload {
+  session_id: string
+  actual_minutes: number
 }
 
 export interface StudentProfileData {

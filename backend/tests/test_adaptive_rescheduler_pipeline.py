@@ -310,6 +310,7 @@ class TestOutputContract:
         for session in result["sessions"]:
             assert set(session.keys()) == {
                 "backlog_item_id",
+                "session_id",
                 "start_time",
                 "end_time",
                 "reason",

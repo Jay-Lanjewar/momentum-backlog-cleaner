@@ -13,7 +13,7 @@ import {
   Zap,
 } from "lucide-react"
 
-import { useProfile, useUpdateBacklogItem } from "@/services/hooks"
+import { useProfile, useCompleteSession } from "@/services/hooks"
 import { Button } from "@/components/ui/button"
 import { CoachMessage } from "@/components/coach/coach-message"
 import { RecommendedNextCard } from "@/components/coach/recommended-next"
@@ -55,17 +55,19 @@ export function FocusModePage() {
   const location = useLocation()
   const queryClient = useQueryClient()
   const { data: profile } = useProfile()
-  const updateBacklogItem = useUpdateBacklogItem()
+  const completeSession = useCompleteSession()
   const state = location.state as {
     session: PlanSession
     sessions: PlanSession[]
     plan: GeneratedPlan
+    plan_snapshot_id?: string
   } | null
 
   const session = state?.session ?? null
 
   const [phase, setPhase] = useState<Phase>("focus")
   const [elapsed, setElapsed] = useState(0)
+  const [adaptiveResponse, setAdaptiveResponse] = useState<import("@/services/types").AdaptivePlanResponse | null>(null)
   const intervalRef = useRef<ReturnType<typeof setInterval>>()
 
   const totalSeconds = useMemo(() => {
@@ -83,7 +85,7 @@ export function FocusModePage() {
         const next = prev + 1
         if (next >= totalSeconds) {
           clearInterval(intervalRef.current)
-          setPhase("complete")
+          handleCompleteSession()
           return totalSeconds
         }
         return next
@@ -101,11 +103,19 @@ export function FocusModePage() {
     setPhase("focus")
   }
 
-  const completeSession = () => {
+  const handleCompleteSession = () => {
     clearInterval(intervalRef.current)
     setPhase("complete")
     if (session) {
-      updateBacklogItem.mutate({ id: session.backlog_item_id, payload: { status: "completed" } })
+      const actualMinutes = Math.max(1, Math.ceil(elapsed / 60))
+      completeSession.mutate(
+        { session_id: session.session_id, actual_minutes: actualMinutes },
+        {
+          onSuccess: (data) => {
+            setAdaptiveResponse(data)
+          },
+        }
+      )
     }
   }
 
@@ -119,7 +129,10 @@ export function FocusModePage() {
     queryClient.invalidateQueries({ queryKey: ["dashboard"] })
     queryClient.invalidateQueries({ queryKey: ["planning"] })
     queryClient.invalidateQueries({ queryKey: ["plans"] })
-    navigate("/", { replace: true })
+    navigate("/", {
+      replace: true,
+      state: adaptiveResponse ? { adaptiveResponse } : undefined,
+    })
   }
 
   if (!session) {
@@ -351,7 +364,7 @@ export function FocusModePage() {
           </AnimatePresence>
 
           <Button
-            onClick={completeSession}
+            onClick={handleCompleteSession}
             variant="outline"
             className="h-12 px-6 rounded-full gap-2"
           >

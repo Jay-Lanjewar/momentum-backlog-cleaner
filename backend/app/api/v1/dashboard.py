@@ -27,6 +27,7 @@ from app.services.deterministic_planner import generate_deterministic_plan
 from app.services.motivation_service import MotivationService
 from app.services.planning_engine import PlanningEngine
 from app.services.streak_service import StreakService
+from app.services.adaptive_service import get_or_create_active_snapshot
 
 logger = logging.getLogger(__name__)
 
@@ -88,15 +89,18 @@ async def get_dashboard(
     )
 
     daily_capacity = profile.daily_target_minutes if profile and profile.daily_target_minutes else None
-    validated = generate_deterministic_plan(planning_data, daily_capacity_minutes=daily_capacity)
+    snapshot = await get_or_create_active_snapshot(
+        db, user.id, target, planning_data, daily_capacity_minutes=daily_capacity
+    )
 
     plan = PlanGenerateResponse(
         plan=GeneratedPlan(
-            sessions=[PlanSession(**s) for s in validated["sessions"]],
-            daily_message=validated["daily_message"],
-            overflow=[uuid.UUID(oid) for oid in validated["overflow"]],
+            sessions=[PlanSession(**s) for s in snapshot.sessions],
+            daily_message=snapshot.daily_message,
+            overflow=[uuid.UUID(oid) for oid in snapshot.overflow],
         ),
-        source="deterministic",
+        source=snapshot.source,
+        snapshot_id=snapshot.id,
     )
 
     streak_service = StreakService(db)

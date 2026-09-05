@@ -177,6 +177,7 @@ describe("estimateTimeSaved and scheduleConfidence", () => {
 describe("nextSessionAfter", () => {
   const s1: PlanSession = {
     backlog_item_id: "a",
+    session_id: "a:s1",
     start_time: "16:00",
     end_time: "16:25",
     reason: "Work on Chemistry",
@@ -184,6 +185,7 @@ describe("nextSessionAfter", () => {
   }
   const s2: PlanSession = {
     backlog_item_id: "b",
+    session_id: "b:s1",
     start_time: "17:00",
     end_time: "17:30",
     reason: "Work on Maths",

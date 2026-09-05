@@ -106,8 +106,16 @@ class TestDashboardEndpoint:
         app.dependency_overrides[get_db] = lambda: mock_db
         app.dependency_overrides[get_current_user] = lambda: mock_user
 
-        with patch("app.api.v1.dashboard.StreakService") as mock_streak_cls, \
+        with patch("app.api.v1.dashboard.get_or_create_active_snapshot") as mock_snapshot, \
+             patch("app.api.v1.dashboard.StreakService") as mock_streak_cls, \
              patch("app.api.v1.dashboard.MotivationService") as mock_motivation_cls:
+            mock_snapshot.return_value = MagicMock(
+                id=uuid.uuid4(),
+                sessions=[],
+                daily_message="No tasks scheduled",
+                overflow=[],
+                source="deterministic",
+            )
             mock_streak = mock_streak_cls.return_value
             mock_streak.get_streaks = AsyncMock(return_value=MOCK_STREAKS)
             mock_streak.compute_balance_score = AsyncMock(return_value=MOCK_BALANCE)
@@ -147,14 +155,16 @@ class TestDashboardEndpoint:
         app.dependency_overrides[get_db] = lambda: mock_db
         app.dependency_overrides[get_current_user] = lambda: mock_user
 
-        with patch("app.api.v1.dashboard.generate_deterministic_plan") as mock_deterministic, \
+        with patch("app.api.v1.dashboard.get_or_create_active_snapshot") as mock_snapshot, \
              patch("app.api.v1.dashboard.StreakService") as mock_streak_cls, \
              patch("app.api.v1.dashboard.MotivationService") as mock_motivation_cls:
-            mock_deterministic.return_value = {
-                "sessions": [],
-                "daily_message": "No tasks scheduled",
-                "overflow": [],
-            }
+            mock_snapshot.return_value = MagicMock(
+                id=uuid.uuid4(),
+                sessions=[],
+                daily_message="No tasks scheduled",
+                overflow=[],
+                source="deterministic",
+            )
             mock_streak = mock_streak_cls.return_value
             mock_streak.get_streaks = AsyncMock(return_value=MOCK_STREAKS)
             mock_streak.compute_balance_score = AsyncMock(return_value=MOCK_BALANCE)
@@ -167,7 +177,7 @@ class TestDashboardEndpoint:
         app.dependency_overrides.clear()
 
         assert response.status_code == 200
-        mock_deterministic.assert_called_once()
+        mock_snapshot.assert_called_once()
 
     def test_dashboard_response_schema_unchanged(self, app, mock_db, mock_user):
         course = Course(id=uuid.uuid4(), user_id=USER_ID, name="Math", color="#6366f1")
@@ -189,8 +199,16 @@ class TestDashboardEndpoint:
         app.dependency_overrides[get_db] = lambda: mock_db
         app.dependency_overrides[get_current_user] = lambda: mock_user
 
-        with patch("app.api.v1.dashboard.StreakService") as mock_streak_cls, \
+        with patch("app.api.v1.dashboard.get_or_create_active_snapshot") as mock_snapshot, \
+             patch("app.api.v1.dashboard.StreakService") as mock_streak_cls, \
              patch("app.api.v1.dashboard.MotivationService") as mock_motivation_cls:
+            mock_snapshot.return_value = MagicMock(
+                id=uuid.uuid4(),
+                sessions=[],
+                daily_message="",
+                overflow=[],
+                source="deterministic",
+            )
             mock_streak = mock_streak_cls.return_value
             mock_streak.get_streaks = AsyncMock(return_value=MOCK_STREAKS)
             mock_streak.compute_balance_score = AsyncMock(return_value=MOCK_BALANCE)
@@ -235,21 +253,25 @@ class TestDashboardEndpoint:
         app.dependency_overrides[get_db] = lambda: mock_db
         app.dependency_overrides[get_current_user] = lambda: mock_user
 
-        with patch("app.api.v1.dashboard.generate_deterministic_plan") as mock_deterministic, \
+        with patch("app.api.v1.dashboard.get_or_create_active_snapshot") as mock_snapshot, \
              patch("app.api.v1.dashboard.StreakService") as mock_streak_cls, \
              patch("app.api.v1.dashboard.MotivationService") as mock_motivation_cls:
-            mock_deterministic.return_value = {
-                "sessions": [
+            mock_snapshot.return_value = MagicMock(
+                id=uuid.uuid4(),
+                sessions=[
                     {
                         "backlog_item_id": str(backlog_item.id),
+                        "session_id": f"{backlog_item.id}:s1",
                         "start_time": "09:00",
                         "end_time": "10:00",
                         "reason": "Focus on high priority homework",
+                        "remaining_minutes": 0,
                     }
                 ],
-                "daily_message": "You've got this!",
-                "overflow": [],
-            }
+                daily_message="You've got this!",
+                overflow=[],
+                source="deterministic",
+            )
             mock_streak = mock_streak_cls.return_value
             mock_streak.get_streaks = AsyncMock(return_value=MOCK_STREAKS)
             mock_streak.compute_balance_score = AsyncMock(return_value=MOCK_BALANCE)

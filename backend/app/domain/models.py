@@ -70,6 +70,9 @@ class User(Base):
     activities: Mapped[list["Activity"]] = relationship(
         "Activity", back_populates="user"
     )
+    plan_snapshots: Mapped[list["PlanSnapshot"]] = relationship(
+        "PlanSnapshot", cascade="all, delete-orphan"
+    )
 
 
 class StudentProfile(Base):
@@ -323,3 +326,47 @@ class Activity(Base):
     )
 
     user: Mapped["User"] = relationship("User", back_populates="activities")
+
+
+class PlanSnapshot(Base):
+    __tablename__ = "plan_snapshots"
+    __table_args__ = (
+        UniqueConstraint("user_id", "plan_date", "version", name="uq_plan_snapshot_version"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False
+    )
+    plan_date: Mapped[date] = mapped_column(DateTime(timezone=True), nullable=False)
+    version: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+    sessions: Mapped[dict] = mapped_column(JSONB, nullable=False, default=list)
+    daily_message: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    overflow: Mapped[dict] = mapped_column(JSONB, nullable=False, default=list)
+    source: Mapped[str] = mapped_column(String(20), nullable=False, default="deterministic")
+    active: Mapped[bool] = mapped_column(nullable=False, default=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+
+    user: Mapped["User"] = relationship("User")
+
+
+class SessionCompletion(Base):
+    __tablename__ = "session_completions"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    plan_snapshot_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("plan_snapshots.id", ondelete="CASCADE"), nullable=False
+    )
+    session_id: Mapped[str] = mapped_column(String(255), nullable=False)
+    backlog_item_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("backlog_items.id", ondelete="CASCADE"), nullable=False
+    )
+    session_number: Mapped[int] = mapped_column(Integer, nullable=False)
+    estimated_minutes: Mapped[int] = mapped_column(Integer, nullable=False)
+    actual_minutes: Mapped[int] = mapped_column(Integer, nullable=False)
+    status: Mapped[str] = mapped_column(String(20), nullable=False, default="completed")
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )

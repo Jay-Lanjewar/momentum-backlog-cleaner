@@ -208,6 +208,7 @@ class PlanningPreviewResponse(BaseModel):
 
 class PlanSession(BaseModel):
     backlog_item_id: uuid.UUID
+    session_id: str = ""
     start_time: str
     end_time: str
     reason: str
@@ -223,6 +224,30 @@ class GeneratedPlan(BaseModel):
 class PlanGenerateResponse(BaseModel):
     plan: GeneratedPlan
     source: str
+    snapshot_id: uuid.UUID | None = None
+
+
+class SessionCompletionRequest(BaseModel):
+    session_id: str = Field(..., min_length=3)
+    actual_minutes: int = Field(..., ge=1)
+
+
+class PlanChange(BaseModel):
+    session_id: str
+    backlog_item_id: str
+    title: str
+    change_type: str
+    previous_start: str | None = None
+    previous_end: str | None = None
+    new_start: str | None = None
+    new_end: str | None = None
+    reason: str
+
+
+class AdaptivePlanResponse(BaseModel):
+    plan: GeneratedPlan
+    changes: list[PlanChange]
+    snapshot_id: uuid.UUID
 
 
 class StudyStreakResponse(BaseModel):
