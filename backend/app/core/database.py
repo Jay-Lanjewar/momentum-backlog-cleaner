@@ -11,6 +11,8 @@ from sqlalchemy.pool import AsyncAdaptedQueuePool
 logger = logging.getLogger(__name__)
 _pool_diag = logging.getLogger("pool_diag")
 
+_newly_created_conns: set[int] = set()
+
 engine = create_async_engine(
     settings.DATABASE_URL,
     echo=settings.DEBUG,
@@ -42,16 +44,17 @@ def _log_query_duration(conn, cursor, statement, parameters, context, executeman
 @event.listens_for(engine.sync_engine, "checkout")
 def _pool_checkout_event(dbapi_conn, connection_rec, connection_proxy):
     conn_id = id(dbapi_conn)
+    was_fresh = conn_id in _newly_created_conns
+    _newly_created_conns.discard(conn_id)
     try:
         pool = engine.pool
-        # checkedout() includes this connection — subtract 1 for pre-checkout count
         _pool_diag.info(
-            "[POOL CHECKOUT] id=%s checkedout_before=%d size=%d overflow=%d",
-            conn_id,
+            "[POOL CHECKOUT] id=%s fresh=%s checkedout_before=%d size=%d overflow=%d",
+            conn_id, was_fresh,
             pool.checkedout() - 1, pool.size(), pool.overflow(),
         )
     except Exception:
-        _pool_diag.info("[POOL CHECKOUT] id=%s", conn_id)
+        _pool_diag.info("[POOL CHECKOUT] id=%s fresh=%s", conn_id, was_fresh)
 
 
 @event.listens_for(engine.sync_engine, "checkin")
@@ -70,7 +73,9 @@ def _pool_checkin_event(dbapi_conn, connection_rec):
 
 @event.listens_for(engine.sync_engine, "connect")
 def _pool_connect_event(dbapi_conn, connection_record):
-    _pool_diag.info("[POOL CONNECT]  id=%s", id(dbapi_conn))
+    conn_id = id(dbapi_conn)
+    _newly_created_conns.add(conn_id)
+    _pool_diag.info("[POOL CONNECT]  id=%s", conn_id)
 
 
 async_session_factory = async_sessionmaker(
