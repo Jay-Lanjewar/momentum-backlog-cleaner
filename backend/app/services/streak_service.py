@@ -4,7 +4,7 @@ from datetime import date, datetime, timedelta, timezone
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.domain.models import BacklogItem, Course
+from app.domain.models import BacklogItem, Course, StudyStreak, SubjectStreak
 from app.repositories.streak_repo import StudyStreakRepository, SubjectStreakRepository
 
 MAX_RECOVERY_TOKENS = 5
@@ -25,13 +25,29 @@ class StreakService:
         self.study_streak_repo = StudyStreakRepository(db)
         self.subject_streak_repo = SubjectStreakRepository(db)
 
-    async def get_streaks(self, user_id: uuid.UUID) -> dict:
-        momentum = await self.study_streak_repo.get_by_user(user_id)
-        subject_streaks = await self.subject_streak_repo.get_by_user(user_id)
+    async def get_streaks(
+        self,
+        user_id: uuid.UUID,
+        *,
+        momentum: StudyStreak | None = None,
+        subject_streaks: list[SubjectStreak] | None = None,
+        courses_by_id: dict[uuid.UUID, Course] | None = None,
+    ) -> dict:
+        if momentum is None:
+            momentum = await self.study_streak_repo.get_by_user(user_id)
+        if subject_streaks is None:
+            subject_streaks = await self.subject_streak_repo.get_by_user(user_id)
+        if courses_by_id is None:
+            courses_by_id = {}
+            for ss in subject_streaks:
+                if ss.course_id not in courses_by_id:
+                    c = await self.db.get(Course, ss.course_id)
+                    if c is not None:
+                        courses_by_id[ss.course_id] = c
 
         subjects_data = []
         for ss in subject_streaks:
-            course = await self.db.get(Course, ss.course_id)
+            course = courses_by_id.get(ss.course_id)
             subjects_data.append({
                 "id": ss.id,
                 "course_id": ss.course_id,
@@ -189,8 +205,16 @@ class StreakService:
             "subjects": subjects_data,
         }
 
-    async def compute_balance_score(self, user_id: uuid.UUID) -> dict:
-        subject_streaks = await self.subject_streak_repo.get_by_user(user_id)
+    async def compute_balance_score(
+        self,
+        user_id: uuid.UUID,
+        *,
+        subject_streaks: list[SubjectStreak] | None = None,
+        courses_by_id: dict[uuid.UUID, Course] | None = None,
+        minutes_30d_by_course: dict[uuid.UUID, int] | None = None,
+    ) -> dict:
+        if subject_streaks is None:
+            subject_streaks = await self.subject_streak_repo.get_by_user(user_id)
 
         if not subject_streaks:
             return {
@@ -199,11 +223,24 @@ class StreakService:
                 "neglected_subjects": [],
             }
 
+        if courses_by_id is None:
+            courses_by_id = {}
+            for ss in subject_streaks:
+                if ss.course_id not in courses_by_id:
+                    c = await self.db.get(Course, ss.course_id)
+                    if c is not None:
+                        courses_by_id[ss.course_id] = c
+
+        if minutes_30d_by_course is None:
+            minutes_30d_by_course = {}
+            for ss in subject_streaks:
+                minutes_30d_by_course[ss.course_id] = await self._get_subject_minutes_30d(user_id, ss.course_id)
+
         today = date.today()
         active_subjects = []
 
         for ss in subject_streaks:
-            course = await self.db.get(Course, ss.course_id)
+            course = courses_by_id.get(ss.course_id)
             course_name = course.name if course else "Unknown"
             last_date = ss.last_completion_date
 
@@ -216,7 +253,7 @@ class StreakService:
             else:
                 days_since = 999
 
-            subject_minutes_30d = await self._get_subject_minutes_30d(user_id, ss.course_id)
+            subject_minutes_30d = minutes_30d_by_course.get(ss.course_id, 0)
 
             active_subjects.append({
                 "course_id": ss.course_id,

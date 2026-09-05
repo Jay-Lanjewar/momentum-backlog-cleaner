@@ -101,6 +101,8 @@ class TestDashboardEndpoint:
             _mock_scalars([course]),
             _mock_scalars([backlog_item]),
             _mock_scalars([]),
+            _mock_scalar(None),
+            _mock_scalars([]),
         ]
 
         app.dependency_overrides[get_db] = lambda: mock_db
@@ -150,6 +152,8 @@ class TestDashboardEndpoint:
             _mock_scalars([course]),
             _mock_scalars([backlog_item]),
             _mock_scalars([]),
+            _mock_scalar(None),
+            _mock_scalars([]),
         ]
 
         app.dependency_overrides[get_db] = lambda: mock_db
@@ -193,6 +197,8 @@ class TestDashboardEndpoint:
             _mock_scalar(schedule),
             _mock_scalars([course]),
             _mock_scalars([backlog_item]),
+            _mock_scalars([]),
+            _mock_scalar(None),
             _mock_scalars([]),
         ]
 
@@ -247,6 +253,8 @@ class TestDashboardEndpoint:
             _mock_scalar(schedule),
             _mock_scalars([course]),
             _mock_scalars([backlog_item]),
+            _mock_scalars([]),
+            _mock_scalar(None),
             _mock_scalars([]),
         ]
 

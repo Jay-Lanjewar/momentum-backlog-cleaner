@@ -1,14 +1,23 @@
 import logging
 import uuid
 
-from datetime import date
+from datetime import date, datetime, timedelta, timezone
 
 from fastapi import APIRouter, Depends
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.dependencies import get_current_user, get_db
-from app.domain.models import BacklogItem, Course, Goal, StudentProfile, User, WeeklySchedule
+from app.domain.models import (
+    BacklogItem,
+    Course,
+    Goal,
+    StudentProfile,
+    StudyStreak,
+    SubjectStreak,
+    User,
+    WeeklySchedule,
+)
 from app.domain.schemas import (
     BacklogHealth,
     BalanceScoreResponse,
@@ -103,12 +112,55 @@ async def get_dashboard(
         snapshot_id=snapshot.id,
     )
 
+    streak_result = await db.execute(
+        select(StudyStreak).where(StudyStreak.user_id == user.id)
+    )
+    momentum = streak_result.scalar_one_or_none()
+
+    subject_streaks_result = await db.execute(
+        select(SubjectStreak).where(SubjectStreak.user_id == user.id)
+    )
+    subject_streaks = list(subject_streaks_result.scalars().all())
+
+    courses_by_id = {c.id: c for c in courses}
+
+    now = datetime.now(timezone.utc)
+    thirty_days_ago = now - timedelta(days=30)
+    minutes_30d_by_course: dict[uuid.UUID, int] = {}
+    for item in backlog_items:
+        if (
+            item.status == "completed"
+            and item.course_id
+            and item.updated_at
+            and item.updated_at >= thirty_days_ago
+        ):
+            minutes_30d_by_course[item.course_id] = (
+                minutes_30d_by_course.get(item.course_id, 0)
+                + (item.estimated_minutes or 30)
+            )
+
     streak_service = StreakService(db)
-    streaks = await streak_service.get_streaks(user.id)
-    balance = await streak_service.compute_balance_score(user.id)
+    streaks = await streak_service.get_streaks(
+        user.id,
+        momentum=momentum,
+        subject_streaks=subject_streaks,
+        courses_by_id=courses_by_id,
+    )
+    balance = await streak_service.compute_balance_score(
+        user.id,
+        subject_streaks=subject_streaks,
+        courses_by_id=courses_by_id,
+        minutes_30d_by_course=minutes_30d_by_course,
+    )
 
     motivation_service = MotivationService(db)
-    insight = await motivation_service.get_insight(user.id)
+    insight = await motivation_service.get_insight(
+        user.id,
+        streak=momentum,
+        subject_streaks=subject_streaks,
+        all_backlog=backlog_items,
+        courses_by_id=courses_by_id,
+    )
 
     return DashboardResponse(
         profile=StudentProfileResponse.model_validate(profile) if profile else None,

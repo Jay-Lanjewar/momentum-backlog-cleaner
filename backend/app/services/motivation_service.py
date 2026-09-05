@@ -4,7 +4,7 @@ from datetime import date, datetime, timedelta, timezone
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.domain.models import BacklogItem, Course
+from app.domain.models import BacklogItem, Course, StudyStreak, SubjectStreak
 from app.repositories.backlog_repo import BacklogItemRepository
 from app.repositories.streak_repo import StudyStreakRepository, SubjectStreakRepository
 
@@ -38,13 +38,33 @@ class MotivationService:
         self.subject_streak_repo = SubjectStreakRepository(db)
         self.backlog_repo = BacklogItemRepository(db)
 
-    async def get_insight(self, user_id: uuid.UUID) -> dict:
+    async def get_insight(
+        self,
+        user_id: uuid.UUID,
+        *,
+        streak: StudyStreak | None = None,
+        subject_streaks: list[SubjectStreak] | None = None,
+        all_backlog: list["BacklogItem"] | None = None,
+        courses_by_id: dict[uuid.UUID, Course] | None = None,
+    ) -> dict:
         today = datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0)
         today_date = date.today()
 
-        streak = await self.study_streak_repo.get_by_user(user_id)
-        subject_streaks = await self.subject_streak_repo.get_by_user(user_id)
-        all_backlog = await self._get_all_backlog(user_id)
+        if streak is None:
+            streak = await self.study_streak_repo.get_by_user(user_id)
+        if subject_streaks is None:
+            subject_streaks = await self.subject_streak_repo.get_by_user(user_id)
+        if all_backlog is None:
+            all_backlog = await self._get_all_backlog(user_id)
+        if courses_by_id is None:
+            courses_by_id = {}
+            course_ids = {item.course_id for item in all_backlog}
+            course_ids.update(ss.course_id for ss in subject_streaks)
+            for cid in course_ids:
+                if cid not in courses_by_id:
+                    c = await self.db.get(Course, cid)
+                    if c is not None:
+                        courses_by_id[cid] = c
 
         streak_protected = False
         current_streak = 0
@@ -74,7 +94,7 @@ class MotivationService:
         if upcoming_exams:
             exams_by_course = {}
             for item in upcoming_exams:
-                course = await self.db.get(Course, item.course_id)
+                course = courses_by_id.get(item.course_id)
                 course_name = course.name if course else "Unknown"
                 if course_name not in exams_by_course:
                     exams_by_course[course_name] = 0
@@ -99,7 +119,7 @@ class MotivationService:
                 }
 
         for ss in subject_streaks:
-            course = await self.db.get(Course, ss.course_id)
+            course = courses_by_id.get(ss.course_id)
             course_name = course.name if course else "Unknown"
             last_date = ss.last_completion_date
             days_since = 999
@@ -149,7 +169,7 @@ class MotivationService:
                     next_milestone = m
                     break
             if next_milestone:
-                course = await self.db.get(Course, ss.course_id)
+                course = courses_by_id.get(ss.course_id)
                 course_name = course.name if course else "Unknown"
                 return {
                     "title": "Subject Milestone Ahead",
