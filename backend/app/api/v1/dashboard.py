@@ -7,7 +7,7 @@ from fastapi import APIRouter, Depends
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.dependencies import get_current_user, get_db
+from app.core.dependencies import get_current_user_id, get_db
 from app.domain.models import (
     BacklogItem,
     Course,
@@ -15,7 +15,6 @@ from app.domain.models import (
     StudentProfile,
     StudyStreak,
     SubjectStreak,
-    User,
     WeeklySchedule,
 )
 from app.domain.schemas import (
@@ -45,31 +44,31 @@ router = APIRouter(prefix="/dashboard", tags=["dashboard"])
 
 @router.get("", response_model=DashboardResponse)
 async def get_dashboard(
-    user: User = Depends(get_current_user),
+    user_id: uuid.UUID = Depends(get_current_user_id),
     db: AsyncSession = Depends(get_db),
 ):
     profile_result = await db.execute(
-        select(StudentProfile).where(StudentProfile.user_id == user.id)
+        select(StudentProfile).where(StudentProfile.user_id == user_id)
     )
     profile = profile_result.scalar_one_or_none()
 
     schedule_result = await db.execute(
-        select(WeeklySchedule).where(WeeklySchedule.user_id == user.id)
+        select(WeeklySchedule).where(WeeklySchedule.user_id == user_id)
     )
     schedule = schedule_result.scalar_one_or_none()
 
     courses_result = await db.execute(
-        select(Course).where(Course.user_id == user.id)
+        select(Course).where(Course.user_id == user_id)
     )
     courses = courses_result.scalars().all()
 
     backlog_result = await db.execute(
-        select(BacklogItem).where(BacklogItem.user_id == user.id)
+        select(BacklogItem).where(BacklogItem.user_id == user_id)
     )
     backlog_items = backlog_result.scalars().all()
 
     goals_result = await db.execute(
-        select(Goal).where(Goal.user_id == user.id)
+        select(Goal).where(Goal.user_id == user_id)
     )
     goals = goals_result.scalars().all()
 
@@ -99,7 +98,7 @@ async def get_dashboard(
 
     daily_capacity = profile.daily_target_minutes if profile and profile.daily_target_minutes else None
     snapshot = await get_or_create_active_snapshot(
-        db, user.id, target, planning_data, daily_capacity_minutes=daily_capacity
+        db, user_id, target, planning_data, daily_capacity_minutes=daily_capacity
     )
 
     plan = PlanGenerateResponse(
@@ -113,12 +112,12 @@ async def get_dashboard(
     )
 
     streak_result = await db.execute(
-        select(StudyStreak).where(StudyStreak.user_id == user.id)
+        select(StudyStreak).where(StudyStreak.user_id == user_id)
     )
     momentum = streak_result.scalar_one_or_none()
 
     subject_streaks_result = await db.execute(
-        select(SubjectStreak).where(SubjectStreak.user_id == user.id)
+        select(SubjectStreak).where(SubjectStreak.user_id == user_id)
     )
     subject_streaks = list(subject_streaks_result.scalars().all())
 
@@ -141,13 +140,13 @@ async def get_dashboard(
 
     streak_service = StreakService(db)
     streaks = await streak_service.get_streaks(
-        user.id,
+        user_id,
         momentum=momentum,
         subject_streaks=subject_streaks,
         courses_by_id=courses_by_id,
     )
     balance = await streak_service.compute_balance_score(
-        user.id,
+        user_id,
         subject_streaks=subject_streaks,
         courses_by_id=courses_by_id,
         minutes_30d_by_course=minutes_30d_by_course,
@@ -155,7 +154,7 @@ async def get_dashboard(
 
     motivation_service = MotivationService(db)
     insight = await motivation_service.get_insight(
-        user.id,
+        user_id,
         streak=momentum,
         subject_streaks=subject_streaks,
         all_backlog=backlog_items,

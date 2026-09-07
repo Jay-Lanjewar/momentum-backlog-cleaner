@@ -71,3 +71,25 @@ async def get_current_user(
         )
 
     return user
+
+
+async def get_current_user_id(
+    credentials: HTTPAuthorizationCredentials = Depends(security_scheme),
+) -> uuid.UUID:
+    """Extract authenticated user ID from JWT without a database query.
+
+    Unlike ``get_current_user``, this dependency does **not** touch the
+    ``users`` table.  It simply decodes the verified JWT and returns the
+    ``sub`` claim as a ``uuid.UUID``.  Use this when the endpoint only
+    needs the user ID (e.g. filtering related rows) and does not require
+    the full ``User`` ORM object.
+    """
+    try:
+        payload = verify_token(credentials.credentials)
+        return uuid.UUID(payload.get("sub", ""))
+    except Exception as e:
+        logger.warning("Token verification failed: %s", e)
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid or expired authentication token",
+        )
