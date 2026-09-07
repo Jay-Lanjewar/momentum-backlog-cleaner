@@ -5,6 +5,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest"
 
 import { FocusModePage } from "@/pages/FocusModePage"
 import type { PlanSession } from "@/services/types"
+import type { FocusLockPhase, UseFocusLockReturn } from "@/hooks/useFocusLock"
 
 const mocks = vi.hoisted(() => {
   const session: PlanSession = {
@@ -66,6 +67,29 @@ const mocks = vi.hoisted(() => {
   }
 })
 
+let currentPhase: FocusLockPhase = "focusing"
+let currentFocusedElapsedMs = 0
+
+const mockPause = vi.fn(() => { currentPhase = "paused_by_user" })
+const mockResume = vi.fn(() => { currentPhase = "focusing" })
+const mockComplete = vi.fn(() => { currentPhase = "complete" })
+const mockReset = vi.fn()
+
+const mockUseFocusLock = vi.fn<() => UseFocusLockReturn>(() => ({
+  phase: currentPhase,
+  focusedElapsedMs: currentFocusedElapsedMs,
+  remainingMs: 1_500_000 - currentFocusedElapsedMs,
+  isFullscreen: false,
+  pause: mockPause,
+  resume: mockResume,
+  complete: mockComplete,
+  reset: mockReset,
+}))
+
+vi.mock("@/hooks/useFocusLock", () => ({
+  useFocusLock: () => mockUseFocusLock(),
+}))
+
 vi.mock("@/services/hooks", () => ({
   useProfile: () => ({ data: mocks.profile }),
   useUpdateBacklogItem: () => ({ mutate: mocks.updateItem }),
@@ -106,7 +130,13 @@ function renderFocus(state?: { session: PlanSession; sessions: PlanSession[] }) 
 
 describe("FocusModePage", () => {
   beforeEach(() => {
-    mocks.updateItem.mockReset()
+    mocks.updateItem.mockClear()
+    mockPause.mockClear()
+    mockResume.mockClear()
+    mockComplete.mockClear()
+    mockReset.mockClear()
+    currentPhase = "focusing"
+    currentFocusedElapsedMs = 0
     mocks.completeResponse = {
       plan: { sessions: [mocks.nextSession], daily_message: "", overflow: [] },
       changes: [],
@@ -115,7 +145,7 @@ describe("FocusModePage", () => {
     }
   })
 
-  it("shows the session title and a calm timer instead of a stopwatch", () => {
+  it("shows the session title and timer", () => {
     renderFocus()
     expect(screen.getByRole("heading", { name: "Chemistry Revision" })).toBeInTheDocument()
     expect(screen.getByText("25:00")).toBeInTheDocument()
@@ -128,30 +158,35 @@ describe("FocusModePage", () => {
     expect(coach).toHaveTextContent(/Settle in. The first few minutes are the hardest/)
   })
 
-  it("pauses and resumes without losing the countdown", async () => {
+  it("calls pause when Pause button is clicked", () => {
     renderFocus()
-
     fireEvent.click(screen.getByRole("button", { name: "Pause timer" }))
-    expect(screen.getByText("Paused")).toBeInTheDocument()
-
-    const resume = await screen.findByRole("button", { name: "Resume timer" })
-    fireEvent.click(resume)
-    expect(await screen.findByText("remaining")).toBeInTheDocument()
+    expect(mockPause).toHaveBeenCalled()
   })
 
-  it("lets the student finish early and marks the session complete", () => {
+  it("calls resume when Resume button is clicked", () => {
+    currentPhase = "paused_by_user"
+    currentFocusedElapsedMs = 600_000
     renderFocus()
+    fireEvent.click(screen.getByRole("button", { name: "Resume timer" }))
+    expect(mockResume).toHaveBeenCalled()
+  })
 
+  it("calls complete when Finish Early is clicked", () => {
+    renderFocus()
     fireEvent.click(screen.getByRole("button", { name: /finish early/i }))
+    expect(mockComplete).toHaveBeenCalled()
+  })
 
+  it("shows completion screen after completion", () => {
+    currentPhase = "complete"
+    renderFocus()
     expect(screen.getByText(/Nice work, Alex!/)).toBeInTheDocument()
   })
 
   it("recommends the next task with a Start Next Session action", () => {
+    currentPhase = "complete"
     renderFocus()
-
-    fireEvent.click(screen.getByRole("button", { name: /finish early/i }))
-
     expect(screen.getByRole("heading", { name: "Maths Practice" })).toBeInTheDocument()
     expect(
       screen.getByText("Up next in today's plan. Starting now keeps your momentum."),
@@ -185,6 +220,8 @@ describe("FocusModePage empty state", () => {
 
 describe("FocusModePage adaptation summary", () => {
   beforeEach(() => {
+    currentPhase = "focusing"
+    currentFocusedElapsedMs = 0
     mocks.completeResponse = {
       plan: { sessions: [mocks.nextSession], daily_message: "", overflow: [] },
       changes: [],
@@ -202,7 +239,6 @@ describe("FocusModePage adaptation summary", () => {
     }
     renderFocus()
     fireEvent.click(screen.getByRole("button", { name: /finish early/i }))
-
     expect(screen.getByText("Momentum Adapted Your Plan")).toBeInTheDocument()
     expect(
       screen.getByText(/Physics took longer than expected/),
@@ -212,7 +248,6 @@ describe("FocusModePage adaptation summary", () => {
   it("hides adaptation card when adaptiveResponse has no changes", () => {
     renderFocus()
     fireEvent.click(screen.getByRole("button", { name: /finish early/i }))
-
     expect(screen.queryByText("Momentum Adapted Your Plan")).not.toBeInTheDocument()
   })
 
@@ -225,10 +260,51 @@ describe("FocusModePage adaptation summary", () => {
     }
     renderFocus()
     fireEvent.click(screen.getByRole("button", { name: /finish early/i }))
-
     expect(screen.getByRole("heading", { name: "Maths Practice" })).toBeInTheDocument()
     expect(
       screen.getByRole("button", { name: /start next session/i }),
     ).toBeInTheDocument()
+  })
+})
+
+describe("FocusModePage focus lock", () => {
+  it("shows focus lock overlay when paused by user", () => {
+    currentPhase = "paused_by_user"
+    currentFocusedElapsedMs = 600_000
+    renderFocus()
+    expect(screen.getByText("Take a break")).toBeInTheDocument()
+    expect(screen.getByText("Pause the timer whenever you need.")).toBeInTheDocument()
+    expect(screen.getByText("10:00 focused")).toBeInTheDocument()
+  })
+
+  it("shows focus lock overlay when paused due to lost focus", () => {
+    currentPhase = "paused_lost_focus"
+    currentFocusedElapsedMs = 300_000
+    renderFocus()
+    expect(screen.getByText("Focus paused")).toBeInTheDocument()
+    expect(screen.getByText("Your focused time is paused until you return.")).toBeInTheDocument()
+    expect(screen.getByText("05:00 focused")).toBeInTheDocument()
+  })
+
+  it("shows welcome back when returning from lost focus", () => {
+    currentPhase = "focus_returned"
+    currentFocusedElapsedMs = 300_000
+    renderFocus()
+    expect(screen.getByText("Welcome back")).toBeInTheDocument()
+    expect(screen.getByText("Your timer is right where you left it.")).toBeInTheDocument()
+  })
+
+  it("does not show overlay when focusing", () => {
+    currentPhase = "focusing"
+    renderFocus()
+    expect(screen.queryByRole("status", { name: "Focus lock status" })).not.toBeInTheDocument()
+  })
+
+  it("resume button calls hook resume", () => {
+    currentPhase = "paused_by_user"
+    currentFocusedElapsedMs = 600_000
+    renderFocus()
+    fireEvent.click(screen.getByRole("button", { name: "Resume timer" }))
+    expect(mockResume).toHaveBeenCalled()
   })
 })

@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useMemo } from "react"
+import { useState, useEffect, useMemo } from "react"
 import { motion, AnimatePresence } from "framer-motion"
 import { useNavigate, useLocation } from "react-router-dom"
 import { useQueryClient } from "@tanstack/react-query"
@@ -9,11 +9,11 @@ import {
   Clock,
   Sparkles,
   ArrowRight,
-  RotateCcw,
   Zap,
 } from "lucide-react"
 
 import { useProfile, useCompleteSession } from "@/services/hooks"
+import { useFocusLock } from "@/hooks/useFocusLock"
 import { Button } from "@/components/ui/button"
 import { CoachMessage } from "@/components/coach/coach-message"
 import { RecommendedNextCard } from "@/components/coach/recommended-next"
@@ -25,7 +25,7 @@ import {
   minutesBetween,
   nextSessionAfter,
 } from "@/lib/coaching"
-import type { PlanSession, GeneratedPlan } from "@/services/types"
+import type { PlanSession, GeneratedPlan, AdaptivePlanResponse } from "@/services/types"
 
 /* ─── Helpers ─── */
 
@@ -40,6 +40,11 @@ function formatDuration(totalSeconds: number) {
   return `${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`
 }
 
+function formatFocusedTime(ms: number) {
+  const totalSeconds = Math.floor(ms / 1000)
+  return formatDuration(totalSeconds)
+}
+
 function topicFromSession(session: PlanSession): string {
   return session.reason.replace(/^Work on\s+/, "")
 }
@@ -47,8 +52,6 @@ function topicFromSession(session: PlanSession): string {
 const FOCUS_COACH_TONE = "default"
 
 /* ─── Main ─── */
-
-type Phase = "focus" | "paused" | "complete"
 
 export function FocusModePage() {
   const navigate = useNavigate()
@@ -65,49 +68,28 @@ export function FocusModePage() {
 
   const session = state?.session ?? null
 
-  const [phase, setPhase] = useState<Phase>("focus")
-  const [elapsed, setElapsed] = useState(0)
-  const [adaptiveResponse, setAdaptiveResponse] = useState<import("@/services/types").AdaptivePlanResponse | null>(null)
-  const intervalRef = useRef<ReturnType<typeof setInterval>>()
-
   const totalSeconds = useMemo(() => {
     if (!session) return 0
     return (parseMinutes(session.end_time) - parseMinutes(session.start_time)) * 60
   }, [session])
 
-  const remaining = Math.max(0, totalSeconds - elapsed)
+  const totalDurationMs = totalSeconds * 1000
 
-  useEffect(() => {
-    if (!session) return
-    if (phase !== "focus") return
-    intervalRef.current = setInterval(() => {
-      setElapsed((prev) => {
-        const next = prev + 1
-        if (next >= totalSeconds) {
-          clearInterval(intervalRef.current)
-          handleCompleteSession()
-          return totalSeconds
-        }
-        return next
-      })
-    }, 1000)
-    return () => clearInterval(intervalRef.current)
-  }, [session, phase, totalSeconds])
+  const {
+    phase,
+    focusedElapsedMs,
+    remainingMs,
+    pause,
+    resume,
+    complete,
+  } = useFocusLock(totalDurationMs)
 
-  const handlePause = () => {
-    clearInterval(intervalRef.current)
-    setPhase("paused")
-  }
-
-  const handleResume = () => {
-    setPhase("focus")
-  }
+  const [adaptiveResponse, setAdaptiveResponse] = useState<AdaptivePlanResponse | null>(null)
 
   const handleCompleteSession = () => {
-    clearInterval(intervalRef.current)
-    setPhase("complete")
+    complete()
     if (session) {
-      const actualMinutes = Math.max(1, Math.ceil(elapsed / 60))
+      const actualMinutes = Math.max(1, Math.ceil(focusedElapsedMs / 60000))
       completeSession.mutate(
         { session_id: session.session_id, actual_minutes: actualMinutes },
         {
@@ -119,12 +101,6 @@ export function FocusModePage() {
     }
   }
 
-  const handleReset = () => {
-    clearInterval(intervalRef.current)
-    setElapsed(0)
-    setPhase("focus")
-  }
-
   const handleBack = () => {
     queryClient.invalidateQueries({ queryKey: ["dashboard"] })
     queryClient.invalidateQueries({ queryKey: ["planning"] })
@@ -134,6 +110,20 @@ export function FocusModePage() {
       state: adaptiveResponse ? { adaptiveResponse } : undefined,
     })
   }
+
+  // Auto-complete when focused time reaches total duration
+  useEffect(() => {
+    if (phase === "focusing" && totalDurationMs > 0 && focusedElapsedMs >= totalDurationMs) {
+      complete()
+      if (session) {
+        const actualMinutes = Math.max(1, Math.ceil(focusedElapsedMs / 60000))
+        completeSession.mutate(
+          { session_id: session.session_id, actual_minutes: actualMinutes },
+          { onSuccess: (data) => setAdaptiveResponse(data) }
+        )
+      }
+    }
+  }, [phase, focusedElapsedMs, totalDurationMs])
 
   if (!session) {
     return (
@@ -153,10 +143,6 @@ export function FocusModePage() {
     )
   }
 
-  const progressPercent = totalSeconds > 0 ? (elapsed / totalSeconds) * 100 : 0
-  const sessionMinutes = minutesBetween(session.start_time, session.end_time)
-  const savedMinutes = Math.floor(elapsed / 60)
-
   if (phase === "complete") {
     const effectiveSessions = adaptiveResponse?.plan.sessions ?? state?.sessions ?? []
     const effectivePlan = adaptiveResponse?.plan ?? state?.plan
@@ -165,6 +151,8 @@ export function FocusModePage() {
       session.backlog_item_id,
       session.start_time
     )
+
+    const savedMinutes = Math.floor(focusedElapsedMs / 60000)
 
     return (
       <div className="min-h-screen bg-background flex flex-col items-center justify-center p-4">
@@ -198,7 +186,7 @@ export function FocusModePage() {
               <div>
                 <p className="text-sm font-medium break-words">{topicFromSession(session)}</p>
                 <p className="text-xs text-muted-foreground">
-                  {formatTimeDisplay(session.start_time)} – {formatTimeDisplay(session.end_time)} · {sessionMinutes} min
+                  {formatTimeDisplay(session.start_time)} – {formatTimeDisplay(session.end_time)} · {minutesBetween(session.start_time, session.end_time)} min
                 </p>
               </div>
             </div>
@@ -264,7 +252,11 @@ export function FocusModePage() {
     )
   }
 
-  const isPaused = phase === "paused"
+  // Focusing or entering
+  const isFocusing = phase === "entering" || phase === "focusing"
+  const isPaused = phase === "paused_by_user" || phase === "paused_lost_focus" || phase === "focus_returned"
+  const progressPercent = totalDurationMs > 0 ? (focusedElapsedMs / totalDurationMs) * 100 : 0
+  const remainingSeconds = Math.floor(remainingMs / 1000)
 
   return (
     <div className="min-h-screen bg-background flex flex-col items-center justify-center p-4">
@@ -281,9 +273,9 @@ export function FocusModePage() {
           <h1 className="text-lg font-semibold leading-snug break-words">
             {topicFromSession(session)}
           </h1>
-          {profile?.name && (
+          {profile?.name && !isPaused && (
             <p className="text-sm text-muted-foreground">
-              {isPaused ? "Paused — the timer is waiting for you." : `Let's finish this one, ${profile.name}.`}
+              {isFocusing ? `Let's finish this one, ${profile.name}.` : "Entering Focus Mode..."}
             </p>
           )}
         </motion.div>
@@ -318,7 +310,6 @@ export function FocusModePage() {
 
           <div className="absolute inset-0 flex flex-col items-center justify-center">
             <motion.span
-              key={remaining}
               initial={{ opacity: 0.6, scale: 0.95 }}
               animate={{ opacity: 1, scale: 1 }}
               aria-live="polite"
@@ -327,7 +318,7 @@ export function FocusModePage() {
                 isPaused && "text-muted-foreground"
               )}
             >
-              {formatDuration(remaining)}
+              {formatDuration(remainingSeconds)}
             </motion.span>
             <span className="text-sm text-muted-foreground mt-1">
               {isPaused ? "Paused" : "remaining"}
@@ -351,7 +342,7 @@ export function FocusModePage() {
                 exit={{ opacity: 0, scale: 0.9 }}
               >
                 <Button
-                  onClick={handleResume}
+                  onClick={resume}
                   size="lg"
                   className="h-16 w-16 rounded-full shadow-lg"
                   aria-label="Resume timer"
@@ -367,7 +358,7 @@ export function FocusModePage() {
                 exit={{ opacity: 0, scale: 0.9 }}
               >
                 <Button
-                  onClick={handlePause}
+                  onClick={pause}
                   variant="secondary"
                   size="lg"
                   className="h-16 w-16 rounded-full shadow-lg"
@@ -389,14 +380,33 @@ export function FocusModePage() {
           </Button>
         </div>
 
-        {/* Reset */}
-        <button
-          onClick={handleReset}
-          className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors mx-auto py-2 px-3 -mx-3"
-        >
-          <RotateCcw className="h-3.5 w-3.5" />
-          Restart timer
-        </button>
+        {/* Focus lock status overlay */}
+        <AnimatePresence>
+          {isPaused && (
+            <motion.div
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: 10 }}
+              className="rounded-xl border bg-card p-4 space-y-2"
+              role="status"
+              aria-label="Focus lock status"
+            >
+              <p className="text-sm font-semibold">
+                {phase === "paused_by_user" && "Take a break"}
+                {phase === "paused_lost_focus" && "Focus paused"}
+                {phase === "focus_returned" && "Welcome back"}
+              </p>
+              <p className="text-xs text-muted-foreground">
+                {phase === "paused_by_user" && "Pause the timer whenever you need."}
+                {phase === "paused_lost_focus" && "Your focused time is paused until you return."}
+                {phase === "focus_returned" && "Your timer is right where you left it."}
+              </p>
+              <p className="text-xs font-medium text-muted-foreground">
+                {formatFocusedTime(focusedElapsedMs)} focused
+              </p>
+            </motion.div>
+          )}
+        </AnimatePresence>
       </div>
     </div>
   )
