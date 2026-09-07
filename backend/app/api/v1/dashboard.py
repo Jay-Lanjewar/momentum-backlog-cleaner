@@ -6,16 +6,15 @@ from datetime import date, datetime, timedelta, timezone
 from fastapi import APIRouter, Depends
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import joinedload
 
 from app.core.dependencies import get_current_user_id, get_db
 from app.domain.models import (
     BacklogItem,
     Course,
     Goal,
-    StudentProfile,
-    StudyStreak,
     SubjectStreak,
-    WeeklySchedule,
+    User,
 )
 from app.domain.schemas import (
     BacklogHealth,
@@ -47,25 +46,35 @@ async def get_dashboard(
     user_id: uuid.UUID = Depends(get_current_user_id),
     db: AsyncSession = Depends(get_db),
 ):
-    profile_result = await db.execute(
-        select(StudentProfile).where(StudentProfile.user_id == user_id)
+    base_user_result = await db.execute(
+        select(User)
+        .where(User.id == user_id)
+        .options(
+            joinedload(User.profile),
+            joinedload(User.schedule),
+            joinedload(User.study_streak),
+        )
     )
-    profile = profile_result.scalar_one_or_none()
+    base_user = base_user_result.unique().scalar_one_or_none()
 
-    schedule_result = await db.execute(
-        select(WeeklySchedule).where(WeeklySchedule.user_id == user_id)
-    )
-    schedule = schedule_result.scalar_one_or_none()
+    profile = base_user.profile if base_user else None
+    schedule = base_user.schedule if base_user else None
+    momentum = base_user.study_streak if base_user else None
 
-    courses_result = await db.execute(
-        select(Course).where(Course.user_id == user_id)
+    courses_backlog_result = await db.execute(
+        select(Course, BacklogItem)
+        .outerjoin(BacklogItem, Course.id == BacklogItem.course_id)
+        .where(Course.user_id == user_id)
     )
-    courses = courses_result.scalars().all()
-
-    backlog_result = await db.execute(
-        select(BacklogItem).where(BacklogItem.user_id == user_id)
-    )
-    backlog_items = backlog_result.scalars().all()
+    rows = courses_backlog_result.all()
+    courses_by_id: dict[uuid.UUID, Course] = {}
+    backlog_items: list[BacklogItem] = []
+    for course, backlog_item in rows:
+        if course.id not in courses_by_id:
+            courses_by_id[course.id] = course
+        if backlog_item is not None:
+            backlog_items.append(backlog_item)
+    courses = list(courses_by_id.values())
 
     goals_result = await db.execute(
         select(Goal).where(Goal.user_id == user_id)
@@ -111,17 +120,10 @@ async def get_dashboard(
         snapshot_id=snapshot.id,
     )
 
-    streak_result = await db.execute(
-        select(StudyStreak).where(StudyStreak.user_id == user_id)
-    )
-    momentum = streak_result.scalar_one_or_none()
-
     subject_streaks_result = await db.execute(
         select(SubjectStreak).where(SubjectStreak.user_id == user_id)
     )
     subject_streaks = list(subject_streaks_result.scalars().all())
-
-    courses_by_id = {c.id: c for c in courses}
 
     now = datetime.now(timezone.utc)
     thirty_days_ago = now - timedelta(days=30)
