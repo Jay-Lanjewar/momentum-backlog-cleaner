@@ -248,6 +248,7 @@ class AdaptivePlanResponse(BaseModel):
     plan: GeneratedPlan
     changes: list[PlanChange]
     snapshot_id: uuid.UUID
+    previous_sessions: list[PlanSession] = Field(default_factory=list)
 
 
 class StudyStreakResponse(BaseModel):

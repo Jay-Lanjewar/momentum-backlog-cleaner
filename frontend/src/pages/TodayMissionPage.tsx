@@ -541,6 +541,8 @@ export function TodayMissionPage() {
           <FadeIn delay={0.02}>
             <ScheduleChangePanel
               changes={adaptiveResponse.changes}
+              previous_sessions={adaptiveResponse.previous_sessions}
+              current_sessions={adaptiveResponse.plan.sessions}
               onDismiss={() => setShowAdaptiveChanges(false)}
             />
           </FadeIn>

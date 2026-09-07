@@ -75,6 +75,7 @@ export interface AdaptivePlanResponse {
   plan: GeneratedPlan
   changes: PlanChange[]
   snapshot_id: string
+  previous_sessions: PlanSession[]
 }
 
 export interface SessionCompletionPayload {

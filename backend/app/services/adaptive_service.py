@@ -274,6 +274,7 @@ async def run_adaptive_completion(
 
     # 11. Build response
     plan_sessions = [PlanSession(**s) for s in new_plan.get("sessions", [])]
+    previous_sessions = [PlanSession(**s) for s in v1_sessions]
     return AdaptivePlanResponse(
         plan=GeneratedPlan(
             sessions=plan_sessions,
@@ -282,6 +283,7 @@ async def run_adaptive_completion(
         ),
         changes=changes,
         snapshot_id=new_snapshot.id,
+        previous_sessions=previous_sessions,
     )
 
 

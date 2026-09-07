@@ -158,8 +158,10 @@ export function FocusModePage() {
   const savedMinutes = Math.floor(elapsed / 60)
 
   if (phase === "complete") {
+    const effectiveSessions = adaptiveResponse?.plan.sessions ?? state?.sessions ?? []
+    const effectivePlan = adaptiveResponse?.plan ?? state?.plan
     const next = nextSessionAfter(
-      state?.sessions ?? [],
+      effectiveSessions,
       session.backlog_item_id,
       session.start_time
     )
@@ -213,6 +215,20 @@ export function FocusModePage() {
             )}
           </div>
 
+          {adaptiveResponse && adaptiveResponse.changes.length > 0 && (
+            <div className="rounded-xl border bg-primary/5 p-4 text-left space-y-1">
+              <div className="flex items-center gap-2">
+                <div className="h-5 w-5 rounded-full bg-primary/10 flex items-center justify-center shrink-0">
+                  <CheckCircle2 className="h-3 w-3 text-primary" />
+                </div>
+                <p className="text-sm font-semibold">Momentum Adapted Your Plan</p>
+              </div>
+              <p className="text-xs text-muted-foreground pl-7">
+                {adaptiveResponse.changes[0].reason}
+              </p>
+            </div>
+          )}
+
           {next ? (
             <div className="text-left">
               <RecommendedNextCard
@@ -225,7 +241,7 @@ export function FocusModePage() {
                 onStart={() =>
                   navigate("/focus", {
                     replace: true,
-                    state: { session: next, sessions: state?.sessions, plan: state?.plan },
+                    state: { session: next, sessions: effectiveSessions, plan: effectivePlan },
                   })
                 }
               />
