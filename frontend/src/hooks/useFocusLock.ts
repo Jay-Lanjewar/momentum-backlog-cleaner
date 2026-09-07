@@ -14,7 +14,7 @@ export interface UseFocusLockReturn {
   remainingMs: number
   isFullscreen: boolean
   pause: () => void
-  resume: () => void
+  resume: () => Promise<void>
   complete: () => void
   reset: () => void
 }
@@ -56,7 +56,15 @@ export function useFocusLock(totalDurationMs: number): UseFocusLockReturn {
     setPhase("paused_lost_focus")
   }, [])
 
-  const resume = useCallback(() => {
+  const resume = useCallback(async () => {
+    const root = document.documentElement
+    if (root.requestFullscreen) {
+      try {
+        await root.requestFullscreen()
+      } catch {
+        // fullscreen unavailable or rejected — resume anyway
+      }
+    }
     focusStartedAtRef.current = now()
     activeRef.current = true
     setPhase("focusing")
@@ -78,18 +86,12 @@ export function useFocusLock(totalDurationMs: number): UseFocusLockReturn {
     setPhase("entering")
   }, [])
 
-  // Initial focus start + fullscreen request
+  // Initial focus start (no automatic fullscreen — fullscreen is requested on resume only)
   useEffect(() => {
     if (phase !== "entering") return
 
     focusStartedAtRef.current = now()
     activeRef.current = true
-
-    const root = document.documentElement
-    if (root.requestFullscreen) {
-      root.requestFullscreen().catch(() => {})
-    }
-
     setPhase("focusing")
   }, [phase])
 

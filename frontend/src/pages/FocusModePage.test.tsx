@@ -71,7 +71,7 @@ let currentPhase: FocusLockPhase = "focusing"
 let currentFocusedElapsedMs = 0
 
 const mockPause = vi.fn(() => { currentPhase = "paused_by_user" })
-const mockResume = vi.fn(() => { currentPhase = "focusing" })
+const mockResume = vi.fn(async () => { currentPhase = "focusing" })
 const mockComplete = vi.fn(() => { currentPhase = "complete" })
 const mockReset = vi.fn()
 

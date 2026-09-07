@@ -39,15 +39,9 @@ describe("useFocusLock", () => {
     expect(result.current.phase).toBe("focusing")
   })
 
-  it("requests fullscreen on enter", () => {
+  it("does NOT request fullscreen on enter", () => {
     renderHook(() => useFocusLock(1_500_000))
-    expect(document.documentElement.requestFullscreen).toHaveBeenCalled()
-  })
-
-  it("continues without fullscreen when request fails", async () => {
-    vi.mocked(document.documentElement.requestFullscreen).mockRejectedValue(new Error("denied"))
-    const { result } = renderHook(() => useFocusLock(1_500_000))
-    expect(result.current.phase).toBe("focusing")
+    expect(document.documentElement.requestFullscreen).not.toHaveBeenCalled()
   })
 
   it("calculates focused elapsed from timestamps", () => {
@@ -103,7 +97,7 @@ describe("useFocusLock", () => {
     expect(result.current.focusedElapsedMs).toBe(elapsedAtPause)
   })
 
-  it("resumes from paused state", () => {
+  it("resumes from paused state", async () => {
     const { result } = renderHook(() => useFocusLock(1_500_000))
 
     vi.mocked(Date.now).mockReturnValue(1_010_000)
@@ -112,8 +106,8 @@ describe("useFocusLock", () => {
     })
 
     vi.mocked(Date.now).mockReturnValue(1_015_000)
-    act(() => {
-      result.current.resume()
+    await act(async () => {
+      await result.current.resume()
     })
 
     expect(result.current.phase).toBe("focusing")
@@ -126,7 +120,7 @@ describe("useFocusLock", () => {
     expect(result.current.focusedElapsedMs).toBe(20_000)
   })
 
-  it("accumulates time across multiple focus/pause cycles", () => {
+  it("accumulates time across multiple focus/pause cycles", async () => {
     const { result } = renderHook(() => useFocusLock(1_500_000))
 
     // Focus 10s
@@ -141,8 +135,8 @@ describe("useFocusLock", () => {
 
     // Focus 8s more
     vi.mocked(Date.now).mockReturnValue(1_015_000)
-    act(() => {
-      result.current.resume()
+    await act(async () => {
+      await result.current.resume()
     })
     vi.mocked(Date.now).mockReturnValue(1_023_000)
     act(() => {
@@ -196,7 +190,7 @@ describe("useFocusLock", () => {
     expect(result.current.phase).toBe("focus_returned")
   })
 
-  it("explicit resume after focus_returned goes to focusing", () => {
+  it("explicit resume after focus_returned goes to focusing", async () => {
     const { result } = renderHook(() => useFocusLock(1_500_000))
 
     act(() => {
@@ -205,8 +199,8 @@ describe("useFocusLock", () => {
     act(() => {
       fireVisibilityChange("visible")
     })
-    act(() => {
-      result.current.resume()
+    await act(async () => {
+      await result.current.resume()
     })
 
     expect(result.current.phase).toBe("focusing")
@@ -353,5 +347,127 @@ describe("useFocusLock", () => {
 
     const actualMinutes = Math.max(1, Math.ceil(result.current.focusedElapsedMs / 60000))
     expect(actualMinutes).toBe(2)
+  })
+
+  it("resume attempts fullscreen", async () => {
+    const { result } = renderHook(() => useFocusLock(1_500_000))
+
+    act(() => {
+      result.current.pause()
+    })
+
+    await act(async () => {
+      await result.current.resume()
+    })
+
+    expect(document.documentElement.requestFullscreen).toHaveBeenCalled()
+  })
+
+  it("successful fullscreen request still resumes focus", async () => {
+    vi.mocked(document.documentElement.requestFullscreen).mockResolvedValue(undefined as never)
+    const { result } = renderHook(() => useFocusLock(1_500_000))
+
+    act(() => {
+      result.current.pause()
+    })
+
+    await act(async () => {
+      await result.current.resume()
+    })
+
+    expect(result.current.phase).toBe("focusing")
+  })
+
+  it("resume continues even if fullscreen request fails", async () => {
+    vi.mocked(document.documentElement.requestFullscreen).mockRejectedValue(new Error("denied"))
+    const { result } = renderHook(() => useFocusLock(1_500_000))
+
+    act(() => {
+      result.current.pause()
+    })
+
+    await act(async () => {
+      await result.current.resume()
+    })
+
+    expect(result.current.phase).toBe("focusing")
+  })
+
+  it("resume works when requestFullscreen is unavailable", async () => {
+    Object.defineProperty(document.documentElement, "requestFullscreen", {
+      value: undefined,
+      writable: true,
+      configurable: true,
+    })
+    const { result } = renderHook(() => useFocusLock(1_500_000))
+
+    act(() => {
+      result.current.pause()
+    })
+
+    await act(async () => {
+      await result.current.resume()
+    })
+
+    expect(result.current.phase).toBe("focusing")
+  })
+
+  it("does not request fullscreen on visibility change", () => {
+    const { result } = renderHook(() => useFocusLock(1_500_000))
+
+    act(() => {
+      fireVisibilityChange("hidden")
+    })
+    act(() => {
+      fireVisibilityChange("visible")
+    })
+
+    // Only entering effect runs, which no longer requests fullscreen
+    expect(document.documentElement.requestFullscreen).not.toHaveBeenCalled()
+    expect(result.current.phase).toBe("focus_returned")
+  })
+
+  it("does not request fullscreen on window focus", () => {
+    const { result } = renderHook(() => useFocusLock(1_500_000))
+
+    act(() => {
+      window.dispatchEvent(new Event("blur"))
+    })
+    act(() => {
+      window.dispatchEvent(new Event("focus"))
+    })
+
+    expect(document.documentElement.requestFullscreen).not.toHaveBeenCalled()
+    expect(result.current.phase).toBe("focus_returned")
+  })
+
+  it("focused elapsed time remains correct after resume with hidden time excluded", async () => {
+    const { result } = renderHook(() => useFocusLock(1_500_000))
+
+    // Focus 10s
+    vi.mocked(Date.now).mockReturnValue(1_010_000)
+    act(() => {
+      fireVisibilityChange("hidden")
+    })
+    expect(result.current.focusedElapsedMs).toBe(10_000)
+
+    // Hidden 30s
+    vi.mocked(Date.now).mockReturnValue(1_040_000)
+    act(() => {
+      fireVisibilityChange("visible")
+    })
+
+    // Resume and focus 5s more
+    vi.mocked(Date.now).mockReturnValue(1_040_000)
+    await act(async () => {
+      await result.current.resume()
+    })
+    vi.mocked(Date.now).mockReturnValue(1_045_000)
+    act(() => {
+      result.current.pause()
+    })
+
+    // Total focused: 10s + 5s = 15s (30s hidden excluded)
+    expect(result.current.focusedElapsedMs).toBe(15_000)
   })
 })
