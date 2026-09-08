@@ -1,10 +1,13 @@
 import {
   formatMinutes,
   formatHourMinute,
+  formatTimeRange,
   getGreeting,
   focusCoachMessage,
   healthTone,
   buildRecommendationReason,
+  topicFromSession,
+  nextSessionAfter,
 } from "../lib/coaching";
 
 describe("formatMinutes", () => {
@@ -113,5 +116,76 @@ describe("buildRecommendationReason", () => {
       "good",
     );
     expect(result).toContain("High-priority");
+  });
+});
+
+describe("formatTimeRange", () => {
+  it("formats a time range", () => {
+    expect(formatTimeRange("14:00", "16:30")).toBe("2:00 PM – 4:30 PM");
+  });
+});
+
+describe("topicFromSession", () => {
+  it("strips Work on prefix", () => {
+    expect(topicFromSession({ reason: "Work on Physics Ch. 5" })).toBe(
+      "Physics Ch. 5",
+    );
+  });
+
+  it("returns reason unchanged when no prefix", () => {
+    expect(topicFromSession({ reason: "Review past paper" })).toBe(
+      "Review past paper",
+    );
+  });
+});
+
+describe("nextSessionAfter", () => {
+  const sessions = [
+    {
+      session_id: "a",
+      start_time: "16:00",
+      backlog_item_id: "item-1",
+      end_time: "17:00",
+      reason: "Work on Physics",
+      remaining_minutes: 60,
+    },
+    {
+      session_id: "b",
+      start_time: "17:00",
+      backlog_item_id: "item-2",
+      end_time: "18:00",
+      reason: "Work on Chemistry",
+      remaining_minutes: 60,
+    },
+    {
+      session_id: "c",
+      start_time: "15:00",
+      backlog_item_id: "item-3",
+      end_time: "16:00",
+      reason: "Work on Math",
+      remaining_minutes: 60,
+    },
+  ];
+
+  it("returns next session after the completed one by start_time", () => {
+    // Completing "a" (16:00) → next is "b" (17:00), c (15:00) is earlier so excluded
+    const next = nextSessionAfter(sessions, "a", "16:00");
+    expect(next?.session_id).toBe("b");
+  });
+
+  it("returns null when completing the last session", () => {
+    // Completing "b" (17:00) → no sessions after 17:00
+    const next = nextSessionAfter(sessions, "b", "17:00");
+    expect(next).toBeNull();
+  });
+
+  it("returns null for empty sessions array", () => {
+    expect(nextSessionAfter([], "a", "16:00")).toBeNull();
+  });
+
+  it("excludes the completed session and earlier sessions", () => {
+    // Completing "c" (15:00) → next is "a" (16:00)
+    const next = nextSessionAfter(sessions, "c", "15:00");
+    expect(next?.session_id).toBe("a");
   });
 });

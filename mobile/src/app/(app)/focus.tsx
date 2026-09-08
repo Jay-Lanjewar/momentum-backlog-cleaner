@@ -12,7 +12,13 @@ import { useKeepAwake } from "expo-keep-awake";
 
 import { useFocusLock } from "@/hooks/useFocusLock";
 import { useCompleteSession } from "@/services/hooks";
-import { formatHourMinute, focusCoachMessage } from "@/lib/coaching";
+import {
+  formatHourMinute,
+  formatTimeRange,
+  focusCoachMessage,
+  topicFromSession,
+  nextSessionAfter,
+} from "@/lib/coaching";
 import type { AdaptivePlanResponse } from "@/services/types";
 
 function parseDurationMs(start: string, end: string): number {
@@ -125,19 +131,40 @@ export default function FocusModeScreen() {
       );
     }
 
+    const nextSession = nextSessionAfter(
+      adaptiveResult.plan.sessions,
+      params.sessionId,
+      params.startTime,
+    );
+
     return (
       <View style={styles.container}>
         <View style={styles.completionContent}>
-          <Text style={styles.completionEmoji}>🎉</Text>
+          <Text style={styles.completionEmoji}>✅</Text>
           <Text style={styles.completionTitle}>Session Complete!</Text>
           <Text style={styles.completionMinutes}>
             {Math.max(1, Math.ceil(focusedElapsedMs / 60000))} minutes focused
           </Text>
 
-          {adaptiveResult.changes.length > 0 && (
-            <View style={styles.changesSection}>
-              <Text style={styles.changesTitle}>Momentum adapted your plan</Text>
-              {adaptiveResult.changes.map((change) => (
+          {/* Session summary */}
+          <View style={styles.summaryCard}>
+            <Text style={styles.summaryTitle} numberOfLines={2}>
+              {topicFromSession({ reason: params.reason })}
+            </Text>
+            <Text style={styles.summaryTime}>
+              {formatTimeRange(params.startTime, params.endTime)}
+            </Text>
+          </View>
+
+          {/* Adaptive plan section */}
+          <View style={styles.adaptiveSection}>
+            <Text style={styles.adaptiveHeader}>
+              {adaptiveResult.changes.length > 0
+                ? "PLAN UPDATED"
+                : "PLAN ON TRACK"}
+            </Text>
+            {adaptiveResult.changes.length > 0 ? (
+              adaptiveResult.changes.map((change) => (
                 <View key={change.session_id} style={styles.changeItem}>
                   <Text style={styles.changeType}>
                     {change.change_type.replace(/_/g, " ").toUpperCase()}
@@ -145,24 +172,68 @@ export default function FocusModeScreen() {
                   <Text style={styles.changeTitle}>{change.title}</Text>
                   <Text style={styles.changeReason}>{change.reason}</Text>
                 </View>
-              ))}
-            </View>
-          )}
+              ))
+            ) : (
+              <View style={styles.changeItem}>
+                <Text style={styles.changeReason}>
+                  Your plan is on track — no adjustments needed.
+                </Text>
+              </View>
+            )}
+          </View>
 
-          {adaptiveResult.plan.daily_message && (
-            <View style={styles.dailyMessage}>
-              <Text style={styles.dailyMessageText}>
-                {adaptiveResult.plan.daily_message}
+          {/* Next session */}
+          {nextSession ? (
+            <View style={styles.nextSessionCard}>
+              <Text style={styles.nextSessionHeader}>UP NEXT</Text>
+              <Text style={styles.nextSessionTitle} numberOfLines={2}>
+                {topicFromSession(nextSession)}
+              </Text>
+              <Text style={styles.nextSessionTime}>
+                {formatTimeRange(nextSession.start_time, nextSession.end_time)}
+              </Text>
+              <TouchableOpacity
+                style={styles.primaryButton}
+                onPress={() =>
+                  router.push({
+                    pathname: "/(app)/focus",
+                    params: {
+                      sessionId: nextSession.session_id,
+                      backlogItemId: nextSession.backlog_item_id,
+                      startTime: nextSession.start_time,
+                      endTime: nextSession.end_time,
+                      reason: nextSession.reason,
+                      remainingMinutes: String(nextSession.remaining_minutes),
+                      sessions: JSON.stringify(adaptiveResult.plan.sessions),
+                      snapshotId: adaptiveResult.snapshot_id,
+                      dailyMessage: adaptiveResult.plan.daily_message,
+                    },
+                  })
+                }
+                activeOpacity={0.8}
+              >
+                <Text style={styles.primaryButtonText}>Start Next Session</Text>
+              </TouchableOpacity>
+            </View>
+          ) : (
+            <View style={styles.nextSessionCard}>
+              <Text style={styles.nextSessionTitle}>
+                You&apos;re all caught up for today.
+              </Text>
+              <Text style={styles.nextSessionTime}>
+                Momentum will line up your next mission for tomorrow.
               </Text>
             </View>
           )}
 
           <TouchableOpacity
-            style={styles.primaryButton}
+            style={styles.secondaryButton}
             onPress={handleBackToMission}
             activeOpacity={0.8}
           >
-            <Text style={styles.primaryButtonText}>Back to Today&apos;s Mission</Text>
+            <Text style={styles.secondaryButtonText}>
+              Back to Today&apos;s Mission
+            </Text>
           </TouchableOpacity>
         </View>
       </View>
@@ -395,39 +466,55 @@ const styles = StyleSheet.create({
     paddingBottom: 40,
   },
   completionEmoji: {
-    fontSize: 56,
+    fontSize: 48,
     textAlign: "center",
-    marginBottom: 16,
+    marginBottom: 12,
   },
   completionTitle: {
     color: "#F8FAFC",
     fontSize: 28,
     fontWeight: "700",
     textAlign: "center",
-    marginBottom: 8,
+    marginBottom: 4,
   },
   completionMinutes: {
     color: "#94A3B8",
-    fontSize: 16,
+    fontSize: 15,
     textAlign: "center",
-    marginBottom: 32,
-  },
-  changesSection: {
     marginBottom: 24,
   },
-  changesTitle: {
-    color: "#60A5FA",
-    fontSize: 14,
+  summaryCard: {
+    backgroundColor: "#1E293B",
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 20,
+  },
+  summaryTitle: {
+    color: "#F8FAFC",
+    fontSize: 15,
     fontWeight: "600",
+    marginBottom: 4,
+  },
+  summaryTime: {
+    color: "#94A3B8",
+    fontSize: 13,
+  },
+  adaptiveSection: {
+    marginBottom: 20,
+  },
+  adaptiveHeader: {
+    color: "#60A5FA",
+    fontSize: 12,
+    fontWeight: "700",
     textTransform: "uppercase",
     letterSpacing: 0.5,
-    marginBottom: 12,
+    marginBottom: 10,
   },
   changeItem: {
     backgroundColor: "#1E293B",
     borderRadius: 12,
-    padding: 16,
-    marginBottom: 10,
+    padding: 14,
+    marginBottom: 8,
   },
   changeType: {
     color: "#94A3B8",
@@ -437,35 +524,57 @@ const styles = StyleSheet.create({
   },
   changeTitle: {
     color: "#F8FAFC",
-    fontSize: 15,
+    fontSize: 14,
     fontWeight: "600",
     marginBottom: 4,
   },
   changeReason: {
-    color: "#94A3B8",
+    color: "#CBD5E1",
     fontSize: 13,
     lineHeight: 18,
   },
-  dailyMessage: {
+  nextSessionCard: {
     backgroundColor: "#1E293B",
     borderRadius: 12,
     padding: 16,
-    marginBottom: 24,
+    marginBottom: 20,
   },
-  dailyMessageText: {
-    color: "#CBD5E1",
-    fontSize: 14,
-    lineHeight: 20,
+  nextSessionHeader: {
+    color: "#60A5FA",
+    fontSize: 12,
+    fontWeight: "700",
+    textTransform: "uppercase",
+    letterSpacing: 0.5,
+    marginBottom: 8,
+  },
+  nextSessionTitle: {
+    color: "#F8FAFC",
+    fontSize: 15,
+    fontWeight: "600",
+    marginBottom: 4,
+  },
+  nextSessionTime: {
+    color: "#94A3B8",
+    fontSize: 13,
+    marginBottom: 12,
   },
   primaryButton: {
     backgroundColor: "#2563EB",
     borderRadius: 14,
-    paddingVertical: 18,
+    paddingVertical: 16,
     alignItems: "center",
   },
   primaryButtonText: {
     color: "#FFF",
-    fontSize: 17,
+    fontSize: 16,
     fontWeight: "600",
+  },
+  secondaryButton: {
+    paddingVertical: 14,
+    alignItems: "center",
+  },
+  secondaryButtonText: {
+    color: "#64748B",
+    fontSize: 15,
   },
 });

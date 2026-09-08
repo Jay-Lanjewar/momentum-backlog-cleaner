@@ -1,3 +1,5 @@
+import type { PlanSession } from "@/services/types";
+
 export function formatMinutes(minutes: number): string {
   if (minutes < 60) return `${minutes}m`;
   const h = Math.floor(minutes / 60);
@@ -14,6 +16,24 @@ export function formatHourMinute(time: string): string {
   const period = h >= 12 ? "PM" : "AM";
   const hour = h % 12 || 12;
   return `${hour}:${String(m).padStart(2, "0")} ${period}`;
+}
+
+export function topicFromSession(session: { reason: string }): string {
+  return session.reason.replace(/^Work on\s+/, "");
+}
+
+export function nextSessionAfter(
+  sessions: PlanSession[],
+  completedSessionId: string,
+  currentStart: string,
+): PlanSession | null {
+  const upcoming = sessions
+    .filter(
+      (s) =>
+        s.session_id !== completedSessionId && s.start_time > currentStart,
+    )
+    .sort((a, b) => a.start_time.localeCompare(b.start_time));
+  return upcoming[0] ?? null;
 }
 
 export function getGreeting(name: string | null): string {
