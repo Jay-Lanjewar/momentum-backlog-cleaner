@@ -1,4 +1,4 @@
-import { useCallback } from "react";
+import { useCallback, useMemo } from "react";
 import {
   View,
   Text,
@@ -18,39 +18,15 @@ import {
   formatMinutes,
   formatHourMinute,
   formatTimeRange,
-  buildRecommendationReason,
+  isSessionCompleted,
+  getActiveSessions,
+  getCurrentSession,
+  getNextSession,
+  getUpcomingSessions,
+  computeDailyProgress,
+  type BacklogItemMap,
 } from "@/lib/coaching";
 import type { PlanSession, DashboardData } from "@/services/types";
-
-function getCurrentSession(
-  sessions: PlanSession[],
-): PlanSession | null {
-  const now = new Date();
-  const nowMin = now.getHours() * 60 + now.getMinutes();
-  return (
-    sessions.find((s) => {
-      const [sh, sm] = s.start_time.split(":").map(Number);
-      const [eh, em] = s.end_time.split(":").map(Number);
-      return nowMin >= sh * 60 + sm && nowMin < eh * 60 + em;
-    }) ?? null
-  );
-}
-
-function getNextSession(sessions: PlanSession[]): PlanSession | null {
-  const now = new Date();
-  const nowMin = now.getHours() * 60 + now.getMinutes();
-  const upcoming = sessions
-    .filter((s) => {
-      const [sh, sm] = s.start_time.split(":").map(Number);
-      return sh * 60 + sm > nowMin;
-    })
-    .sort((a, b) => {
-      const [ah, am] = a.start_time.split(":").map(Number);
-      const [bh, bm] = b.start_time.split(":").map(Number);
-      return ah * 60 + am - (bh * 60 + bm);
-    });
-  return upcoming[0] ?? null;
-}
 
 export default function TodayMissionPage() {
   const router = useRouter();
@@ -100,25 +76,47 @@ export default function TodayMissionPage() {
     );
   }
 
-  const activeSessions = data.plan.plan.sessions;
-  const currentSession = getCurrentSession(activeSessions);
-  const nextSession = getNextSession(activeSessions);
+  const allSessions = data.plan.plan.sessions;
+
+  const backlogItemMap: BacklogItemMap = useMemo(() => {
+    const map = new Map<string, (typeof data.planning.prioritized_backlog)[0]>();
+    for (const item of data.planning.prioritized_backlog) {
+      map.set(String(item.id), item);
+    }
+    return map;
+  }, [data.planning.prioritized_backlog]);
+
+  const activeSessions = useMemo(
+    () => getActiveSessions(allSessions, backlogItemMap),
+    [allSessions, backlogItemMap],
+  );
+
+  const nowMin = useMemo(() => {
+    const now = new Date();
+    return now.getHours() * 60 + now.getMinutes();
+  }, []);
+
+  const currentSession = useMemo(
+    () => getCurrentSession(activeSessions, nowMin),
+    [activeSessions, nowMin],
+  );
+  const nextSession = useMemo(
+    () => getNextSession(activeSessions, nowMin),
+    [activeSessions, nowMin],
+  );
   const missionSession = currentSession ?? nextSession;
+
+  const upcomingSessions = useMemo(() => {
+    const future = getUpcomingSessions(activeSessions, nowMin);
+    return future.filter((s) => s.session_id !== missionSession?.session_id);
+  }, [activeSessions, nowMin, missionSession]);
+
+  const allPlanSessionsCompleted = allSessions.length > 0 &&
+    allSessions.every((s) => isSessionCompleted(s, backlogItemMap));
 
   const healthScore = data.planning.backlog_health.health_score;
   const streak = data.streaks.momentum.current_streak;
-  const targetMinutes = data.profile?.daily_target_minutes ?? 0;
-  const completedToday =
-    targetMinutes > 0
-      ? Math.min(
-          Math.round(
-            ((targetMinutes - data.planning.total_required_minutes) /
-              targetMinutes) *
-              100,
-          ),
-          100,
-        )
-      : 0;
+  const completedToday = computeDailyProgress(allSessions, backlogItemMap);
 
   return (
     <SafeAreaView style={styles.container}>
@@ -174,11 +172,18 @@ export default function TodayMissionPage() {
               <Text style={styles.startButtonText}>Start Focus Session</Text>
             </TouchableOpacity>
           </View>
-        ) : (
+        ) : allPlanSessionsCompleted ? (
           <View style={styles.emptyCard}>
             <Text style={styles.emptyTitle}>All caught up!</Text>
             <Text style={styles.emptySubtitle}>
-              No more sessions scheduled for today.
+              You&apos;ve completed all of today&apos;s planned work.
+            </Text>
+          </View>
+        ) : (
+          <View style={styles.emptyCard}>
+            <Text style={styles.emptyTitle}>No more sessions today</Text>
+            <Text style={styles.emptySubtitle}>
+              Remaining work will carry over to your next study day.
             </Text>
           </View>
         )}
@@ -210,34 +215,28 @@ export default function TodayMissionPage() {
         </View>
 
         {/* Progress */}
-        {targetMinutes > 0 && (
-          <View style={styles.progressSection}>
-            <Text style={styles.progressLabel}>
-              Daily Progress: {completedToday}%
-            </Text>
-            <View style={styles.progressTrack}>
-              <View
-                style={[
-                  styles.progressFill,
-                  { width: `${Math.min(completedToday, 100)}%` },
-                ]}
-              />
-            </View>
+        <View style={styles.progressSection}>
+          <Text style={styles.progressLabel}>
+            Daily Progress: {completedToday}%
+          </Text>
+          <View style={styles.progressTrack}>
+            <View
+              style={[
+                styles.progressFill,
+                { width: `${Math.min(completedToday, 100)}%` },
+              ]}
+            />
           </View>
-        )}
+        </View>
 
         {/* Upcoming Sessions */}
-        {activeSessions.length > 1 && (
+        {upcomingSessions.length > 0 && (
           <View style={styles.upcomingSection}>
             <Text style={styles.sectionTitle}>Upcoming Today</Text>
-            {activeSessions.map((s) => (
+            {upcomingSessions.map((s) => (
               <TouchableOpacity
                 key={s.session_id}
-                style={[
-                  styles.sessionRow,
-                  s.session_id === missionSession?.session_id &&
-                    styles.sessionRowActive,
-                ]}
+                style={styles.sessionRow}
                 onPress={() => handleStartStudy(s, data)}
               >
                 <Text style={styles.sessionTime}>

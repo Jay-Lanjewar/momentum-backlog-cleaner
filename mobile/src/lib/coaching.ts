@@ -1,4 +1,4 @@
-import type { PlanSession } from "@/services/types";
+import type { PlanSession, PrioritizedBacklogItem } from "@/services/types";
 
 export function formatMinutes(minutes: number): string {
   if (minutes < 60) return `${minutes}m`;
@@ -34,6 +34,72 @@ export function nextSessionAfter(
     )
     .sort((a, b) => a.start_time.localeCompare(b.start_time));
   return upcoming[0] ?? null;
+}
+
+// ─── Session classification helpers ───
+
+export function parseTimeToMinutes(time: string): number {
+  const [h, m] = time.split(":").map(Number);
+  return h * 60 + m;
+}
+
+export type BacklogItemMap = Map<string, PrioritizedBacklogItem>;
+
+export function isSessionCompleted(
+  session: PlanSession,
+  backlogItemMap: BacklogItemMap,
+): boolean {
+  return backlogItemMap.get(String(session.backlog_item_id))?.status === "completed";
+}
+
+export function getActiveSessions(
+  sessions: PlanSession[],
+  backlogItemMap: BacklogItemMap,
+): PlanSession[] {
+  return sessions.filter((s) => !isSessionCompleted(s, backlogItemMap));
+}
+
+export function getCurrentSession(
+  sessions: PlanSession[],
+  nowMin: number,
+): PlanSession | null {
+  return (
+    sessions.find((s) => {
+      const start = parseTimeToMinutes(s.start_time);
+      const end = parseTimeToMinutes(s.end_time);
+      return nowMin >= start && nowMin < end;
+    }) ?? null
+  );
+}
+
+export function getNextSession(
+  sessions: PlanSession[],
+  nowMin: number,
+): PlanSession | null {
+  const upcoming = sessions
+    .filter((s) => parseTimeToMinutes(s.start_time) > nowMin)
+    .sort((a, b) => a.start_time.localeCompare(b.start_time));
+  return upcoming[0] ?? null;
+}
+
+export function getUpcomingSessions(
+  sessions: PlanSession[],
+  nowMin: number,
+): PlanSession[] {
+  return sessions
+    .filter((s) => parseTimeToMinutes(s.start_time) > nowMin)
+    .sort((a, b) => a.start_time.localeCompare(b.start_time));
+}
+
+export function computeDailyProgress(
+  sessions: PlanSession[],
+  backlogItemMap: BacklogItemMap,
+): number {
+  if (sessions.length === 0) return 0;
+  const completedCount = sessions.filter((s) =>
+    isSessionCompleted(s, backlogItemMap),
+  ).length;
+  return Math.round((completedCount / sessions.length) * 100);
 }
 
 export function getGreeting(name: string | null): string {
