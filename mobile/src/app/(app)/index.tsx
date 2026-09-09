@@ -78,6 +78,23 @@ export default function TodayMissionPage() {
 
   const allSessions = data.plan.plan.sessions;
 
+  // ── Dev-only diagnostic logging ──
+  if (__DEV__) {
+    console.log("[Dashboard] snapshot_id:", data.plan.snapshot_id);
+    console.log("[Dashboard] sessions.length:", allSessions.length);
+    console.log("[Dashboard] prioritized_backlog.length:", data.planning.prioritized_backlog.length);
+    console.log("[Dashboard] sessions:", allSessions.map((s) => ({
+      session_id: s.session_id,
+      backlog_item_id: String(s.backlog_item_id),
+      start_time: s.start_time,
+      end_time: s.end_time,
+    })));
+    console.log("[Dashboard] backlog_items:", data.planning.prioritized_backlog.map((b) => ({
+      id: String(b.id),
+      status: b.status,
+    })));
+  }
+
   const backlogItemMap: BacklogItemMap = useMemo(() => {
     const map = new Map<string, (typeof data.planning.prioritized_backlog)[0]>();
     for (const item of data.planning.prioritized_backlog) {
