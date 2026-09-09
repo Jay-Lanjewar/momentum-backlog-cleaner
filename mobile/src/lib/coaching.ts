@@ -49,7 +49,7 @@ export function isSessionCompleted(
   session: PlanSession,
   backlogItemMap: BacklogItemMap,
 ): boolean {
-  return backlogItemMap.get(String(session.backlog_item_id))?.status === "completed";
+  return !backlogItemMap.has(String(session.backlog_item_id));
 }
 
 export function getActiveSessions(

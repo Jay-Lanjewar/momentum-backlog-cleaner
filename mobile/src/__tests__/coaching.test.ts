@@ -241,32 +241,32 @@ describe("parseTimeToMinutes", () => {
 });
 
 describe("isSessionCompleted", () => {
-  it("returns true when backlog item is completed", () => {
-    const session = makeSession({ backlog_item_id: "item-1" });
-    const map = makeMap({ "item-1": "completed" });
-    expect(isSessionCompleted(session, map as any)).toBe(true);
-  });
-
-  it("returns false when backlog item is pending", () => {
+  it("returns false when backlog item is present with pending status", () => {
     const session = makeSession({ backlog_item_id: "item-1" });
     const map = makeMap({ "item-1": "pending" });
     expect(isSessionCompleted(session, map as any)).toBe(false);
   });
 
-  it("returns false when backlog item not in map", () => {
+  it("returns false when backlog item is present with in_progress status", () => {
+    const session = makeSession({ backlog_item_id: "item-1" });
+    const map = makeMap({ "item-1": "in_progress" });
+    expect(isSessionCompleted(session, map as any)).toBe(false);
+  });
+
+  it("returns true when backlog item is absent from prioritized_backlog", () => {
     const session = makeSession({ backlog_item_id: "item-1" });
     const map = makeMap({});
-    expect(isSessionCompleted(session, map as any)).toBe(false);
+    expect(isSessionCompleted(session, map as any)).toBe(true);
   });
 });
 
 describe("getActiveSessions", () => {
-  it("filters out completed sessions", () => {
+  it("filters out completed sessions (absent from map)", () => {
     const sessions = [
       makeSession({ session_id: "a", backlog_item_id: "item-1" }),
       makeSession({ session_id: "b", backlog_item_id: "item-2" }),
     ];
-    const map = makeMap({ "item-1": "completed", "item-2": "pending" });
+    const map = makeMap({ "item-2": "pending" });
     const active = getActiveSessions(sessions, map as any);
     expect(active).toHaveLength(1);
     expect(active[0].session_id).toBe("b");
@@ -285,7 +285,7 @@ describe("getActiveSessions", () => {
     const sessions = [
       makeSession({ session_id: "a", backlog_item_id: "item-1" }),
     ];
-    const map = makeMap({ "item-1": "completed" });
+    const map = makeMap({});
     expect(getActiveSessions(sessions, map as any)).toHaveLength(0);
   });
 });
@@ -406,7 +406,7 @@ describe("computeDailyProgress", () => {
       makeSession({ backlog_item_id: "item-1" }),
       makeSession({ backlog_item_id: "item-2" }),
     ];
-    const map = makeMap({ "item-1": "completed", "item-2": "completed" });
+    const map = makeMap({});
     expect(computeDailyProgress(sessions, map as any)).toBe(100);
   });
 
@@ -415,7 +415,7 @@ describe("computeDailyProgress", () => {
       makeSession({ backlog_item_id: "item-1" }),
       makeSession({ backlog_item_id: "item-2" }),
     ];
-    const map = makeMap({ "item-1": "completed", "item-2": "pending" });
+    const map = makeMap({ "item-2": "pending" });
     expect(computeDailyProgress(sessions, map as any)).toBe(50);
   });
 
@@ -427,7 +427,7 @@ describe("computeDailyProgress", () => {
 
   it("caps at 100", () => {
     const sessions = [makeSession({ backlog_item_id: "item-1" })];
-    const map = makeMap({ "item-1": "completed" });
+    const map = makeMap({});
     expect(computeDailyProgress(sessions, map as any)).toBeLessThanOrEqual(100);
   });
 
@@ -436,8 +436,7 @@ describe("computeDailyProgress", () => {
       makeSession({ backlog_item_id: "item-1" }),
       makeSession({ backlog_item_id: "item-2" }),
     ];
-    const map = makeMap({ "item-1": "completed", "item-2": "pending" });
-    // Only 1 of 2 completed → 50%, not 100%
-    expect(computeDailyProgress(sessions, map as any)).toBe(50);
+    const map = makeMap({ "item-1": "pending", "item-2": "pending" });
+    expect(computeDailyProgress(sessions, map as any)).toBe(0);
   });
 });
