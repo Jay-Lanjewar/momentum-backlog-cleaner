@@ -1,12 +1,14 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import {
   View,
   Text,
   TouchableOpacity,
+  ScrollView,
   StyleSheet,
   Alert,
   BackHandler,
 } from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useKeepAwake } from "expo-keep-awake";
 
@@ -15,11 +17,19 @@ import { useCompleteSession } from "@/services/hooks";
 import {
   formatHourMinute,
   formatTimeRange,
+  formatMinutes,
   focusCoachMessage,
   topicFromSession,
   nextSessionAfter,
+  parseTimeToMinutes,
 } from "@/lib/coaching";
-import type { AdaptivePlanResponse } from "@/services/types";
+import type { AdaptivePlanResponse, PlanChange } from "@/services/types";
+import {
+  AdaptiveTimelineBar,
+  computeTimelineBounds,
+} from "@/components/adaptive/AdaptiveTimelineBar";
+import { AdaptiveSessionLegend } from "@/components/adaptive/AdaptiveSessionLegend";
+import { AdaptiveChangeGroup } from "@/components/adaptive/AdaptiveChangeGroup";
 
 function parseDurationMs(start: string, end: string): number {
   const [sh, sm] = start.split(":").map(Number);
@@ -32,6 +42,10 @@ function formatCountdown(ms: number): string {
   const m = Math.floor(totalSec / 60);
   const s = totalSec % 60;
   return `${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
+}
+
+function minutesBetween(start: string, end: string): number {
+  return parseTimeToMinutes(end) - parseTimeToMinutes(start);
 }
 
 export default function FocusModeScreen() {
@@ -119,15 +133,15 @@ export default function FocusModeScreen() {
     router.replace("/(app)");
   }, [router]);
 
-  // ─── Completion screen ───
+  // ─── Completion / adaptive result screen ───
   if (phase === "complete" || adaptiveResult) {
     if (!adaptiveResult) {
       return (
-        <View style={styles.container}>
+        <SafeAreaView style={styles.container} edges={["bottom"]}>
           <View style={styles.center}>
             <Text style={styles.loadingText}>Saving your progress...</Text>
           </View>
-        </View>
+        </SafeAreaView>
       );
     }
 
@@ -137,60 +151,167 @@ export default function FocusModeScreen() {
       params.startTime,
     );
 
-    return (
-      <View style={styles.container}>
-        <View style={styles.completionContent}>
-          <Text style={styles.completionEmoji}>✅</Text>
-          <Text style={styles.completionTitle}>Session Complete!</Text>
-          <Text style={styles.completionMinutes}>
-            {Math.max(1, Math.ceil(focusedElapsedMs / 60000))} minutes focused
-          </Text>
+    const hasChanges = adaptiveResult.changes.length > 0;
+    const previousSessions = adaptiveResult.previous_sessions ?? [];
+    const currentSessions = adaptiveResult.plan.sessions;
+    const focusedMinutes = Math.max(1, Math.ceil(focusedElapsedMs / 60000));
 
-          {/* Session summary */}
-          <View style={styles.summaryCard}>
-            <Text style={styles.summaryTitle} numberOfLines={2}>
-              {topicFromSession({ reason: params.reason })}
-            </Text>
-            <Text style={styles.summaryTime}>
-              {formatTimeRange(params.startTime, params.endTime)}
+    const changedSessionIds = useMemo(
+      () => new Set(adaptiveResult.changes.map((c) => c.session_id)),
+      [adaptiveResult.changes],
+    );
+
+    const overflowIds = useMemo(() => {
+      const ids = new Set<string>();
+      for (const c of adaptiveResult.changes) {
+        if (c.change_type === "moved_to_overflow") {
+          ids.add(c.backlog_item_id);
+        }
+      }
+      return ids;
+    }, [adaptiveResult.changes]);
+
+    const { minStart, span } = useMemo(
+      () => computeTimelineBounds(previousSessions, currentSessions),
+      [previousSessions, currentSessions],
+    );
+
+    const hasTimelines = previousSessions.length > 0 || currentSessions.length > 0;
+
+    return (
+      <SafeAreaView style={styles.container} edges={["bottom"]}>
+        <ScrollView
+          style={styles.scrollContainer}
+          contentContainerStyle={styles.scrollContent}
+          showsVerticalScrollIndicator={false}
+        >
+          {/* ── Celebration header ── */}
+          <View style={styles.celebrationHeader}>
+            <View style={styles.checkCircle}>
+              <Text style={styles.checkIcon}>{"\u2713"}</Text>
+            </View>
+            <Text style={styles.celebrationTitle}>Nice work!</Text>
+            <Text style={styles.celebrationSubtitle}>
+              You finished a focused session.
             </Text>
           </View>
 
-          {/* Adaptive plan section */}
-          <View style={styles.adaptiveSection}>
-            <Text style={styles.adaptiveHeader}>
-              {adaptiveResult.changes.length > 0
-                ? "PLAN UPDATED"
-                : "PLAN ON TRACK"}
-            </Text>
-            {adaptiveResult.changes.length > 0 ? (
-              adaptiveResult.changes.map((change) => (
-                <View key={change.session_id} style={styles.changeItem}>
-                  <Text style={styles.changeType}>
-                    {change.change_type.replace(/_/g, " ").toUpperCase()}
-                  </Text>
-                  <Text style={styles.changeTitle}>{change.title}</Text>
-                  <Text style={styles.changeReason}>{change.reason}</Text>
-                </View>
-              ))
-            ) : (
-              <View style={styles.changeItem}>
-                <Text style={styles.changeReason}>
-                  Your plan is on track — no adjustments needed.
+          {/* ── Session summary card ── */}
+          <View style={styles.card}>
+            <View style={styles.summaryRow}>
+              <View style={styles.summaryIconCircle}>
+                <Text style={styles.summaryIconCheck}>{"\u2713"}</Text>
+              </View>
+              <View style={styles.summaryContent}>
+                <Text style={styles.summaryTopic} numberOfLines={2}>
+                  {topicFromSession({ reason: params.reason })}
                 </Text>
+                <Text style={styles.summaryTime}>
+                  {formatTimeRange(params.startTime, params.endTime)}{" "}
+                  {" \u00B7 "} {focusedMinutes} min
+                </Text>
+              </View>
+            </View>
+            {focusedMinutes > 0 && (
+              <View style={styles.summaryRow}>
+                <View style={styles.summaryIconCircle}>
+                  <Text style={styles.summaryIconStar}>{"\u2726"}</Text>
+                </View>
+                <View style={styles.summaryContent}>
+                  <Text style={styles.summaryMotivation}>
+                    One less thing to worry about
+                  </Text>
+                  <Text style={styles.summaryMotivationSub}>
+                    Future You will thank you.
+                  </Text>
+                </View>
               </View>
             )}
           </View>
 
-          {/* Next session */}
+          {/* ── Adaptation section ── */}
+          {hasChanges ? (
+            <View style={styles.adaptationSection}>
+              <View style={styles.adaptationHeader}>
+                <View style={styles.adaptationIconCircle}>
+                  <Text style={styles.adaptationIconCheck}>{"\u2713"}</Text>
+                </View>
+                <Text style={styles.adaptationTitle}>
+                  Momentum Adapted Your Plan
+                </Text>
+              </View>
+              <Text style={styles.adaptationReason}>
+                {adaptiveResult.changes[0].reason}
+              </Text>
+
+              {/* Before/After timelines */}
+              {hasTimelines && (
+                <View style={styles.timelineSection}>
+                  {previousSessions.length > 0 && (
+                    <View style={styles.timelineBlock}>
+                      <Text style={styles.timelineLabel}>BEFORE</Text>
+                      <AdaptiveTimelineBar
+                        sessions={previousSessions}
+                        changedSessionIds={changedSessionIds}
+                        minStart={minStart}
+                        span={span}
+                      />
+                      <AdaptiveSessionLegend
+                        sessions={previousSessions}
+                        changedSessionIds={changedSessionIds}
+                      />
+                    </View>
+                  )}
+                  {currentSessions.length > 0 && (
+                    <View style={styles.timelineBlock}>
+                      <Text style={styles.timelineLabel}>AFTER</Text>
+                      <AdaptiveTimelineBar
+                        sessions={currentSessions}
+                        changedSessionIds={changedSessionIds}
+                        minStart={minStart}
+                        span={span}
+                        overflowIds={overflowIds}
+                      />
+                      <AdaptiveSessionLegend
+                        sessions={currentSessions}
+                        changedSessionIds={changedSessionIds}
+                        overflowIds={overflowIds}
+                      />
+                    </View>
+                  )}
+                </View>
+              )}
+
+              {/* Grouped change rows */}
+              <AdaptiveChangeGroup changes={adaptiveResult.changes} />
+            </View>
+          ) : (
+            <View style={styles.onTrackCard}>
+              <View style={styles.onTrackRow}>
+                <View style={styles.onTrackIconCircle}>
+                  <Text style={styles.onTrackIconCheck}>{"\u2713"}</Text>
+                </View>
+                <Text style={styles.onTrackTitle}>Plan stays on track</Text>
+              </View>
+              <Text style={styles.onTrackText}>
+                No adjustments needed. Everything is running smoothly.
+              </Text>
+            </View>
+          )}
+
+          {/* ── Next session card ── */}
           {nextSession ? (
             <View style={styles.nextSessionCard}>
-              <Text style={styles.nextSessionHeader}>UP NEXT</Text>
-              <Text style={styles.nextSessionTitle} numberOfLines={2}>
+              <Text style={styles.nextSessionLabel}>UP NEXT</Text>
+              <Text style={styles.nextSessionTopic} numberOfLines={2}>
                 {topicFromSession(nextSession)}
               </Text>
               <Text style={styles.nextSessionTime}>
                 {formatTimeRange(nextSession.start_time, nextSession.end_time)}
+                {" \u00B7 "}
+                {formatMinutes(
+                  minutesBetween(nextSession.start_time, nextSession.end_time),
+                )}
               </Text>
               <TouchableOpacity
                 style={styles.primaryButton}
@@ -212,20 +333,23 @@ export default function FocusModeScreen() {
                 }
                 activeOpacity={0.8}
               >
-                <Text style={styles.primaryButtonText}>Start Next Session</Text>
+                <Text style={styles.primaryButtonText}>
+                  Start Next Session
+                </Text>
               </TouchableOpacity>
             </View>
           ) : (
-            <View style={styles.nextSessionCard}>
-              <Text style={styles.nextSessionTitle}>
+            <View style={styles.caughtUpCard}>
+              <Text style={styles.caughtUpTitle}>
                 You&apos;re all caught up for today.
               </Text>
-              <Text style={styles.nextSessionTime}>
+              <Text style={styles.caughtUpSubtitle}>
                 Momentum will line up your next mission for tomorrow.
               </Text>
             </View>
           )}
 
+          {/* ── Back to Today ── */}
           <TouchableOpacity
             style={styles.secondaryButton}
             onPress={handleBackToMission}
@@ -235,8 +359,8 @@ export default function FocusModeScreen() {
               Back to Today&apos;s Mission
             </Text>
           </TouchableOpacity>
-        </View>
-      </View>
+        </ScrollView>
+      </SafeAreaView>
     );
   }
 
@@ -354,6 +478,264 @@ const styles = StyleSheet.create({
     color: "#94A3B8",
     fontSize: 16,
   },
+
+  // ── Completion screen ──
+  scrollContainer: {
+    flex: 1,
+  },
+  scrollContent: {
+    paddingHorizontal: 20,
+    paddingTop: 16,
+    paddingBottom: 32,
+  },
+  celebrationHeader: {
+    alignItems: "center",
+    marginBottom: 20,
+  },
+  checkCircle: {
+    width: 64,
+    height: 64,
+    borderRadius: 32,
+    backgroundColor: "rgba(16, 185, 129, 0.12)",
+    alignItems: "center",
+    justifyContent: "center",
+    marginBottom: 12,
+  },
+  checkIcon: {
+    color: "#10B981",
+    fontSize: 32,
+    fontWeight: "300",
+  },
+  celebrationTitle: {
+    color: "#F8FAFC",
+    fontSize: 26,
+    fontWeight: "700",
+    marginBottom: 4,
+  },
+  celebrationSubtitle: {
+    color: "#94A3B8",
+    fontSize: 14,
+  },
+
+  // ── Cards ──
+  card: {
+    backgroundColor: "#1E293B",
+    borderRadius: 14,
+    padding: 16,
+    marginBottom: 16,
+  },
+  summaryRow: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: 12,
+  },
+  summaryIconCircle: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    alignItems: "center",
+    justifyContent: "center",
+    marginTop: 1,
+  },
+  summaryIconCheck: {
+    color: "#10B981",
+    fontSize: 15,
+    fontWeight: "700",
+  },
+  summaryIconStar: {
+    color: "#2563EB",
+    fontSize: 16,
+  },
+  summaryContent: {
+    flex: 1,
+  },
+  summaryTopic: {
+    color: "#F8FAFC",
+    fontSize: 15,
+    fontWeight: "600",
+    marginBottom: 2,
+  },
+  summaryTime: {
+    color: "#94A3B8",
+    fontSize: 13,
+  },
+  summaryMotivation: {
+    color: "#F8FAFC",
+    fontSize: 14,
+    fontWeight: "500",
+  },
+  summaryMotivationSub: {
+    color: "#94A3B8",
+    fontSize: 12,
+  },
+
+  // ── Adaptation section ──
+  adaptationSection: {
+    backgroundColor: "rgba(37, 99, 235, 0.06)",
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: "rgba(37, 99, 235, 0.15)",
+    padding: 16,
+    marginBottom: 16,
+  },
+  adaptationHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    marginBottom: 6,
+  },
+  adaptationIconCircle: {
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    backgroundColor: "rgba(37, 99, 235, 0.15)",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  adaptationIconCheck: {
+    color: "#2563EB",
+    fontSize: 12,
+    fontWeight: "700",
+  },
+  adaptationTitle: {
+    color: "#F8FAFC",
+    fontSize: 14,
+    fontWeight: "600",
+  },
+  adaptationReason: {
+    color: "#94A3B8",
+    fontSize: 13,
+    lineHeight: 18,
+    marginLeft: 30,
+    marginBottom: 12,
+  },
+
+  // ── Timelines ──
+  timelineSection: {
+    gap: 12,
+    marginBottom: 12,
+  },
+  timelineBlock: {},
+  timelineLabel: {
+    color: "#94A3B8",
+    fontSize: 10,
+    fontWeight: "700",
+    textTransform: "uppercase",
+    letterSpacing: 0.8,
+    marginBottom: 6,
+  },
+
+  // ── On-track card ──
+  onTrackCard: {
+    backgroundColor: "#1E293B",
+    borderRadius: 14,
+    padding: 16,
+    marginBottom: 16,
+  },
+  onTrackRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    marginBottom: 6,
+  },
+  onTrackIconCircle: {
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    backgroundColor: "rgba(16, 185, 129, 0.12)",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  onTrackIconCheck: {
+    color: "#10B981",
+    fontSize: 12,
+    fontWeight: "700",
+  },
+  onTrackTitle: {
+    color: "#F8FAFC",
+    fontSize: 14,
+    fontWeight: "600",
+  },
+  onTrackText: {
+    color: "#94A3B8",
+    fontSize: 13,
+    lineHeight: 18,
+  },
+
+  // ── Next session ──
+  nextSessionCard: {
+    backgroundColor: "#1E293B",
+    borderRadius: 14,
+    padding: 16,
+    marginBottom: 16,
+    borderLeftWidth: 3,
+    borderLeftColor: "#2563EB",
+  },
+  nextSessionLabel: {
+    color: "#60A5FA",
+    fontSize: 11,
+    fontWeight: "700",
+    textTransform: "uppercase",
+    letterSpacing: 0.5,
+    marginBottom: 6,
+  },
+  nextSessionTopic: {
+    color: "#F8FAFC",
+    fontSize: 16,
+    fontWeight: "600",
+    marginBottom: 4,
+  },
+  nextSessionTime: {
+    color: "#94A3B8",
+    fontSize: 13,
+    marginBottom: 14,
+  },
+  primaryButton: {
+    backgroundColor: "#2563EB",
+    borderRadius: 12,
+    paddingVertical: 14,
+    alignItems: "center",
+  },
+  primaryButtonText: {
+    color: "#FFF",
+    fontSize: 15,
+    fontWeight: "600",
+  },
+
+  // ── Caught up ──
+  caughtUpCard: {
+    backgroundColor: "#1E293B",
+    borderRadius: 14,
+    borderWidth: 1,
+    borderStyle: "dashed",
+    borderColor: "#334155",
+    padding: 20,
+    alignItems: "center",
+    marginBottom: 16,
+  },
+  caughtUpTitle: {
+    color: "#F8FAFC",
+    fontSize: 15,
+    fontWeight: "600",
+    marginBottom: 4,
+  },
+  caughtUpSubtitle: {
+    color: "#94A3B8",
+    fontSize: 13,
+    textAlign: "center",
+  },
+
+  // ── Secondary button ──
+  secondaryButton: {
+    paddingVertical: 14,
+    alignItems: "center",
+  },
+  secondaryButtonText: {
+    color: "#64748B",
+    fontSize: 15,
+  },
+
+  // ── Focus timer (unchanged) ──
   sessionInfo: {
     alignItems: "center",
     paddingTop: 60,
@@ -456,124 +838,6 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   finishButtonText: {
-    color: "#64748B",
-    fontSize: 15,
-  },
-  completionContent: {
-    flex: 1,
-    justifyContent: "center",
-    paddingHorizontal: 24,
-    paddingBottom: 40,
-  },
-  completionEmoji: {
-    fontSize: 48,
-    textAlign: "center",
-    marginBottom: 12,
-  },
-  completionTitle: {
-    color: "#F8FAFC",
-    fontSize: 28,
-    fontWeight: "700",
-    textAlign: "center",
-    marginBottom: 4,
-  },
-  completionMinutes: {
-    color: "#94A3B8",
-    fontSize: 15,
-    textAlign: "center",
-    marginBottom: 24,
-  },
-  summaryCard: {
-    backgroundColor: "#1E293B",
-    borderRadius: 12,
-    padding: 16,
-    marginBottom: 20,
-  },
-  summaryTitle: {
-    color: "#F8FAFC",
-    fontSize: 15,
-    fontWeight: "600",
-    marginBottom: 4,
-  },
-  summaryTime: {
-    color: "#94A3B8",
-    fontSize: 13,
-  },
-  adaptiveSection: {
-    marginBottom: 20,
-  },
-  adaptiveHeader: {
-    color: "#60A5FA",
-    fontSize: 12,
-    fontWeight: "700",
-    textTransform: "uppercase",
-    letterSpacing: 0.5,
-    marginBottom: 10,
-  },
-  changeItem: {
-    backgroundColor: "#1E293B",
-    borderRadius: 12,
-    padding: 14,
-    marginBottom: 8,
-  },
-  changeType: {
-    color: "#94A3B8",
-    fontSize: 11,
-    fontWeight: "700",
-    marginBottom: 4,
-  },
-  changeTitle: {
-    color: "#F8FAFC",
-    fontSize: 14,
-    fontWeight: "600",
-    marginBottom: 4,
-  },
-  changeReason: {
-    color: "#CBD5E1",
-    fontSize: 13,
-    lineHeight: 18,
-  },
-  nextSessionCard: {
-    backgroundColor: "#1E293B",
-    borderRadius: 12,
-    padding: 16,
-    marginBottom: 20,
-  },
-  nextSessionHeader: {
-    color: "#60A5FA",
-    fontSize: 12,
-    fontWeight: "700",
-    textTransform: "uppercase",
-    letterSpacing: 0.5,
-    marginBottom: 8,
-  },
-  nextSessionTitle: {
-    color: "#F8FAFC",
-    fontSize: 15,
-    fontWeight: "600",
-    marginBottom: 4,
-  },
-  nextSessionTime: {
-    color: "#94A3B8",
-    fontSize: 13,
-    marginBottom: 12,
-  },
-  primaryButton: {
-    backgroundColor: "#2563EB",
-    borderRadius: 14,
-    paddingVertical: 16,
-    alignItems: "center",
-  },
-  primaryButtonText: {
-    color: "#FFF",
-    fontSize: 16,
-    fontWeight: "600",
-  },
-  secondaryButton: {
-    paddingVertical: 14,
-    alignItems: "center",
-  },
-  secondaryButtonText: {
     color: "#64748B",
     fontSize: 15,
   },
