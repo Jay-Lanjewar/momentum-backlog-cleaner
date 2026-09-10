@@ -133,6 +133,29 @@ export default function FocusModeScreen() {
     router.replace("/(app)");
   }, [router]);
 
+  // ─── Derived adaptive values (declared before any early returns) ───
+  const changedSessionIds = useMemo(
+    () => new Set(adaptiveResult?.changes?.map((c) => c.session_id) ?? []),
+    [adaptiveResult?.changes],
+  );
+
+  const overflowIds = useMemo(() => {
+    const ids = new Set<string>();
+    for (const c of adaptiveResult?.changes ?? []) {
+      if (c.change_type === "moved_to_overflow") {
+        ids.add(c.backlog_item_id);
+      }
+    }
+    return ids;
+  }, [adaptiveResult?.changes]);
+
+  const previousSessions = adaptiveResult?.previous_sessions ?? [];
+  const currentSessions = adaptiveResult?.plan?.sessions ?? [];
+  const { minStart, span } = useMemo(
+    () => computeTimelineBounds(previousSessions, currentSessions),
+    [previousSessions, currentSessions],
+  );
+
   // ─── Completion / adaptive result screen ───
   if (phase === "complete" || adaptiveResult) {
     if (!adaptiveResult) {
@@ -152,29 +175,7 @@ export default function FocusModeScreen() {
     );
 
     const hasChanges = adaptiveResult.changes.length > 0;
-    const previousSessions = adaptiveResult.previous_sessions ?? [];
-    const currentSessions = adaptiveResult.plan.sessions;
     const focusedMinutes = Math.max(1, Math.ceil(focusedElapsedMs / 60000));
-
-    const changedSessionIds = useMemo(
-      () => new Set(adaptiveResult.changes.map((c) => c.session_id)),
-      [adaptiveResult.changes],
-    );
-
-    const overflowIds = useMemo(() => {
-      const ids = new Set<string>();
-      for (const c of adaptiveResult.changes) {
-        if (c.change_type === "moved_to_overflow") {
-          ids.add(c.backlog_item_id);
-        }
-      }
-      return ids;
-    }, [adaptiveResult.changes]);
-
-    const { minStart, span } = useMemo(
-      () => computeTimelineBounds(previousSessions, currentSessions),
-      [previousSessions, currentSessions],
-    );
 
     const hasTimelines = previousSessions.length > 0 || currentSessions.length > 0;
 
