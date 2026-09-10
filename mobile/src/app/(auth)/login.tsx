@@ -12,10 +12,12 @@ import {
   ScrollView,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+import { useRouter } from "expo-router";
 
 import { useAuth } from "@/hooks/useAuth";
 
 export default function LoginScreen() {
+  const router = useRouter();
   const { login } = useAuth();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -88,7 +90,23 @@ export default function LoginScreen() {
                 <Text style={styles.buttonText}>Sign In</Text>
               )}
             </TouchableOpacity>
+
+            <TouchableOpacity
+              onPress={() => router.push("/(auth)/forgot-password")}
+            >
+              <Text style={styles.forgotText}>Forgot password?</Text>
+            </TouchableOpacity>
           </View>
+
+          <TouchableOpacity
+            style={styles.linkRow}
+            onPress={() => router.push("/(auth)/register")}
+          >
+            <Text style={styles.linkText}>
+              Don&apos;t have an account?{" "}
+              <Text style={styles.linkBold}>Create one</Text>
+            </Text>
+          </TouchableOpacity>
         </ScrollView>
       </KeyboardAvoidingView>
     </SafeAreaView>
@@ -154,6 +172,24 @@ const styles = StyleSheet.create({
   buttonText: {
     color: "#FFF",
     fontSize: 16,
+    fontWeight: "600",
+  },
+  forgotText: {
+    color: "#2563EB",
+    fontSize: 14,
+    textAlign: "center",
+    marginTop: 12,
+  },
+  linkRow: {
+    marginTop: 24,
+    alignItems: "center",
+  },
+  linkText: {
+    fontSize: 14,
+    color: "#666",
+  },
+  linkBold: {
+    color: "#2563EB",
     fontWeight: "600",
   },
 });

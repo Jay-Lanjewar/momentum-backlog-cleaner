@@ -16,7 +16,7 @@ const queryClient = new QueryClient({
 });
 
 function AuthGate() {
-  const { isAuthenticated, isLoading } = useAuth();
+  const { user, isAuthenticated, isLoading } = useAuth();
   const segments = useSegments();
   const router = useRouter();
 
@@ -24,13 +24,24 @@ function AuthGate() {
     if (isLoading) return;
 
     const inAuthGroup = segments[0] === "(auth)";
+    const inOnboardingGroup = segments[0] === "(onboarding)";
 
     if (!isAuthenticated && !inAuthGroup) {
       router.replace("/(auth)/login");
     } else if (isAuthenticated && inAuthGroup) {
-      router.replace("/(app)");
+      const hasProfile = !!user?.profile;
+      if (hasProfile) {
+        router.replace("/(app)");
+      } else {
+        router.replace("/(onboarding)");
+      }
+    } else if (isAuthenticated && inOnboardingGroup) {
+      const hasProfile = !!user?.profile;
+      if (hasProfile) {
+        router.replace("/(app)");
+      }
     }
-  }, [isAuthenticated, isLoading, segments, router]);
+  }, [isAuthenticated, isLoading, user, segments, router]);
 
   useEffect(() => {
     if (!isLoading) {
