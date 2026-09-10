@@ -65,7 +65,7 @@ jest.mock("react-native", () => {
   return RN;
 });
 
-import FocusModeScreen from "../app/(app)/focus";
+import FocusModeScreen from "../app/(app)/(today)/focus";
 
 describe("FocusModeScreen hooks ordering regression", () => {
   it("exports the default component", () => {
