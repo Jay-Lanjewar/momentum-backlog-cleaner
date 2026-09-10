@@ -1,9 +1,14 @@
 import uuid
-from unittest.mock import AsyncMock
+from datetime import date, datetime, timezone
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
+from fastapi import FastAPI
+from fastapi.testclient import TestClient
 
-from app.domain.models import BacklogItem, Course
+from app.api.v1 import router as v1_router
+from app.core.dependencies import get_current_user, get_db
+from app.domain.models import BacklogItem, Course, PlanSnapshot, User
 from app.domain.schemas import BacklogItemCreate, BacklogItemUpdate
 from app.services.backlog_service import BacklogService
 from tests.conftest import TEST_USER_ID, TEST_USER_ID_2
@@ -176,3 +181,189 @@ async def test_delete_backlog_item_not_owned(
     result = await backlog_service.delete(sample_backlog_item.id, TEST_USER_ID_2)
 
     assert result is False
+
+
+# ─── Integration tests: PUT /backlog/{item_id} snapshot invalidation ───
+
+
+@pytest.fixture
+def app():
+    app = FastAPI()
+    app.include_router(v1_router)
+    return app
+
+
+@pytest.fixture
+def mock_user():
+    return User(id=TEST_USER_ID, email="test@test.com", name="Test")
+
+
+class TestBacklogCompletionSupersedesSnapshot:
+    """Verify that completing a backlog item via PUT supersedes the active snapshot."""
+
+    @patch("app.api.v1.backlog.supersede_snapshot", new_callable=AsyncMock)
+    @patch("app.api.v1.backlog.get_active_snapshot", new_callable=AsyncMock)
+    @patch("app.api.v1.backlog.ActivityService")
+    def test_completion_supersedes_active_snapshot(
+        self, mock_activity_cls, mock_get_snapshot, mock_supersede, app, mock_user
+    ):
+        """When a backlog item transitions to 'completed', the active snapshot is superseded."""
+        now = datetime.now(timezone.utc)
+        course = Course(id=uuid.uuid4(), user_id=TEST_USER_ID, name="Math", color="#6366f1")
+        item = BacklogItem(
+            id=uuid.uuid4(), user_id=TEST_USER_ID, course_id=course.id,
+            title="Homework", priority=3, estimated_minutes=60, status="pending",
+            created_at=now, updated_at=now,
+        )
+        completed_item = BacklogItem(
+            id=item.id, user_id=TEST_USER_ID, course_id=course.id,
+            title="Homework", priority=3, estimated_minutes=60, status="completed",
+            created_at=now, updated_at=now,
+        )
+        snapshot = PlanSnapshot(
+            id=uuid.uuid4(), user_id=TEST_USER_ID, plan_date=date.today(),
+            version=1, sessions=[], daily_message="", overflow=[],
+            source="deterministic", active=True,
+        )
+
+        mock_get_snapshot.return_value = snapshot
+        mock_act_instance = AsyncMock()
+        mock_activity_cls.return_value = mock_act_instance
+
+        mock_service = AsyncMock()
+        mock_service.get = AsyncMock(return_value=item)
+        mock_service.update = AsyncMock(return_value=completed_item)
+
+        app.dependency_overrides[get_current_user] = lambda: mock_user
+
+        with patch("app.api.v1.backlog.BacklogService", return_value=mock_service):
+            client = TestClient(app)
+            response = client.put(
+                f"/api/v1/backlog/{item.id}",
+                json={"status": "completed"},
+            )
+
+        app.dependency_overrides.clear()
+
+        assert response.status_code == 200
+        assert response.json()["status"] == "completed"
+        mock_get_snapshot.assert_awaited_once()
+        mock_supersede.assert_awaited_once()
+
+    @patch("app.api.v1.backlog.supersede_snapshot", new_callable=AsyncMock)
+    @patch("app.api.v1.backlog.get_active_snapshot", new_callable=AsyncMock)
+    @patch("app.api.v1.backlog.ActivityService")
+    def test_completion_without_snapshot_does_not_fail(
+        self, mock_activity_cls, mock_get_snapshot, mock_supersede, app, mock_user
+    ):
+        """Completing a backlog item when no active snapshot exists does not fail."""
+        now = datetime.now(timezone.utc)
+        course = Course(id=uuid.uuid4(), user_id=TEST_USER_ID, name="Math", color="#6366f1")
+        item = BacklogItem(
+            id=uuid.uuid4(), user_id=TEST_USER_ID, course_id=course.id,
+            title="Homework", priority=3, estimated_minutes=60, status="pending",
+            created_at=now, updated_at=now,
+        )
+        completed_item = BacklogItem(
+            id=item.id, user_id=TEST_USER_ID, course_id=course.id,
+            title="Homework", priority=3, estimated_minutes=60, status="completed",
+            created_at=now, updated_at=now,
+        )
+
+        mock_get_snapshot.return_value = None
+        mock_act_instance = AsyncMock()
+        mock_activity_cls.return_value = mock_act_instance
+
+        mock_service = AsyncMock()
+        mock_service.get = AsyncMock(return_value=item)
+        mock_service.update = AsyncMock(return_value=completed_item)
+
+        app.dependency_overrides[get_current_user] = lambda: mock_user
+
+        with patch("app.api.v1.backlog.BacklogService", return_value=mock_service):
+            client = TestClient(app)
+            response = client.put(
+                f"/api/v1/backlog/{item.id}",
+                json={"status": "completed"},
+            )
+
+        app.dependency_overrides.clear()
+
+        assert response.status_code == 200
+        assert response.json()["status"] == "completed"
+        mock_get_snapshot.assert_awaited_once()
+        mock_supersede.assert_not_awaited()
+
+    @patch("app.api.v1.backlog.supersede_snapshot", new_callable=AsyncMock)
+    @patch("app.api.v1.backlog.get_active_snapshot", new_callable=AsyncMock)
+    @patch("app.api.v1.backlog.ActivityService")
+    def test_non_completion_status_does_not_supersede(
+        self, mock_activity_cls, mock_get_snapshot, mock_supersede, app, mock_user
+    ):
+        """Changing status to 'in_progress' does NOT supersede the snapshot."""
+        now = datetime.now(timezone.utc)
+        course = Course(id=uuid.uuid4(), user_id=TEST_USER_ID, name="Math", color="#6366f1")
+        item = BacklogItem(
+            id=uuid.uuid4(), user_id=TEST_USER_ID, course_id=course.id,
+            title="Homework", priority=3, estimated_minutes=60, status="pending",
+            created_at=now, updated_at=now,
+        )
+        in_progress_item = BacklogItem(
+            id=item.id, user_id=TEST_USER_ID, course_id=course.id,
+            title="Homework", priority=3, estimated_minutes=60, status="in_progress",
+            created_at=now, updated_at=now,
+        )
+
+        mock_service = AsyncMock()
+        mock_service.get = AsyncMock(return_value=item)
+        mock_service.update = AsyncMock(return_value=in_progress_item)
+
+        app.dependency_overrides[get_current_user] = lambda: mock_user
+
+        with patch("app.api.v1.backlog.BacklogService", return_value=mock_service):
+            client = TestClient(app)
+            response = client.put(
+                f"/api/v1/backlog/{item.id}",
+                json={"status": "in_progress"},
+            )
+
+        app.dependency_overrides.clear()
+
+        assert response.status_code == 200
+        assert response.json()["status"] == "in_progress"
+        mock_get_snapshot.assert_not_awaited()
+        mock_supersede.assert_not_awaited()
+
+    @patch("app.api.v1.backlog.supersede_snapshot", new_callable=AsyncMock)
+    @patch("app.api.v1.backlog.get_active_snapshot", new_callable=AsyncMock)
+    @patch("app.api.v1.backlog.ActivityService")
+    def test_already_completed_does_not_supersede_again(
+        self, mock_activity_cls, mock_get_snapshot, mock_supersede, app, mock_user
+    ):
+        """If the item is already 'completed', re-completing does NOT supersede again."""
+        now = datetime.now(timezone.utc)
+        course = Course(id=uuid.uuid4(), user_id=TEST_USER_ID, name="Math", color="#6366f1")
+        item = BacklogItem(
+            id=uuid.uuid4(), user_id=TEST_USER_ID, course_id=course.id,
+            title="Homework", priority=3, estimated_minutes=60, status="completed",
+            created_at=now, updated_at=now,
+        )
+
+        mock_service = AsyncMock()
+        mock_service.get = AsyncMock(return_value=item)
+        mock_service.update = AsyncMock(return_value=item)
+
+        app.dependency_overrides[get_current_user] = lambda: mock_user
+
+        with patch("app.api.v1.backlog.BacklogService", return_value=mock_service):
+            client = TestClient(app)
+            response = client.put(
+                f"/api/v1/backlog/{item.id}",
+                json={"status": "completed"},
+            )
+
+        app.dependency_overrides.clear()
+
+        assert response.status_code == 200
+        mock_get_snapshot.assert_not_awaited()
+        mock_supersede.assert_not_awaited()
