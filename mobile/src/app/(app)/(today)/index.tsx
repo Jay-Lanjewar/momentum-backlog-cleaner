@@ -17,7 +17,6 @@ import {
   getGreeting,
   formatMinutes,
   formatHourMinute,
-  formatTimeRange,
   isSessionCompleted,
   getActiveSessions,
   getCurrentSession,
@@ -27,6 +26,12 @@ import {
   type BacklogItemMap,
 } from "@/lib/coaching";
 import type { PlanSession, DashboardData } from "@/services/types";
+
+import { RecommendedNextCard } from "@/components/dashboard/RecommendedNextCard";
+import { BacklogHealthCard } from "@/components/dashboard/BacklogHealthCard";
+import { ProgressOverview } from "@/components/dashboard/ProgressOverview";
+import { StreakCard } from "@/components/dashboard/StreakCard";
+import { BalanceScoreCard } from "@/components/dashboard/BalanceScoreCard";
 
 export default function TodayMissionPage() {
   const router = useRouter();
@@ -78,23 +83,6 @@ export default function TodayMissionPage() {
 
   const allSessions = data.plan.plan.sessions;
 
-  // ── Dev-only diagnostic logging ──
-  if (__DEV__) {
-    console.log("[Dashboard] snapshot_id:", data.plan.snapshot_id);
-    console.log("[Dashboard] sessions.length:", allSessions.length);
-    console.log("[Dashboard] prioritized_backlog.length:", data.planning.prioritized_backlog.length);
-    console.log("[Dashboard] sessions:", allSessions.map((s) => ({
-      session_id: s.session_id,
-      backlog_item_id: String(s.backlog_item_id),
-      start_time: s.start_time,
-      end_time: s.end_time,
-    })));
-    console.log("[Dashboard] backlog_items:", data.planning.prioritized_backlog.map((b) => ({
-      id: String(b.id),
-      status: b.status,
-    })));
-  }
-
   const backlogItemMap: BacklogItemMap = useMemo(() => {
     const map = new Map<string, (typeof data.planning.prioritized_backlog)[0]>();
     for (const item of data.planning.prioritized_backlog) {
@@ -132,8 +120,17 @@ export default function TodayMissionPage() {
     allSessions.every((s) => isSessionCompleted(s, backlogItemMap));
 
   const healthScore = data.planning.backlog_health.health_score;
-  const streak = data.streaks.momentum.current_streak;
   const completedToday = computeDailyProgress(allSessions, backlogItemMap);
+
+  // Find deadline from prioritized backlog
+  const nextDeadline = useMemo(() => {
+    const withDue = data.planning.prioritized_backlog
+      .filter((b) => b.due_date && !b.overdue)
+      .sort((a, b) => (a.due_date ?? "").localeCompare(b.due_date ?? ""));
+    if (withDue.length === 0) return null;
+    const d = new Date(withDue[0].due_date!);
+    return d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+  }, [data.planning.prioritized_backlog]);
 
   return (
     <SafeAreaView style={styles.container}>
@@ -149,46 +146,21 @@ export default function TodayMissionPage() {
             <Text style={styles.greeting}>
               {getGreeting(user?.name ?? null)}
             </Text>
-            <Text style={styles.streakLine}>
-              🔥 {streak} day streak
-            </Text>
           </View>
           <TouchableOpacity onPress={logout} style={styles.logoutButton}>
             <Text style={styles.logoutText}>Sign Out</Text>
           </TouchableOpacity>
         </View>
 
-        {/* Mission Card */}
+        {/* 1. Recommended Next Session */}
         {missionSession ? (
-          <View style={styles.missionCard}>
-            <Text style={styles.missionLabel}>TODAY&apos;S MISSION</Text>
-            <Text style={styles.missionTitle} numberOfLines={2}>
-              {missionSession.reason}
-            </Text>
-            <Text style={styles.missionTime}>
-              {formatTimeRange(
-                missionSession.start_time,
-                missionSession.end_time,
-              )}
-            </Text>
-            {missionSession.remaining_minutes > 0 && (
-              <Text style={styles.missionRemaining}>
-                ~{formatMinutes(missionSession.remaining_minutes)} estimated
-              </Text>
-            )}
-            {missionSession === currentSession && (
-              <View style={styles.nowBadge}>
-                <Text style={styles.nowBadgeText}>NOW</Text>
-              </View>
-            )}
-            <TouchableOpacity
-              style={styles.startButton}
-              onPress={() => handleStartStudy(missionSession, data)}
-              activeOpacity={0.8}
-            >
-              <Text style={styles.startButtonText}>Start Focus Session</Text>
-            </TouchableOpacity>
-          </View>
+          <RecommendedNextCard
+            session={missionSession}
+            backlogItem={backlogItemMap.get(String(missionSession.backlog_item_id))}
+            isCurrent={missionSession === currentSession}
+            healthScore={healthScore}
+            onStart={() => handleStartStudy(missionSession, data)}
+          />
         ) : allPlanSessionsCompleted ? (
           <View style={styles.emptyCard}>
             <Text style={styles.emptyTitle}>All caught up!</Text>
@@ -205,7 +177,7 @@ export default function TodayMissionPage() {
           </View>
         )}
 
-        {/* Insight */}
+        {/* 2. Insight */}
         {data.insight && (
           <View style={styles.insightCard}>
             <Text style={styles.insightTitle}>{data.insight.title}</Text>
@@ -213,59 +185,53 @@ export default function TodayMissionPage() {
           </View>
         )}
 
-        {/* Quick Stats */}
-        <View style={styles.statsRow}>
-          <View style={styles.statBox}>
-            <Text style={styles.statValue}>{data.planning.backlog_health.pending_items}</Text>
-            <Text style={styles.statLabel}>Pending</Text>
-          </View>
-          <View style={styles.statBox}>
-            <Text style={styles.statValue}>{formatMinutes(data.planning.total_required_minutes)}</Text>
-            <Text style={styles.statLabel}>Remaining</Text>
-          </View>
-          <View style={styles.statBox}>
-            <Text style={[styles.statValue, healthScore === "critical" && styles.statCritical]}>
-              {healthScore}
-            </Text>
-            <Text style={styles.statLabel}>Health</Text>
-          </View>
-        </View>
+        {/* 3. Progress Overview */}
+        <ProgressOverview
+          totalTasks={data.planning.prioritized_backlog.length}
+          completedTasks={data.planning.backlog_health.completed_items}
+          studyMinutes={data.planning.total_available_minutes}
+          streak={data.streaks.momentum}
+          deadlineLabel={nextDeadline ?? undefined}
+        />
 
-        {/* Progress */}
-        <View style={styles.progressSection}>
-          <Text style={styles.progressLabel}>
-            Daily Progress: {completedToday}%
-          </Text>
-          <View style={styles.progressTrack}>
-            <View
-              style={[
-                styles.progressFill,
-                { width: `${Math.min(completedToday, 100)}%` },
-              ]}
-            />
-          </View>
-        </View>
-
-        {/* Upcoming Sessions */}
+        {/* 4. Upcoming Sessions */}
         {upcomingSessions.length > 0 && (
           <View style={styles.upcomingSection}>
             <Text style={styles.sectionTitle}>Upcoming Today</Text>
-            {upcomingSessions.map((s) => (
-              <TouchableOpacity
-                key={s.session_id}
-                style={styles.sessionRow}
-                onPress={() => handleStartStudy(s, data)}
-              >
-                <Text style={styles.sessionTime}>
-                  {formatHourMinute(s.start_time)}
-                </Text>
-                <Text style={styles.sessionTitle} numberOfLines={1}>
-                  {s.reason}
-                </Text>
-              </TouchableOpacity>
-            ))}
+            {upcomingSessions.map((s) => {
+              const item = backlogItemMap.get(String(s.backlog_item_id));
+              return (
+                <TouchableOpacity
+                  key={s.session_id}
+                  style={styles.sessionRow}
+                  onPress={() => handleStartStudy(s, data)}
+                >
+                  <View style={[styles.sessionDot, { backgroundColor: item?.course_color ?? "#6B7280" }]} />
+                  <View style={styles.sessionInfo}>
+                    <Text style={styles.sessionTime}>
+                      {formatHourMinute(s.start_time)}
+                    </Text>
+                    <Text style={styles.sessionTitle} numberOfLines={1}>
+                      {s.reason}
+                    </Text>
+                  </View>
+                  <Text style={styles.sessionDuration}>
+                    ~{formatMinutes(s.remaining_minutes)}
+                  </Text>
+                </TouchableOpacity>
+              );
+            })}
           </View>
         )}
+
+        {/* 5. Backlog Health */}
+        <BacklogHealthCard health={data.planning.backlog_health} />
+
+        {/* 6. Streak */}
+        <StreakCard streaks={data.streaks} />
+
+        {/* 7. Balance Score */}
+        <BalanceScoreCard balance={data.balance} />
       </ScrollView>
     </SafeAreaView>
   );
@@ -291,17 +257,12 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     alignItems: "flex-start",
     paddingTop: 16,
-    paddingBottom: 24,
+    paddingBottom: 20,
   },
   greeting: {
     fontSize: 26,
     fontWeight: "700",
     color: "#1A1A1A",
-  },
-  streakLine: {
-    fontSize: 15,
-    color: "#666",
-    marginTop: 4,
   },
   logoutButton: {
     paddingHorizontal: 12,
@@ -310,61 +271,6 @@ const styles = StyleSheet.create({
   logoutText: {
     fontSize: 14,
     color: "#999",
-  },
-  missionCard: {
-    backgroundColor: "#FFF",
-    borderRadius: 16,
-    padding: 24,
-    marginBottom: 16,
-    borderWidth: 1,
-    borderColor: "#E8E8E8",
-  },
-  missionLabel: {
-    fontSize: 12,
-    fontWeight: "700",
-    color: "#2563EB",
-    letterSpacing: 1,
-    marginBottom: 8,
-  },
-  missionTitle: {
-    fontSize: 20,
-    fontWeight: "600",
-    color: "#1A1A1A",
-    marginBottom: 8,
-  },
-  missionTime: {
-    fontSize: 15,
-    color: "#666",
-    marginBottom: 4,
-  },
-  missionRemaining: {
-    fontSize: 14,
-    color: "#999",
-    marginBottom: 16,
-  },
-  nowBadge: {
-    backgroundColor: "#DCFCE7",
-    alignSelf: "flex-start",
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 6,
-    marginBottom: 16,
-  },
-  nowBadgeText: {
-    fontSize: 12,
-    fontWeight: "700",
-    color: "#16A34A",
-  },
-  startButton: {
-    backgroundColor: "#2563EB",
-    borderRadius: 12,
-    paddingVertical: 16,
-    alignItems: "center",
-  },
-  startButtonText: {
-    color: "#FFF",
-    fontSize: 16,
-    fontWeight: "600",
   },
   emptyCard: {
     backgroundColor: "#FFF",
@@ -402,53 +308,6 @@ const styles = StyleSheet.create({
     color: "#555",
     lineHeight: 20,
   },
-  statsRow: {
-    flexDirection: "row",
-    gap: 12,
-    marginBottom: 16,
-  },
-  statBox: {
-    flex: 1,
-    backgroundColor: "#FFF",
-    borderRadius: 12,
-    padding: 16,
-    alignItems: "center",
-    borderWidth: 1,
-    borderColor: "#E8E8E8",
-  },
-  statValue: {
-    fontSize: 20,
-    fontWeight: "700",
-    color: "#1A1A1A",
-    marginBottom: 4,
-  },
-  statCritical: {
-    color: "#DC2626",
-  },
-  statLabel: {
-    fontSize: 12,
-    color: "#999",
-  },
-  progressSection: {
-    marginBottom: 16,
-  },
-  progressLabel: {
-    fontSize: 14,
-    fontWeight: "600",
-    color: "#333",
-    marginBottom: 8,
-  },
-  progressTrack: {
-    height: 8,
-    backgroundColor: "#E8E8E8",
-    borderRadius: 4,
-    overflow: "hidden",
-  },
-  progressFill: {
-    height: "100%",
-    backgroundColor: "#2563EB",
-    borderRadius: 4,
-  },
   upcomingSection: {
     marginBottom: 16,
   },
@@ -469,20 +328,26 @@ const styles = StyleSheet.create({
     borderColor: "#E8E8E8",
     gap: 12,
   },
-  sessionRowActive: {
-    borderColor: "#2563EB",
-    backgroundColor: "#F0F4FF",
+  sessionDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+  },
+  sessionInfo: {
+    flex: 1,
   },
   sessionTime: {
-    fontSize: 14,
+    fontSize: 13,
     fontWeight: "600",
     color: "#2563EB",
-    width: 70,
   },
   sessionTitle: {
     fontSize: 14,
     color: "#333",
-    flex: 1,
+  },
+  sessionDuration: {
+    fontSize: 13,
+    color: "#999",
   },
   errorText: {
     fontSize: 16,
