@@ -1,4 +1,4 @@
-import type { PlanSession, PrioritizedBacklogItem } from "@/services/types";
+import type { PlanSession, PrioritizedBacklogItem, BacklogItem, Course } from "@/services/types";
 
 export function formatMinutes(minutes: number): string {
   if (minutes < 60) return `${minutes}m`;
@@ -142,4 +142,141 @@ export function buildRecommendationReason(
     return "Your backlog needs attention. Let's clear some items.";
   if (item.priority === 1) return "High-priority task — important to tackle first.";
   return "This is the best next task for your study session.";
+}
+
+// ─── Difficulty (backlog priority abstraction) ───
+
+export type Difficulty = "easy" | "medium" | "hard";
+
+export const DIFFICULTIES: { value: Difficulty; label: string; hint: string }[] = [
+  { value: "easy", label: "Easy", hint: "Quick, light work" },
+  { value: "medium", label: "Medium", hint: "Regular revision" },
+  { value: "hard", label: "Hard", hint: "Needs deep focus" },
+];
+
+export function difficultyFromPriority(
+  priority: number | null | undefined,
+): Difficulty {
+  if (priority == null) return "medium";
+  if (priority <= 2) return "hard";
+  if (priority === 4) return "easy";
+  return "medium";
+}
+
+export function priorityFromDifficulty(difficulty: Difficulty): number {
+  switch (difficulty) {
+    case "hard":
+      return 1;
+    case "easy":
+      return 4;
+    default:
+      return 3;
+  }
+}
+
+// ─── Due date chips ───
+
+export type DueChip = "today" | "tomorrow" | "week" | "custom";
+
+export const DUE_CHIPS: { value: DueChip; label: string }[] = [
+  { value: "today", label: "Today" },
+  { value: "tomorrow", label: "Tomorrow" },
+  { value: "week", label: "This Week" },
+  { value: "custom", label: "Custom" },
+];
+
+function toDateKey(d: Date): string {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+}
+
+function endOfWeek(now: Date): Date {
+  const daysUntilSunday = (7 - now.getDay()) % 7;
+  const end = new Date(now);
+  end.setDate(now.getDate() + daysUntilSunday);
+  end.setHours(0, 0, 0, 0);
+  return end;
+}
+
+export function dueDateForChip(
+  chip: "today" | "tomorrow" | "week",
+  now: Date = new Date(),
+): string {
+  const d = new Date(now);
+  switch (chip) {
+    case "today":
+      return toDateKey(d);
+    case "tomorrow":
+      d.setDate(d.getDate() + 1);
+      return toDateKey(d);
+    case "week":
+      return toDateKey(endOfWeek(now));
+  }
+}
+
+function dateKeyFromString(dateStr: string): string {
+  const match = /^(\d{4})-(\d{2})-(\d{2})/.exec(dateStr);
+  if (match) return `${match[1]}-${match[2]}-${match[3]}`;
+  return toDateKey(new Date(dateStr));
+}
+
+export function chipForDate(
+  dateStr: string | null | undefined,
+  now: Date = new Date(),
+): DueChip | null {
+  if (!dateStr) return null;
+  const key = dateKeyFromString(dateStr);
+  if (key === toDateKey(now)) return "today";
+  const tomorrow = new Date(now);
+  tomorrow.setDate(now.getDate() + 1);
+  if (key === toDateKey(tomorrow)) return "tomorrow";
+  const weekEnd = endOfWeek(now);
+  if (key >= toDateKey(now) && key <= toDateKey(weekEnd)) return "week";
+  return "custom";
+}
+
+export function formatDueDate(dateStr: string | null): string {
+  if (!dateStr) return "";
+  const chip = chipForDate(dateStr);
+  if (chip === "today") return "Today";
+  if (chip === "tomorrow") return "Tomorrow";
+  if (chip === "week") return "This Week";
+  const d = new Date(dateStr);
+  const months = [
+    "Jan", "Feb", "Mar", "Apr", "May", "Jun",
+    "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
+  ];
+  return `${months[d.getMonth()]} ${d.getDate()}`;
+}
+
+export function isOverdue(dateStr: string | null): boolean {
+  if (!dateStr) return false;
+  const due = new Date(dateStr);
+  const now = new Date();
+  now.setHours(0, 0, 0, 0);
+  return due.getTime() < now.getTime();
+}
+
+// ─── Course helpers ───
+
+export function courseMapFromList(courses: Course[]): Map<string, Course> {
+  const map = new Map<string, Course>();
+  for (const c of courses) map.set(c.id, c);
+  return map;
+}
+
+export function courseNameForItem(
+  courseId: string,
+  courseMap: Map<string, Course>,
+): string {
+  return courseMap.get(courseId)?.name ?? "Unknown";
+}
+
+export function courseColorForItem(
+  courseId: string,
+  courseMap: Map<string, Course>,
+): string {
+  return courseMap.get(courseId)?.color ?? "#6b7280";
 }

@@ -56,6 +56,50 @@ export interface StudyWindow {
   latest_end: string;
 }
 
+// ─── Backlog ───
+
+export interface BacklogItem {
+  id: string;
+  user_id: string;
+  course_id: string;
+  title: string;
+  description: string | null;
+  priority: number;
+  estimated_minutes: number | null;
+  due_date: string | null;
+  status: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface BacklogItemCreatePayload {
+  title: string;
+  course_id: string;
+  description?: string | null;
+  priority?: number;
+  estimated_minutes?: number | null;
+  due_date?: string | null;
+}
+
+export interface BacklogItemUpdatePayload {
+  title?: string;
+  course_id?: string;
+  description?: string | null;
+  priority?: number;
+  estimated_minutes?: number | null;
+  due_date?: string | null;
+  status?: string;
+}
+
+export interface Course {
+  id: string;
+  user_id: string;
+  name: string;
+  color: string;
+  created_at: string;
+  updated_at: string;
+}
+
 // ─── Planning ───
 
 export interface TimeBlock {
