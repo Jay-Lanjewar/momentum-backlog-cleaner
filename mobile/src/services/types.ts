@@ -139,6 +139,36 @@ export interface GoalUpdatePayload {
   status?: "active" | "achieved" | "abandoned";
 }
 
+// ─── Weekly Schedule ───
+
+export type BlockType =
+  | "school" | "coaching" | "homework" | "self_study" | "project"
+  | "robotics" | "competition" | "exercise" | "sports" | "music"
+  | "art" | "reading" | "travel" | "meal" | "break" | "sleep" | "custom";
+
+export interface WeeklyBlock {
+  type: BlockType;
+  start: string;
+  end: string;
+  title?: string;
+}
+
+export type DayName =
+  | "monday" | "tuesday" | "wednesday" | "thursday"
+  | "friday" | "saturday" | "sunday";
+
+export interface WeeklyScheduleData {
+  id: string;
+  user_id: string;
+  schedule: Partial<Record<DayName, WeeklyBlock[]>>;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface WeeklyScheduleUpdatePayload {
+  schedule: Partial<Record<DayName, WeeklyBlock[]>>;
+}
+
 // ─── Planning ───
 
 export interface TimeBlock {

@@ -395,7 +395,10 @@ describe("query invalidation consistency", () => {
 
   it("goal create/update/delete only invalidate goals", () => {
     const content = readFile("services/hooks.ts");
-    const goalsSection = content.slice(content.indexOf("// ─── Goals"));
+    const goalsStart = content.indexOf("// ─── Goals");
+    const scheduleStart = content.indexOf("// ─── Weekly Schedule");
+    // Extract only the Goals section (not the Schedule section below it)
+    const goalsSection = content.slice(goalsStart, scheduleStart);
     // Goal mutations should NOT invalidate backlog or dashboard
     expect(goalsSection).not.toContain('queryKey: ["backlog"]');
     expect(goalsSection).not.toContain('queryKey: ["dashboard"]');

@@ -14,6 +14,8 @@ import type {
   Goal,
   GoalCreatePayload,
   GoalUpdatePayload,
+  WeeklyScheduleData,
+  WeeklyScheduleUpdatePayload,
 } from "@/services/types";
 
 export function useDashboard() {
@@ -258,6 +260,42 @@ export function useDeleteGoal() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["goals"] });
+    },
+  });
+}
+
+// ─── Weekly Schedule ───
+
+export function useWeeklySchedule() {
+  return useQuery({
+    queryKey: ["schedule"],
+    queryFn: async () => {
+      const result = await api.get<WeeklyScheduleData>(
+        "/api/v1/profile/schedule",
+      );
+      if (result.error) throw new Error(result.error);
+      return result.data;
+    },
+    staleTime: 1000 * 60 * 5,
+    retry: 1,
+  });
+}
+
+export function useSaveWeeklySchedule() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (payload: WeeklyScheduleUpdatePayload) => {
+      const result = await api.put<WeeklyScheduleData>(
+        "/api/v1/profile/schedule",
+        payload,
+      );
+      if (result.error) throw new Error(result.error);
+      return result.data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["schedule"] });
+      queryClient.invalidateQueries({ queryKey: ["backlog"] });
+      queryClient.invalidateQueries({ queryKey: ["dashboard"] });
     },
   });
 }
