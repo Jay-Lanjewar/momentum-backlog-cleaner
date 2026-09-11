@@ -229,7 +229,7 @@ async def run_adaptive_completion(
     backlog_item.status = "completed"
     await db.flush()
 
-    # Record activity
+    # Record activity and update streaks on fresh completion
     if old_status != "completed":
         act = ActivityService(db)
         await act.record(
@@ -237,6 +237,11 @@ async def run_adaptive_completion(
             ActivityType.TASK_COMPLETED,
             {"item_id": str(backlog_item.id), "title": backlog_item.title},
         )
+
+        # Update momentum + subject streaks
+        from app.services.streak_service import StreakService
+        streak_svc = StreakService(db)
+        await streak_svc.update_streaks(user_id, [backlog_item.course_id])
 
     # 5. Record SessionCompletion
     await record_completion(

@@ -19,8 +19,9 @@ export function ProgressOverview({
   deadlineLabel,
   deadlineDate,
 }: ProgressOverviewProps) {
-  const tasksDone = completedTasks;
-  const tasksTotal = totalTasks;
+  const donePercent = totalTasks > 0
+    ? Math.round((completedTasks / totalTasks) * 100)
+    : 0;
 
   return (
     <View style={styles.card}>
@@ -30,8 +31,8 @@ export function ProgressOverview({
       <View style={styles.grid}>
         <View style={styles.gridRow}>
           <View style={styles.statBox}>
-            <Text style={styles.statValue}>{tasksDone}/{tasksTotal}</Text>
-            <Text style={styles.statLabel}>Tasks Done</Text>
+            <Text style={styles.statValue}>{donePercent}%</Text>
+            <Text style={styles.statLabel}>Completed</Text>
           </View>
           <View style={styles.statBox}>
             <Text style={styles.statValue}>{formatMinutes(studyMinutes)}</Text>

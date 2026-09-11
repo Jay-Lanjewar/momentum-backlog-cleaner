@@ -34,6 +34,9 @@ function healthLabel(score: string): string {
 export function BacklogHealthCard({ health }: BacklogHealthCardProps) {
   const color = healthColor(health.health_score);
   const clearRate = Math.round(health.clear_rate_7d * 100);
+  const donePercent = health.total_items > 0
+    ? Math.round((health.completed_items / health.total_items) * 100)
+    : 0;
 
   return (
     <View style={styles.card}>
@@ -77,7 +80,7 @@ export function BacklogHealthCard({ health }: BacklogHealthCardProps) {
         </View>
         <View style={styles.countDivider} />
         <View style={styles.countItem}>
-          <Text style={styles.countValue}>{health.completed_items}</Text>
+          <Text style={styles.countValue}>{donePercent}%</Text>
           <Text style={styles.countLabel}>Done</Text>
         </View>
       </View>

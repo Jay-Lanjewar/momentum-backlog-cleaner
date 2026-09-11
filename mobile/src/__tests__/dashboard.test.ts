@@ -175,9 +175,9 @@ describe("ProgressOverview", () => {
     expect(content).toContain("statBox");
   });
 
-  it("shows tasks done/total", () => {
-    expect(content).toContain("tasksDone");
-    expect(content).toContain("tasksTotal");
+  it("shows completed percentage", () => {
+    expect(content).toContain("donePercent");
+    expect(content).toContain("totalTasks");
   });
 
   it("shows study time", () => {

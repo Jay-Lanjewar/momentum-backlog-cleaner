@@ -22,7 +22,6 @@ import {
   getCurrentSession,
   getNextSession,
   getUpcomingSessions,
-  computeDailyProgress,
   type BacklogItemMap,
 } from "@/lib/coaching";
 import type { PlanSession, DashboardData } from "@/services/types";
@@ -120,17 +119,31 @@ export default function TodayMissionPage() {
     allSessions.every((s) => isSessionCompleted(s, backlogItemMap));
 
   const healthScore = data.planning.backlog_health.health_score;
-  const completedToday = computeDailyProgress(allSessions, backlogItemMap);
 
-  // Find deadline from prioritized backlog
+  // Study time: sum of completed sessions' durations (today only, matching web)
+  const studyMinutes = useMemo(() => {
+    return allSessions
+      .filter((s) => backlogItemMap.has(String(s.backlog_item_id)))
+      .reduce((sum, s) => {
+        const [sh, sm] = s.start_time.split(":").map(Number);
+        const [eh, em] = s.end_time.split(":").map(Number);
+        return sum + (eh * 60 + em - (sh * 60 + sm));
+      }, 0);
+  }, [allSessions, backlogItemMap]);
+
+  // Find deadline from today's planned sessions only (matching web)
   const nextDeadline = useMemo(() => {
-    const withDue = data.planning.prioritized_backlog
-      .filter((b) => b.due_date && !b.overdue)
+    const scheduledItems = allSessions
+      .map((s) => backlogItemMap.get(String(s.backlog_item_id)))
+      .filter(
+        (item): item is NonNullable<typeof item> =>
+          item !== undefined && !!item.due_date && !item.overdue,
+      )
       .sort((a, b) => (a.due_date ?? "").localeCompare(b.due_date ?? ""));
-    if (withDue.length === 0) return null;
-    const d = new Date(withDue[0].due_date!);
+    if (scheduledItems.length === 0) return null;
+    const d = new Date(scheduledItems[0].due_date!);
     return d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
-  }, [data.planning.prioritized_backlog]);
+  }, [allSessions, backlogItemMap]);
 
   return (
     <SafeAreaView style={styles.container}>
@@ -187,9 +200,9 @@ export default function TodayMissionPage() {
 
         {/* 3. Progress Overview */}
         <ProgressOverview
-          totalTasks={data.planning.prioritized_backlog.length}
+          totalTasks={data.planning.backlog_health.total_items}
           completedTasks={data.planning.backlog_health.completed_items}
-          studyMinutes={data.planning.total_available_minutes}
+          studyMinutes={studyMinutes}
           streak={data.streaks.momentum}
           deadlineLabel={nextDeadline ?? undefined}
         />
