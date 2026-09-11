@@ -100,6 +100,11 @@ export interface Course {
   updated_at: string;
 }
 
+export interface CourseCreatePayload {
+  name: string;
+  color?: string;
+}
+
 // ─── Planning ───
 
 export interface TimeBlock {

@@ -13,7 +13,7 @@ import DateTimePicker, {
   type DateTimePickerEvent,
 } from "@react-native-community/datetimepicker";
 
-import { useCourses } from "@/services/hooks";
+import { useCourses, useCreateCourse } from "@/services/hooks";
 import type { Course, BacklogItem } from "@/services/types";
 import {
   DIFFICULTIES,
@@ -26,6 +26,7 @@ import {
   type Difficulty,
   type DueChip,
 } from "@/lib/coaching";
+import { COURSE_COLORS } from "@/lib/onboarding";
 
 interface BacklogFormProps {
   initial?: BacklogItem;
@@ -48,6 +49,7 @@ export function BacklogForm({
   onSubmit,
 }: BacklogFormProps) {
   const { data: courses = [], isLoading: coursesLoading } = useCourses();
+  const createCourse = useCreateCourse();
 
   const [title, setTitle] = useState(initial?.title ?? "");
   const [courseId, setCourseId] = useState(initial?.course_id ?? "");
@@ -68,6 +70,9 @@ export function BacklogForm({
   );
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [showCoursePicker, setShowCoursePicker] = useState(false);
+  const [creatingCourse, setCreatingCourse] = useState(false);
+  const [newCourseName, setNewCourseName] = useState("");
+  const [newCourseColor, setNewCourseColor] = useState(COURSE_COLORS[0]);
 
   const trimmedTitle = title.trim();
   const valid = trimmedTitle.length > 0 && trimmedTitle.length <= 255 && !!courseId;
@@ -105,6 +110,23 @@ export function BacklogForm({
   }
 
   const selectedCourse = courses.find((c) => c.id === courseId);
+
+  async function handleCreateCourse() {
+    if (!newCourseName.trim() || createCourse.isPending) return;
+    try {
+      const course = await createCourse.mutateAsync({
+        name: newCourseName.trim(),
+        color: newCourseColor,
+      });
+      setCourseId(course.id);
+      setNewCourseName("");
+      setNewCourseColor(COURSE_COLORS[0]);
+      setCreatingCourse(false);
+      setShowCoursePicker(false);
+    } catch {
+      // error handled by mutation
+    }
+  }
 
   return (
     <ScrollView
@@ -148,35 +170,98 @@ export function BacklogForm({
 
       {showCoursePicker && (
         <View style={styles.courseList}>
-          {courses.length === 0 ? (
-            <Text style={styles.emptyCourseText}>
-              No subjects yet. Create subjects in Settings.
-            </Text>
+          {creatingCourse ? (
+            <View style={styles.createCourseForm}>
+              <TextInput
+                style={styles.input}
+                value={newCourseName}
+                onChangeText={setNewCourseName}
+                placeholder="Subject name"
+                placeholderTextColor="#64748B"
+                autoFocus
+                maxLength={255}
+              />
+              <View style={styles.colorPalette}>
+                {COURSE_COLORS.map((c) => (
+                  <TouchableOpacity
+                    key={c}
+                    style={[
+                      styles.colorCircle,
+                      { backgroundColor: c },
+                      newCourseColor === c && styles.colorCircleSelected,
+                    ]}
+                    onPress={() => setNewCourseColor(c)}
+                    activeOpacity={0.7}
+                  />
+                ))}
+              </View>
+              <View style={styles.createCourseActions}>
+                <TouchableOpacity
+                  style={styles.createCancelBtn}
+                  onPress={() => {
+                    setCreatingCourse(false);
+                    setNewCourseName("");
+                    setNewCourseColor(COURSE_COLORS[0]);
+                  }}
+                  activeOpacity={0.7}
+                >
+                  <Text style={styles.createCancelText}>Cancel</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[
+                    styles.createSubmitBtn,
+                    (!newCourseName.trim() || createCourse.isPending) &&
+                      styles.createSubmitDisabled,
+                  ]}
+                  onPress={handleCreateCourse}
+                  disabled={!newCourseName.trim() || createCourse.isPending}
+                  activeOpacity={0.8}
+                >
+                  {createCourse.isPending ? (
+                    <ActivityIndicator size="small" color="#FFF" />
+                  ) : (
+                    <Text style={styles.createSubmitText}>Create</Text>
+                  )}
+                </TouchableOpacity>
+              </View>
+            </View>
           ) : (
-            courses.map((c) => (
+            <>
+              {courses.length === 0 && (
+                <Text style={styles.emptyCourseText}>No subjects yet.</Text>
+              )}
+              {courses.map((c) => (
+                <TouchableOpacity
+                  key={c.id}
+                  style={[
+                    styles.courseOption,
+                    c.id === courseId && styles.courseOptionSelected,
+                  ]}
+                  onPress={() => {
+                    setCourseId(c.id);
+                    setShowCoursePicker(false);
+                  }}
+                  activeOpacity={0.7}
+                >
+                  <View style={[styles.courseDot, { backgroundColor: c.color }]} />
+                  <Text
+                    style={[
+                      styles.courseOptionText,
+                      c.id === courseId && styles.courseOptionTextSelected,
+                    ]}
+                  >
+                    {c.name}
+                  </Text>
+                </TouchableOpacity>
+              ))}
               <TouchableOpacity
-                key={c.id}
-                style={[
-                  styles.courseOption,
-                  c.id === courseId && styles.courseOptionSelected,
-                ]}
-                onPress={() => {
-                  setCourseId(c.id);
-                  setShowCoursePicker(false);
-                }}
+                style={styles.addSubjectButton}
+                onPress={() => setCreatingCourse(true)}
                 activeOpacity={0.7}
               >
-                <View style={[styles.courseDot, { backgroundColor: c.color }]} />
-                <Text
-                  style={[
-                    styles.courseOptionText,
-                    c.id === courseId && styles.courseOptionTextSelected,
-                  ]}
-                >
-                  {c.name}
-                </Text>
+                <Text style={styles.addSubjectText}>+ Add Subject</Text>
               </TouchableOpacity>
-            ))
+            </>
           )}
         </View>
       )}
@@ -364,6 +449,55 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     textAlign: "center",
   },
+  addSubjectButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderTopWidth: 1,
+    borderTopColor: "#334155",
+  },
+  addSubjectText: { fontSize: 14, color: "#3B82F6", fontWeight: "600" },
+  createCourseForm: {
+    padding: 12,
+    gap: 12,
+  },
+  colorPalette: {
+    flexDirection: "row",
+    gap: 8,
+    flexWrap: "wrap",
+  },
+  colorCircle: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+  },
+  colorCircleSelected: {
+    borderWidth: 3,
+    borderColor: "#F8FAFC",
+  },
+  createCourseActions: {
+    flexDirection: "row",
+    gap: 8,
+  },
+  createCancelBtn: {
+    flex: 1,
+    paddingVertical: 10,
+    borderRadius: 8,
+    alignItems: "center",
+    backgroundColor: "#334155",
+  },
+  createCancelText: { fontSize: 14, color: "#CBD5E1" },
+  createSubmitBtn: {
+    flex: 1,
+    paddingVertical: 10,
+    borderRadius: 8,
+    alignItems: "center",
+    backgroundColor: "#3B82F6",
+  },
+  createSubmitDisabled: { opacity: 0.5 },
+  createSubmitText: { fontSize: 14, color: "#FFF", fontWeight: "600" },
   segmentedRow: {
     flexDirection: "row",
     gap: 8,

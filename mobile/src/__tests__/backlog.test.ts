@@ -378,4 +378,157 @@ describe("BacklogItem type", () => {
       expect(content).toContain(field);
     }
   });
+
+  it("types.ts defines CourseCreatePayload", () => {
+    const content = fs.readFileSync(
+      path.join(SRC, "services/types.ts"),
+      "utf-8",
+    );
+    expect(content).toContain("CourseCreatePayload");
+    expect(content).toContain("name: string");
+  });
+});
+
+// ─── Inline course creation ───
+
+describe("inline course creation", () => {
+  it("hooks.ts has useCreateCourse mutation", () => {
+    const content = fs.readFileSync(
+      path.join(SRC, "services/hooks.ts"),
+      "utf-8",
+    );
+    expect(content).toContain("useCreateCourse");
+    expect(content).toContain("/api/v1/courses");
+    expect(content).toContain("CourseCreatePayload");
+  });
+
+  it("useCreateCourse invalidates courses query", () => {
+    const content = fs.readFileSync(
+      path.join(SRC, "services/hooks.ts"),
+      "utf-8",
+    );
+    const createCourseSection = content.slice(
+      content.indexOf("useCreateCourse"),
+    );
+    expect(createCourseSection).toContain('queryKey: ["courses"]');
+  });
+
+  it("BacklogForm imports useCreateCourse", () => {
+    const content = fs.readFileSync(
+      path.join(SRC, "components/BacklogForm.tsx"),
+      "utf-8",
+    );
+    expect(content).toContain("useCreateCourse");
+  });
+
+  it("BacklogForm has Add Subject button", () => {
+    const content = fs.readFileSync(
+      path.join(SRC, "components/BacklogForm.tsx"),
+      "utf-8",
+    );
+    expect(content).toContain("Add Subject");
+    expect(content).toContain("addSubjectButton");
+  });
+
+  it("BacklogForm has inline create form with color palette", () => {
+    const content = fs.readFileSync(
+      path.join(SRC, "components/BacklogForm.tsx"),
+      "utf-8",
+    );
+    expect(content).toContain("creatingCourse");
+    expect(content).toContain("newCourseName");
+    expect(content).toContain("newCourseColor");
+    expect(content).toContain("colorPalette");
+    expect(content).toContain("COURSE_COLORS");
+  });
+
+  it("BacklogForm auto-selects course after creation", () => {
+    const content = fs.readFileSync(
+      path.join(SRC, "components/BacklogForm.tsx"),
+      "utf-8",
+    );
+    expect(content).toContain("setCourseId(course.id)");
+  });
+
+  it("BacklogForm closes create form after success", () => {
+    const content = fs.readFileSync(
+      path.join(SRC, "components/BacklogForm.tsx"),
+      "utf-8",
+    );
+    expect(content).toContain("setCreatingCourse(false)");
+    expect(content).toContain("setShowCoursePicker(false)");
+  });
+
+  it("BacklogForm resets create form state on cancel", () => {
+    const content = fs.readFileSync(
+      path.join(SRC, "components/BacklogForm.tsx"),
+      "utf-8",
+    );
+    expect(content).toContain("setNewCourseName(\"\")");
+    expect(content).toContain("setNewCourseColor(COURSE_COLORS[0])");
+  });
+
+  it("BacklogForm disables create button when name empty or pending", () => {
+    const content = fs.readFileSync(
+      path.join(SRC, "components/BacklogForm.tsx"),
+      "utf-8",
+    );
+    expect(content).toContain("createSubmitDisabled");
+    expect(content).toContain("createCourse.isPending");
+  });
+});
+
+// ─── Delete action ───
+
+describe("delete action in edit screen", () => {
+  it("edit screen has delete button", () => {
+    const content = fs.readFileSync(
+      path.join(SRC, "app/(app)/(work)/[id].tsx"),
+      "utf-8",
+    );
+    expect(content).toContain("handleDelete");
+    expect(content).toContain("Delete");
+  });
+
+  it("delete uses Alert confirmation", () => {
+    const content = fs.readFileSync(
+      path.join(SRC, "app/(app)/(work)/[id].tsx"),
+      "utf-8",
+    );
+    expect(content).toContain("Alert.alert");
+    expect(content).toContain("Delete Task");
+  });
+
+  it("delete calls deleteItem.mutateAsync", () => {
+    const content = fs.readFileSync(
+      path.join(SRC, "app/(app)/(work)/[id].tsx"),
+      "utf-8",
+    );
+    expect(content).toContain("deleteItem.mutateAsync");
+  });
+
+  it("delete navigates back after success", () => {
+    const content = fs.readFileSync(
+      path.join(SRC, "app/(app)/(work)/[id].tsx"),
+      "utf-8",
+    );
+    expect(content).toContain("router.back()");
+  });
+
+  it("delete button has visible styling", () => {
+    const content = fs.readFileSync(
+      path.join(SRC, "app/(app)/(work)/[id].tsx"),
+      "utf-8",
+    );
+    expect(content).toContain("deleteButton");
+    expect(content).toContain("deleteText");
+  });
+
+  it("delete button shows loading state", () => {
+    const content = fs.readFileSync(
+      path.join(SRC, "app/(app)/(work)/[id].tsx"),
+      "utf-8",
+    );
+    expect(content).toContain("deleteItem.isPending");
+  });
 });

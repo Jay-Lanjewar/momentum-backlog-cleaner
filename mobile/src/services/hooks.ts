@@ -9,6 +9,7 @@ import type {
   BacklogItemCreatePayload,
   BacklogItemUpdatePayload,
   Course,
+  CourseCreatePayload,
 } from "@/services/types";
 
 export function useDashboard() {
@@ -135,5 +136,19 @@ export function useCourses() {
     },
     staleTime: 1000 * 60 * 5,
     retry: 1,
+  });
+}
+
+export function useCreateCourse() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (payload: CourseCreatePayload) => {
+      const result = await api.post<Course>("/api/v1/courses", payload);
+      if (result.error) throw new Error(result.error);
+      return result.data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["courses"] });
+    },
   });
 }

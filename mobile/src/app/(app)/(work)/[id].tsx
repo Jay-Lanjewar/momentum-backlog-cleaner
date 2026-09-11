@@ -104,12 +104,14 @@ export default function BacklogEditScreen() {
         <Text style={styles.headerTitle}>Edit Task</Text>
         <TouchableOpacity
           onPress={handleDelete}
-          style={styles.headerButton}
+          style={styles.deleteButton}
           disabled={deleteItem.isPending}
         >
-          <Text style={styles.deleteText}>
-            {deleteItem.isPending ? "..." : "\uD83D\uDDD1"}
-          </Text>
+          {deleteItem.isPending ? (
+            <ActivityIndicator size="small" color="#EF4444" />
+          ) : (
+            <Text style={styles.deleteText}>Delete</Text>
+          )}
         </TouchableOpacity>
       </View>
 
@@ -178,7 +180,13 @@ const styles = StyleSheet.create({
   headerButton: { padding: 4 },
   headerBack: { fontSize: 16, color: "#3B82F6" },
   headerTitle: { fontSize: 17, fontWeight: "600", color: "#F8FAFC" },
-  deleteText: { fontSize: 20 },
+  deleteButton: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 8,
+    backgroundColor: "rgba(239,68,68,0.15)",
+  },
+  deleteText: { fontSize: 14, color: "#EF4444", fontWeight: "600" },
   errorBar: {
     backgroundColor: "rgba(239,68,68,0.15)",
     paddingHorizontal: 20,
