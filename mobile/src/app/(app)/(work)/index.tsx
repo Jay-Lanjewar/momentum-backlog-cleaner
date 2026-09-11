@@ -190,10 +190,10 @@ export default function BacklogScreen() {
   const empty = EMPTY_MESSAGES[activeTab];
 
   return (
-    <SafeAreaView style={styles.container} edges={["bottom"]}>
+    <SafeAreaView style={styles.container} edges={["top"]}>
       {/* Header */}
       <View style={styles.header}>
-        <View>
+        <View style={styles.headerLeft}>
           <Text style={styles.headerTitle}>Pending Work</Text>
           <Text style={styles.headerSubtitle}>
             Momentum turns these into study sessions automatically.
@@ -204,7 +204,7 @@ export default function BacklogScreen() {
           onPress={() => setShowCreate(true)}
           activeOpacity={0.8}
         >
-          <Text style={styles.addButtonText}>+ Add</Text>
+          <Text style={styles.addButtonText}>+ Add Work</Text>
         </TouchableOpacity>
       </View>
 
@@ -306,120 +306,121 @@ const styles = StyleSheet.create({
   header: {
     flexDirection: "row",
     justifyContent: "space-between",
-    alignItems: "flex-start",
+    alignItems: "center",
     paddingHorizontal: 20,
-    paddingTop: 12,
-    paddingBottom: 16,
+    paddingTop: 10,
+    paddingBottom: 12,
   },
-  headerTitle: { fontSize: 24, fontWeight: "700", color: "#F8FAFC" },
-  headerSubtitle: { fontSize: 13, color: "#64748B", marginTop: 2 },
+  headerLeft: { flex: 1, marginRight: 12 },
+  headerTitle: { fontSize: 20, fontWeight: "700", color: "#F8FAFC" },
+  headerSubtitle: { fontSize: 12, color: "#64748B", marginTop: 2 },
   addButton: {
     backgroundColor: "#3B82F6",
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-    borderRadius: 10,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 8,
   },
-  addButtonText: { color: "#FFF", fontSize: 14, fontWeight: "600" },
+  addButtonText: { color: "#FFF", fontSize: 13, fontWeight: "600" },
 
   // Tabs
   tabBar: {
     flexDirection: "row",
     marginHorizontal: 20,
-    marginBottom: 12,
+    marginBottom: 10,
     backgroundColor: "#1E293B",
-    borderRadius: 12,
-    padding: 4,
+    borderRadius: 10,
+    padding: 3,
   },
   tab: {
     flex: 1,
-    paddingVertical: 8,
-    borderRadius: 10,
+    paddingVertical: 6,
+    borderRadius: 8,
     alignItems: "center",
   },
   tabActive: { backgroundColor: "#334155" },
-  tabText: { fontSize: 14, color: "#64748B" },
+  tabText: { fontSize: 13, color: "#64748B" },
   tabTextActive: { color: "#F8FAFC", fontWeight: "600" },
 
   // List
   listContent: { paddingHorizontal: 20, paddingBottom: 80 },
-  separator: { height: 8 },
+  separator: { height: 6 },
 
   // Card
   card: {
     flexDirection: "row",
     backgroundColor: "#1E293B",
-    borderRadius: 14,
-    padding: 16,
+    borderRadius: 12,
+    padding: 12,
     borderWidth: 1,
     borderColor: "#334155",
   },
-  cardCompleted: { opacity: 0.6 },
-  completionCircle: { marginRight: 14, paddingTop: 2 },
+  cardCompleted: { opacity: 0.7 },
+  completionCircle: { marginRight: 12, paddingTop: 1 },
   circleEmpty: {
-    width: 24,
-    height: 24,
-    borderRadius: 12,
+    width: 22,
+    height: 22,
+    borderRadius: 11,
     borderWidth: 2,
     borderColor: "#475569",
   },
   circleFilled: {
-    width: 24,
-    height: 24,
-    borderRadius: 12,
+    width: 22,
+    height: 22,
+    borderRadius: 11,
     backgroundColor: "#22C55E",
     alignItems: "center",
     justifyContent: "center",
   },
-  checkmark: { color: "#FFF", fontSize: 14, fontWeight: "700" },
+  checkmark: { color: "#FFF", fontSize: 12, fontWeight: "700" },
   cardContent: { flex: 1 },
   cardTitle: {
-    fontSize: 16,
-    fontWeight: "500",
+    fontSize: 15,
+    fontWeight: "600",
     color: "#F8FAFC",
-    marginBottom: 8,
+    marginBottom: 4,
   },
   cardTitleCompleted: {
     textDecorationLine: "line-through",
-    color: "#64748B",
+    color: "#94A3B8",
   },
-  cardMeta: { flexDirection: "row", gap: 8, marginBottom: 8, flexWrap: "wrap" },
+  cardMeta: { flexDirection: "row", gap: 6, marginBottom: 4, flexWrap: "wrap" },
   badge: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 5,
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 6,
+    gap: 4,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 4,
     borderWidth: 1,
   },
-  badgeDot: { width: 6, height: 6, borderRadius: 3 },
-  badgeText: { fontSize: 12, fontWeight: "500" },
-  cardBottom: { flexDirection: "row", gap: 12 },
-  dueText: { fontSize: 12, color: "#94A3B8" },
+  badgeDot: { width: 5, height: 5, borderRadius: 3 },
+  badgeText: { fontSize: 11, fontWeight: "500" },
+  cardBottom: { flexDirection: "row", gap: 10 },
+  dueText: { fontSize: 11, color: "#94A3B8" },
   dueOverdue: { color: "#EF4444", fontWeight: "600" },
-  estText: { fontSize: 12, color: "#94A3B8" },
+  estText: { fontSize: 11, color: "#64748B" },
 
   // Loading
   loadingContainer: { paddingHorizontal: 20, paddingTop: 8 },
   skeletonCard: {
     flexDirection: "row",
     backgroundColor: "#1E293B",
-    borderRadius: 14,
-    padding: 16,
-    marginBottom: 8,
+    borderRadius: 12,
+    padding: 12,
+    marginBottom: 6,
   },
   skeletonCircle: {
-    width: 24,
-    height: 24,
-    borderRadius: 12,
+    width: 22,
+    height: 22,
+    borderRadius: 11,
     backgroundColor: "#334155",
-    marginRight: 14,
+    marginRight: 12,
   },
-  skeletonContent: { flex: 1, gap: 8 },
+  skeletonContent: { flex: 1, gap: 6 },
   skeletonLine: {
-    height: 14,
+    height: 12,
     backgroundColor: "#334155",
-    borderRadius: 6,
+    borderRadius: 4,
     width: "80%",
   },
 
@@ -431,26 +432,26 @@ const styles = StyleSheet.create({
     paddingHorizontal: 32,
   },
   emptyTitle: {
-    fontSize: 20,
+    fontSize: 18,
     fontWeight: "600",
     color: "#F8FAFC",
-    marginBottom: 8,
+    marginBottom: 6,
     textAlign: "center",
   },
   emptyBody: {
-    fontSize: 14,
+    fontSize: 13,
     color: "#64748B",
     textAlign: "center",
-    lineHeight: 20,
-    marginBottom: 24,
+    lineHeight: 18,
+    marginBottom: 20,
   },
   emptyButton: {
     backgroundColor: "#3B82F6",
-    paddingHorizontal: 20,
-    paddingVertical: 12,
-    borderRadius: 10,
+    paddingHorizontal: 18,
+    paddingVertical: 10,
+    borderRadius: 8,
   },
-  emptyButtonText: { color: "#FFF", fontSize: 14, fontWeight: "600" },
+  emptyButtonText: { color: "#FFF", fontSize: 13, fontWeight: "600" },
 
   // Modal
   modalContainer: { flex: 1, backgroundColor: "#0F172A" },
@@ -459,7 +460,7 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     alignItems: "center",
     paddingHorizontal: 20,
-    paddingVertical: 16,
+    paddingVertical: 14,
     borderBottomWidth: 1,
     borderBottomColor: "#1E293B",
   },
