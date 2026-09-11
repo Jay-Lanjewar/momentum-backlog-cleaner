@@ -10,6 +10,10 @@ import type {
   BacklogItemUpdatePayload,
   Course,
   CourseCreatePayload,
+  CourseUpdatePayload,
+  Goal,
+  GoalCreatePayload,
+  GoalUpdatePayload,
 } from "@/services/types";
 
 export function useDashboard() {
@@ -149,6 +153,111 @@ export function useCreateCourse() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["courses"] });
+    },
+  });
+}
+
+export function useUpdateCourse() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({
+      id,
+      payload,
+    }: {
+      id: string;
+      payload: CourseUpdatePayload;
+    }) => {
+      const result = await api.put<Course>(
+        `/api/v1/courses/${id}`,
+        payload,
+      );
+      if (result.error) throw new Error(result.error);
+      return result.data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["courses"] });
+      queryClient.invalidateQueries({ queryKey: ["backlog"] });
+    },
+  });
+}
+
+export function useDeleteCourse() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (id: string) => {
+      const result = await api.delete<null>(`/api/v1/courses/${id}`);
+      if (result.error) throw new Error(result.error);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["courses"] });
+      queryClient.invalidateQueries({ queryKey: ["backlog"] });
+      queryClient.invalidateQueries({ queryKey: ["dashboard"] });
+    },
+  });
+}
+
+// ─── Goals ───
+
+export function useGoals(status?: string) {
+  return useQuery({
+    queryKey: ["goals", status ?? "all"],
+    queryFn: async () => {
+      const params = status ? `?status=${status}` : "";
+      const result = await api.get<Goal[]>(`/api/v1/goals${params}`);
+      if (result.error) throw new Error(result.error);
+      return result.data;
+    },
+    staleTime: 1000 * 30,
+    retry: 1,
+  });
+}
+
+export function useCreateGoal() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (payload: GoalCreatePayload) => {
+      const result = await api.post<Goal>("/api/v1/goals", payload);
+      if (result.error) throw new Error(result.error);
+      return result.data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["goals"] });
+    },
+  });
+}
+
+export function useUpdateGoal() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({
+      id,
+      payload,
+    }: {
+      id: string;
+      payload: GoalUpdatePayload;
+    }) => {
+      const result = await api.put<Goal>(
+        `/api/v1/goals/${id}`,
+        payload,
+      );
+      if (result.error) throw new Error(result.error);
+      return result.data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["goals"] });
+    },
+  });
+}
+
+export function useDeleteGoal() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (id: string) => {
+      const result = await api.delete<null>(`/api/v1/goals/${id}`);
+      if (result.error) throw new Error(result.error);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["goals"] });
     },
   });
 }

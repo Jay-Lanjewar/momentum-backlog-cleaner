@@ -24,6 +24,12 @@ import {
   type Difficulty,
 } from "@/lib/coaching";
 
+const SECTION_TABS = [
+  { value: "backlog", label: "Backlog" },
+  { value: "courses", label: "Courses" },
+  { value: "goals", label: "Goals" },
+] as const;
+
 const TABS = [
   { value: "all", label: "All" },
   { value: "upcoming", label: "Upcoming" },
@@ -194,7 +200,7 @@ export default function BacklogScreen() {
       {/* Header */}
       <View style={styles.header}>
         <View style={styles.headerLeft}>
-          <Text style={styles.headerTitle}>Pending Work</Text>
+          <Text style={styles.headerTitle}>Work</Text>
           <Text style={styles.headerSubtitle}>
             Momentum turns these into study sessions automatically.
           </Text>
@@ -206,6 +212,33 @@ export default function BacklogScreen() {
         >
           <Text style={styles.addButtonText}>+ Add Work</Text>
         </TouchableOpacity>
+      </View>
+
+      {/* Section Nav */}
+      <View style={styles.sectionNav}>
+        {SECTION_TABS.map((tab) => (
+          <TouchableOpacity
+            key={tab.value}
+            style={[
+              styles.sectionTab,
+              tab.value === "backlog" && styles.sectionTabActive,
+            ]}
+            onPress={() => {
+              if (tab.value === "courses") router.push("/(app)/(work)/courses");
+              else if (tab.value === "goals") router.push("/(app)/(work)/goals");
+            }}
+            activeOpacity={0.7}
+          >
+            <Text
+              style={[
+                styles.sectionTabText,
+                tab.value === "backlog" && styles.sectionTabTextActive,
+              ]}
+            >
+              {tab.label}
+            </Text>
+          </TouchableOpacity>
+        ))}
       </View>
 
       {/* Tabs */}
@@ -321,6 +354,23 @@ const styles = StyleSheet.create({
     borderRadius: 8,
   },
   addButtonText: { color: "#FFF", fontSize: 13, fontWeight: "600" },
+
+  // Section Nav
+  sectionNav: {
+    flexDirection: "row",
+    marginHorizontal: 20,
+    marginBottom: 10,
+    gap: 4,
+  },
+  sectionTab: {
+    paddingHorizontal: 14,
+    paddingVertical: 6,
+    borderRadius: 8,
+    backgroundColor: "#1E293B",
+  },
+  sectionTabActive: { backgroundColor: "#334155" },
+  sectionTabText: { fontSize: 13, color: "#64748B" },
+  sectionTabTextActive: { color: "#F8FAFC", fontWeight: "600" },
 
   // Tabs
   tabBar: {

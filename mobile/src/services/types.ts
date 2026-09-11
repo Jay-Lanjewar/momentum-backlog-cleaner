@@ -105,6 +105,40 @@ export interface CourseCreatePayload {
   color?: string;
 }
 
+export interface CourseUpdatePayload {
+  name?: string;
+  color?: string;
+}
+
+// ─── Goals ───
+
+export interface Goal {
+  id: string;
+  user_id: string;
+  title: string;
+  description: string | null;
+  target_date: string | null;
+  status: string;
+  category: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface GoalCreatePayload {
+  title: string;
+  description?: string | null;
+  target_date?: string | null;
+  category?: string | null;
+}
+
+export interface GoalUpdatePayload {
+  title?: string;
+  description?: string | null;
+  target_date?: string | null;
+  category?: string | null;
+  status?: "active" | "achieved" | "abandoned";
+}
+
 // ─── Planning ───
 
 export interface TimeBlock {
