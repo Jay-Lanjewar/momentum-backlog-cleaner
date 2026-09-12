@@ -121,7 +121,7 @@ export default function TodayMissionPage() {
   const healthScore = data.planning.backlog_health.health_score;
 
   // Study time: actual completed minutes from SessionCompletion (authoritative source)
-  const studyMinutes = data.today_completed_minutes;
+  const studyMinutes = data.today_completed_minutes ?? 0;
 
   // Find deadline from today's planned sessions only (matching web)
   const nextDeadline = useMemo(() => {

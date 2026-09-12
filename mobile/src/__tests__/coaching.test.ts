@@ -19,16 +19,32 @@ import {
 import type { PlanSession } from "../services/types";
 
 describe("formatMinutes", () => {
-  it("formats minutes only", () => {
+  it("formats 0 minutes", () => {
+    expect(formatMinutes(0)).toBe("0m");
+  });
+
+  it("formats minutes only (< 60)", () => {
+    expect(formatMinutes(5)).toBe("5m");
+  });
+
+  it("formats minutes only at boundary", () => {
     expect(formatMinutes(45)).toBe("45m");
   });
 
-  it("formats hours only", () => {
-    expect(formatMinutes(120)).toBe("2h");
+  it("formats exactly 60 as 1h", () => {
+    expect(formatMinutes(60)).toBe("1h");
   });
 
-  it("formats hours and minutes", () => {
+  it("formats 90 as 1h 30m", () => {
     expect(formatMinutes(90)).toBe("1h 30m");
+  });
+
+  it("formats 125 as 2h 5m", () => {
+    expect(formatMinutes(125)).toBe("2h 5m");
+  });
+
+  it("formats hours only when exact", () => {
+    expect(formatMinutes(120)).toBe("2h");
   });
 });
 
