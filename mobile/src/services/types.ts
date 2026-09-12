@@ -305,4 +305,5 @@ export interface DashboardData {
   insight: InsightData;
   planning: PlanningPreview;
   plan: PlanGenerateResponse;
+  today_completed_minutes: number;
 }

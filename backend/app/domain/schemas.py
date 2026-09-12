@@ -391,6 +391,7 @@ class DashboardResponse(BaseModel):
     insight: InsightResponse
     planning: PlanningPreviewResponse
     plan: PlanGenerateResponse
+    today_completed_minutes: int = 0
 
 
 # ─── Friend Schemas ───

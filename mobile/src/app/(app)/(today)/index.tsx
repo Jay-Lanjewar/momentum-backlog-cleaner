@@ -120,16 +120,8 @@ export default function TodayMissionPage() {
 
   const healthScore = data.planning.backlog_health.health_score;
 
-  // Study time: sum of completed sessions' durations (today only, matching web)
-  const studyMinutes = useMemo(() => {
-    return allSessions
-      .filter((s) => backlogItemMap.has(String(s.backlog_item_id)))
-      .reduce((sum, s) => {
-        const [sh, sm] = s.start_time.split(":").map(Number);
-        const [eh, em] = s.end_time.split(":").map(Number);
-        return sum + (eh * 60 + em - (sh * 60 + sm));
-      }, 0);
-  }, [allSessions, backlogItemMap]);
+  // Study time: actual completed minutes from SessionCompletion (authoritative source)
+  const studyMinutes = data.today_completed_minutes;
 
   // Find deadline from today's planned sessions only (matching web)
   const nextDeadline = useMemo(() => {

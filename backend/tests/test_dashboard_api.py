@@ -253,6 +253,8 @@ class TestDashboardEndpoint:
         assert "insight" in data
         assert "planning" in data
         assert "plan" in data
+        assert "today_completed_minutes" in data
+        assert isinstance(data["today_completed_minutes"], int)
         assert "sessions" in data["plan"]["plan"]
         assert "daily_message" in data["plan"]["plan"]
         assert "overflow" in data["plan"]["plan"]
@@ -358,7 +360,7 @@ class TestDashboardEndpoint:
         app.dependency_overrides.clear()
 
         assert response.status_code == 200
-        assert mock_db.execute.call_count == 4
+        assert mock_db.execute.call_count == 5
         mock_snapshot.assert_called_once()
 
     def test_dashboard_deduplicates_courses(self, app, mock_db, mock_user):

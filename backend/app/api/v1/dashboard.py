@@ -13,6 +13,8 @@ from app.domain.models import (
     BacklogItem,
     Course,
     Goal,
+    PlanSnapshot,
+    SessionCompletion,
     SubjectStreak,
     User,
 )
@@ -163,6 +165,18 @@ async def get_dashboard(
         courses_by_id=courses_by_id,
     )
 
+    today_start = datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0)
+    completions_result = await db.execute(
+        select(SessionCompletion).where(
+            SessionCompletion.plan_snapshot_id == PlanSnapshot.id,
+            PlanSnapshot.user_id == user_id,
+            SessionCompletion.created_at >= today_start,
+        )
+    )
+    today_completed_minutes = sum(
+        c.actual_minutes for c in completions_result.scalars().all()
+    )
+
     return DashboardResponse(
         profile=StudentProfileResponse.model_validate(profile) if profile else None,
         streaks=StreakAllResponse.model_validate(streaks),
@@ -170,4 +184,5 @@ async def get_dashboard(
         insight=InsightResponse(**insight),
         planning=planning,
         plan=plan,
+        today_completed_minutes=today_completed_minutes,
     )
