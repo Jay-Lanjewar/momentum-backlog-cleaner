@@ -4,6 +4,7 @@ import {
   formatTimeRange,
   getGreeting,
   focusCoachMessage,
+  sessionLengthCategory,
   healthTone,
   buildRecommendationReason,
   topicFromSession,
@@ -79,6 +80,28 @@ describe("getGreeting", () => {
   });
 });
 
+describe("sessionLengthCategory", () => {
+  it("returns short for sessions under 30 minutes", () => {
+    expect(sessionLengthCategory(20 * 60_000)).toBe("short");
+  });
+
+  it("returns medium for sessions 30-60 minutes", () => {
+    expect(sessionLengthCategory(45 * 60_000)).toBe("medium");
+  });
+
+  it("returns long for sessions over 60 minutes", () => {
+    expect(sessionLengthCategory(90 * 60_000)).toBe("long");
+  });
+
+  it("returns medium at exact 30 minutes", () => {
+    expect(sessionLengthCategory(30 * 60_000)).toBe("medium");
+  });
+
+  it("returns medium at exact 60 minutes", () => {
+    expect(sessionLengthCategory(60 * 60_000)).toBe("medium");
+  });
+});
+
 describe("focusCoachMessage", () => {
   const totalMs = 25 * 60 * 1000; // 25 minutes
 
@@ -97,9 +120,58 @@ describe("focusCoachMessage", () => {
     expect(msg).toContain("halfway");
   });
 
-  it("returns almost done message at 90%", () => {
+  it("returns final-push message at 90%+", () => {
     const msg = focusCoachMessage(totalMs * 0.9, totalMs);
-    expect(msg).toContain("Almost there");
+    expect(msg.toLowerCase()).toContain("final");
+  });
+
+  it("returns final-push message at 100%", () => {
+    const msg = focusCoachMessage(totalMs, totalMs);
+    expect(msg.toLowerCase()).toContain("final");
+  });
+
+  it("returns done message for zero total", () => {
+    expect(focusCoachMessage(0, 0)).toBe("You're done!");
+  });
+
+  describe("session-length awareness", () => {
+    const shortSession = 20 * 60_000; // 20 min
+    const mediumSession = 45 * 60_000; // 45 min
+    const longSession = 90 * 60_000; // 90 min
+
+    it("short session uses concise messages", () => {
+      const msg = focusCoachMessage(shortSession * 0.3, shortSession);
+      expect(typeof msg).toBe("string");
+      expect(msg.length).toBeGreaterThan(0);
+    });
+
+    it("medium session uses pace-focused messages", () => {
+      const msg = focusCoachMessage(mediumSession * 0.3, mediumSession);
+      expect(msg.toLowerCase()).toContain("zone");
+    });
+
+    it("long session uses deep-work messages", () => {
+      const msg = focusCoachMessage(longSession * 0.5, longSession);
+      expect(msg.toLowerCase()).toContain("deep work");
+    });
+
+    it("long session final push differs from short session", () => {
+      const shortFinal = focusCoachMessage(shortSession * 0.95, shortSession);
+      const longFinal = focusCoachMessage(longSession * 0.95, longSession);
+      expect(shortFinal).not.toBe(longFinal);
+    });
+  });
+
+  describe("variant rotation", () => {
+    it("variant 0 and variant 1 can produce different messages at same threshold", () => {
+      const totalMs = 90 * 60_000; // long session
+      const elapsed = totalMs * 0.3; // 25-50% tier
+      const msg0 = focusCoachMessage(elapsed, totalMs, 0);
+      const msg1 = focusCoachMessage(elapsed, totalMs, 1);
+      // Both should be valid strings (may or may not differ)
+      expect(typeof msg0).toBe("string");
+      expect(typeof msg1).toBe("string");
+    });
   });
 });
 

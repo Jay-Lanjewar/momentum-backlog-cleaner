@@ -109,13 +109,58 @@ export function getGreeting(name: string | null): string {
   return name ? `${timeGreeting}, ${name}` : timeGreeting;
 }
 
-export function focusCoachMessage(elapsedMs: number, totalMs: number): string {
+export type SessionLength = "short" | "medium" | "long";
+
+export function sessionLengthCategory(totalMs: number): SessionLength {
+  const totalMin = totalMs / 60_000;
+  if (totalMin < 30) return "short";
+  if (totalMin <= 60) return "medium";
+  return "long";
+}
+
+const COACH_MESSAGES: Record<SessionLength, string[]> = {
+  short: [
+    "Great start. Settle in and find your rhythm.",
+    "You're building momentum. Keep going.",
+    "Over halfway there. You're doing well.",
+    "Almost there. Finish strong.",
+  ],
+  medium: [
+    "Great start. Settle in and find your rhythm.",
+    "You're in the zone. Keep this pace.",
+    "Over halfway there. You're doing well.",
+    "Almost there. Finish strong.",
+  ],
+  long: [
+    "Great start. Settle in and find your rhythm.",
+    "You're building momentum. Steady pace wins.",
+    "Deep work now. You're doing well.",
+    "Almost there. Finish strong.",
+  ],
+};
+
+const FINAL_PUSH_MESSAGES: Record<SessionLength, string> = {
+  short: "Final stretch — you're nearly done.",
+  medium: "Last push — you're almost across the finish line.",
+  long: "Final minutes — you've earned this finish.",
+};
+
+export function focusCoachMessage(
+  elapsedMs: number,
+  totalMs: number,
+  variant: number = 0,
+): string {
   if (totalMs <= 0) return "You're done!";
   const pct = elapsedMs / totalMs;
-  if (pct < 0.25) return "Great start. Settle in and find your rhythm.";
-  if (pct < 0.5) return "You're building momentum. Keep going.";
-  if (pct < 0.75) return "Over halfway there. You're doing well.";
-  return "Almost there. Finish strong.";
+  const category = sessionLengthCategory(totalMs);
+  const msgs = COACH_MESSAGES[category];
+
+  if (pct >= 0.9) return FINAL_PUSH_MESSAGES[category];
+
+  const idx =
+    pct < 0.25 ? 0 : pct < 0.5 ? 1 : pct < 0.75 ? 2 : 3;
+  const v = variant % msgs.length;
+  return msgs[(idx + v) % msgs.length];
 }
 
 export function healthTone(
