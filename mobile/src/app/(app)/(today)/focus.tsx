@@ -7,10 +7,12 @@ import {
   StyleSheet,
   Alert,
   BackHandler,
+  Animated,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useKeepAwake } from "expo-keep-awake";
+import Svg, { Circle } from "react-native-svg";
 
 import { useFocusLock } from "@/hooks/useFocusLock";
 import { useCompleteSession } from "@/services/hooks";
@@ -36,6 +38,8 @@ function parseDurationMs(start: string, end: string): number {
   const [eh, em] = end.split(":").map(Number);
   return (eh * 60 + em - (sh * 60 + sm)) * 60 * 1000;
 }
+
+const AnimatedCircle = Animated.createAnimatedComponent(Circle);
 
 function formatCountdown(ms: number): string {
   const totalSec = Math.max(0, Math.ceil(ms / 1000));
@@ -71,6 +75,7 @@ export default function FocusModeScreen() {
   const [adaptiveResult, setAdaptiveResult] =
     useState<AdaptivePlanResponse | null>(null);
   const completingRef = useRef(false);
+  const animatedProgress = useRef(new Animated.Value(0)).current;
 
   useKeepAwake("focus-session");
 
@@ -376,8 +381,23 @@ export default function FocusModeScreen() {
     totalDurationMs > 0
       ? Math.min(focusedElapsedMs / totalDurationMs, 1)
       : 0;
-  const circumference = 2 * Math.PI * 120;
-  const strokeDashoffset = circumference * (1 - progress);
+
+  useEffect(() => {
+    Animated.timing(animatedProgress, {
+      toValue: progress,
+      duration: 300,
+      useNativeDriver: false,
+    }).start();
+  }, [progress]);
+
+  const RING_RADIUS = 112;
+  const RING_STROKE = 8;
+  const RING_SIZE = 260;
+  const circumference = 2 * Math.PI * RING_RADIUS;
+  const strokeDashoffset = animatedProgress.interpolate({
+    inputRange: [0, 1],
+    outputRange: [circumference, 0],
+  });
 
   return (
     <View style={styles.container}>
@@ -399,9 +419,34 @@ export default function FocusModeScreen() {
       {/* Timer ring */}
       <View style={styles.timerContainer}>
         <View style={styles.timerRing}>
-          {/* Background circle */}
-          <View style={[styles.circle, styles.circleBg]} />
-          {/* Progress indicator via border */}
+          <Svg
+            width={RING_SIZE}
+            height={RING_SIZE}
+            viewBox={`0 0 ${RING_SIZE} ${RING_SIZE}`}
+            style={{ transform: [{ rotate: "-90deg" }] }}
+          >
+            {/* Track */}
+            <Circle
+              cx={RING_SIZE / 2}
+              cy={RING_SIZE / 2}
+              r={RING_RADIUS}
+              stroke="#1E293B"
+              strokeWidth={RING_STROKE}
+              fill="none"
+            />
+            {/* Progress */}
+            <AnimatedCircle
+              cx={RING_SIZE / 2}
+              cy={RING_SIZE / 2}
+              r={RING_RADIUS}
+              stroke="#3B82F6"
+              strokeWidth={RING_STROKE}
+              fill="none"
+              strokeLinecap="round"
+              strokeDasharray={circumference}
+              strokeDashoffset={strokeDashoffset}
+            />
+          </Svg>
           <View style={styles.timerInner}>
             <Text style={styles.timerText}>
               {formatCountdown(remainingMs)}
@@ -787,16 +832,6 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     alignItems: "center",
     position: "relative",
-  },
-  circle: {
-    position: "absolute",
-    width: 240,
-    height: 240,
-    borderRadius: 120,
-    borderWidth: 6,
-  },
-  circleBg: {
-    borderColor: "#1E293B",
   },
   timerInner: {
     alignItems: "center",
