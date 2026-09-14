@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo } from "react";
+import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import {
   View,
   Text,
@@ -69,6 +69,7 @@ export default function FocusModeScreen() {
   const completeSession = useCompleteSession();
   const [adaptiveResult, setAdaptiveResult] =
     useState<AdaptivePlanResponse | null>(null);
+  const completingRef = useRef(false);
 
   useKeepAwake("focus-session");
 
@@ -101,6 +102,8 @@ export default function FocusModeScreen() {
   }, [phase, complete, router]);
 
   const handleComplete = useCallback(() => {
+    if (completingRef.current || completeSession.isPending) return;
+    completingRef.current = true;
     complete();
     const actualMinutes = Math.max(
       1,
@@ -116,6 +119,7 @@ export default function FocusModeScreen() {
           setAdaptiveResult(data);
         },
         onError: (error) => {
+          completingRef.current = false;
           Alert.alert("Error", error.message);
         },
       },
