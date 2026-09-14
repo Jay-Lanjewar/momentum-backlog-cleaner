@@ -26,7 +26,7 @@ import {
   nextSessionAfter,
   parseTimeToMinutes,
 } from "@/lib/coaching";
-import type { AdaptivePlanResponse, PlanChange } from "@/services/types";
+import type { AdaptivePlanResponse } from "@/services/types";
 import {
   AdaptiveTimelineBar,
   computeTimelineBounds,
@@ -76,7 +76,7 @@ export default function FocusModeScreen() {
   const [adaptiveResult, setAdaptiveResult] =
     useState<AdaptivePlanResponse | null>(null);
   const completingRef = useRef(false);
-  const animatedProgress = useRef(new Animated.Value(0)).current;
+  const [animatedProgress] = useState(() => new Animated.Value(0));
 
   useKeepAwake("focus-session");
 
@@ -177,6 +177,29 @@ export default function FocusModeScreen() {
     () => computeTimelineBounds(previousSessions, currentSessions),
     [previousSessions, currentSessions],
   );
+
+  // ─── Progress ring animation (must be before early returns) ───
+  const progress =
+    totalDurationMs > 0
+      ? Math.min(focusedElapsedMs / totalDurationMs, 1)
+      : 0;
+
+  useEffect(() => {
+    Animated.timing(animatedProgress, {
+      toValue: progress,
+      duration: 300,
+      useNativeDriver: false,
+    }).start();
+  }, [progress]);
+
+  const RING_RADIUS = 112;
+  const RING_STROKE = 8;
+  const RING_SIZE = 260;
+  const circumference = 2 * Math.PI * RING_RADIUS;
+  const strokeDashoffset = animatedProgress.interpolate({
+    inputRange: [0, 1],
+    outputRange: [circumference, 0],
+  });
 
   // ─── Completion / adaptive result screen ───
   if (phase === "complete" || adaptiveResult) {
@@ -389,28 +412,6 @@ export default function FocusModeScreen() {
   }
 
   // ─── Focus timer screen ───
-  const progress =
-    totalDurationMs > 0
-      ? Math.min(focusedElapsedMs / totalDurationMs, 1)
-      : 0;
-
-  useEffect(() => {
-    Animated.timing(animatedProgress, {
-      toValue: progress,
-      duration: 300,
-      useNativeDriver: false,
-    }).start();
-  }, [progress]);
-
-  const RING_RADIUS = 112;
-  const RING_STROKE = 8;
-  const RING_SIZE = 260;
-  const circumference = 2 * Math.PI * RING_RADIUS;
-  const strokeDashoffset = animatedProgress.interpolate({
-    inputRange: [0, 1],
-    outputRange: [circumference, 0],
-  });
-
   return (
     <View style={styles.container}>
       {/* Session info */}
