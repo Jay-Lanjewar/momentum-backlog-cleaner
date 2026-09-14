@@ -238,6 +238,17 @@ export default function TodayMissionPage() {
 
         {/* 7. Balance Score */}
         <BalanceScoreCard balance={data.balance} />
+
+        {/* Dev-only Focus Preview */}
+        {__DEV__ && (
+          <TouchableOpacity
+            style={styles.devPreviewButton}
+            onPress={() => router.push("/(app)/(today)/focus-preview")}
+            activeOpacity={0.7}
+          >
+            <Text style={styles.devPreviewText}>DEV: Preview Focus Screen</Text>
+          </TouchableOpacity>
+        )}
       </ScrollView>
     </SafeAreaView>
   );
@@ -367,6 +378,20 @@ const styles = StyleSheet.create({
   },
   retryText: {
     color: "#FFF",
+    fontWeight: "600",
+  },
+  devPreviewButton: {
+    backgroundColor: "#F59E0B",
+    borderRadius: 8,
+    paddingVertical: 12,
+    paddingHorizontal: 20,
+    alignItems: "center",
+    marginTop: 24,
+    marginBottom: 16,
+  },
+  devPreviewText: {
+    color: "#000",
+    fontSize: 13,
     fontWeight: "600",
   },
 });
