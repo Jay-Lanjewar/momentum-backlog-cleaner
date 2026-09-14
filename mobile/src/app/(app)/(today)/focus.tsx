@@ -13,6 +13,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useKeepAwake } from "expo-keep-awake";
 import Svg, { Circle } from "react-native-svg";
+import * as Haptics from "expo-haptics";
 
 import { useFocusLock } from "@/hooks/useFocusLock";
 import { useCompleteSession } from "@/services/hooks";
@@ -122,6 +123,7 @@ export default function FocusModeScreen() {
       },
       {
         onSuccess: (data) => {
+          Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
           setAdaptiveResult(data);
         },
         onError: (error) => {
@@ -138,6 +140,16 @@ export default function FocusModeScreen() {
       { text: "Finish", onPress: handleComplete },
     ]);
   }, [handleComplete]);
+
+  const handlePause = useCallback(() => {
+    Haptics.selectionAsync();
+    pause();
+  }, [pause]);
+
+  const handleResume = useCallback(() => {
+    Haptics.selectionAsync();
+    resume();
+  }, [resume]);
 
   const handleBackToMission = useCallback(() => {
     router.replace("/(app)");
@@ -496,7 +508,7 @@ export default function FocusModeScreen() {
         {phase === "focusing" ? (
           <TouchableOpacity
             style={styles.controlButton}
-            onPress={pause}
+            onPress={handlePause}
             activeOpacity={0.7}
           >
             <Text style={styles.controlButtonText}>Pause</Text>
@@ -504,7 +516,7 @@ export default function FocusModeScreen() {
         ) : phase === "paused_by_user" || phase === "focus_returned" ? (
           <TouchableOpacity
             style={[styles.controlButton, styles.controlButtonPrimary]}
-            onPress={resume}
+            onPress={handleResume}
             activeOpacity={0.7}
           >
             <Text style={[styles.controlButtonText, styles.controlButtonTextPrimary]}>
