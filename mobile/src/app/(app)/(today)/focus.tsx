@@ -418,12 +418,18 @@ export default function FocusModeScreen() {
           <Text style={styles.statusText}>
             You left the app. Timer is paused.
           </Text>
+          <Text style={styles.statusFocused}>
+            {formatCountdown(focusedElapsedMs)} focused
+          </Text>
         </View>
       )}
       {phase === "focus_returned" && (
         <View style={[styles.statusBanner, styles.statusReturned]}>
           <Text style={styles.statusText}>
             Welcome back! Tap Resume to continue.
+          </Text>
+          <Text style={styles.statusFocused}>
+            {formatCountdown(focusedElapsedMs)} focused
           </Text>
         </View>
       )}
@@ -807,6 +813,11 @@ const styles = StyleSheet.create({
   statusText: {
     color: "#CBD5E1",
     fontSize: 14,
+  },
+  statusFocused: {
+    color: "#94A3B8",
+    fontSize: 12,
+    marginTop: 4,
   },
   coachMessage: {
     color: "#94A3B8",
