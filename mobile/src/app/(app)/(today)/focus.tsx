@@ -60,6 +60,7 @@ export default function FocusModeScreen() {
     sessions: string;
     snapshotId: string;
     dailyMessage: string;
+    userName: string;
   }>();
 
   const totalDurationMs = parseDurationMs(params.startTime, params.endTime);
@@ -333,6 +334,7 @@ export default function FocusModeScreen() {
                       sessions: JSON.stringify(adaptiveResult.plan.sessions),
                       snapshotId: adaptiveResult.snapshot_id,
                       dailyMessage: adaptiveResult.plan.daily_message,
+                      userName: params.userName ?? "",
                     },
                   })
                 }
@@ -387,6 +389,11 @@ export default function FocusModeScreen() {
         <Text style={styles.sessionTime}>
           {formatHourMinute(params.startTime)} – {formatHourMinute(params.endTime)}
         </Text>
+        {params.userName && (phase === "focusing" || phase === "entering") && (
+          <Text style={styles.sessionGreeting}>
+            Let&apos;s finish this one, {params.userName}.
+          </Text>
+        )}
       </View>
 
       {/* Timer ring */}
@@ -762,6 +769,12 @@ const styles = StyleSheet.create({
   sessionTime: {
     color: "#94A3B8",
     fontSize: 14,
+  },
+  sessionGreeting: {
+    color: "#94A3B8",
+    fontSize: 13,
+    marginTop: 6,
+    fontStyle: "italic",
   },
   timerContainer: {
     flex: 1,

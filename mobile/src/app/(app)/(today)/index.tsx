@@ -51,10 +51,11 @@ export default function TodayMissionPage() {
           sessions: JSON.stringify(dashboard.plan.plan.sessions),
           snapshotId: dashboard.plan.snapshot_id ?? "",
           dailyMessage: dashboard.plan.plan.daily_message,
+          userName: user?.name ?? "",
         },
       });
     },
-    [router],
+    [router, user?.name],
   );
 
   if (isLoading) {

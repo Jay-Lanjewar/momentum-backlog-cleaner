@@ -22,6 +22,7 @@ jest.mock("expo-router", () => ({
     sessions: "[]",
     snapshotId: "snap-1",
     dailyMessage: "Keep it up!",
+    userName: "Alex",
   }),
   useRouter: () => ({
     replace: jest.fn(),
