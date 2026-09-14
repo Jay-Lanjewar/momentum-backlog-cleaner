@@ -4,14 +4,14 @@
  * Verifies the SVG stroke-dashoffset math used in the animated progress ring.
  */
 
-const RING_RADIUS = 112;
-const RING_STROKE = 8;
-const RING_SIZE = 260;
+const RING_RADIUS = 90;
+const RING_STROKE = 7;
+const RING_SIZE = 200;
 const CIRCUMFERENCE = 2 * Math.PI * RING_RADIUS;
 
 describe("Progress ring math", () => {
-  it("circumference is correct for radius 112", () => {
-    expect(CIRCUMFERENCE).toBeCloseTo(703.716754, 4);
+  it("circumference is correct for radius 90", () => {
+    expect(CIRCUMFERENCE).toBeCloseTo(565.486677, 4);
   });
 
   it("strokeDashoffset at 0% progress equals full circumference", () => {
@@ -45,8 +45,8 @@ describe("Progress ring math", () => {
     expect(clampProgress(0.5)).toBe(0.5);
   });
 
-  it("ring size matches existing UI dimensions", () => {
-    expect(RING_SIZE).toBe(260);
-    expect(RING_STROKE).toBe(8);
+  it("ring size matches UI dimensions", () => {
+    expect(RING_SIZE).toBe(200);
+    expect(RING_STROKE).toBe(7);
   });
 });
