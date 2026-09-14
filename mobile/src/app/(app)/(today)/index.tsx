@@ -40,7 +40,7 @@ export default function TodayMissionPage() {
   const handleStartStudy = useCallback(
     (session: PlanSession, dashboard: DashboardData) => {
       router.push({
-        pathname: "/(app)/focus",
+        pathname: "/(app)/(today)/focus",
         params: {
           sessionId: session.session_id,
           backlogItemId: session.backlog_item_id,

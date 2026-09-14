@@ -339,7 +339,7 @@ describe("Today screen integration", () => {
   });
 
   it("retains existing focus navigation", () => {
-    expect(content).toContain("pathname: \"/(app)/focus\"");
+    expect(content).toContain("pathname: \"/(app)/(today)/focus\"");
     expect(content).toContain("handleStartStudy");
   });
 

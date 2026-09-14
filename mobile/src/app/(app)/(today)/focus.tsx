@@ -192,9 +192,9 @@ export default function FocusModeScreen() {
     }).start();
   }, [progress]);
 
-  const RING_RADIUS = 112;
-  const RING_STROKE = 8;
-  const RING_SIZE = 260;
+  const RING_RADIUS = 90;
+  const RING_STROKE = 7;
+  const RING_SIZE = 200;
   const circumference = 2 * Math.PI * RING_RADIUS;
   const strokeDashoffset = animatedProgress.interpolate({
     inputRange: [0, 1],
@@ -363,7 +363,7 @@ export default function FocusModeScreen() {
                 style={styles.primaryButton}
                 onPress={() =>
                   router.push({
-                    pathname: "/(app)/focus",
+                    pathname: "/(app)/(today)/focus",
                     params: {
                       sessionId: nextSession.session_id,
                       backlogItemId: nextSession.backlog_item_id,
@@ -414,7 +414,7 @@ export default function FocusModeScreen() {
   // ─── Focus timer screen ───
   return (
     <View style={styles.container}>
-      {/* Session info */}
+      {/* Session info — fixed at top */}
       <View style={styles.sessionInfo}>
         <Text style={styles.sessionReason} numberOfLines={2}>
           {params.reason}
@@ -429,7 +429,7 @@ export default function FocusModeScreen() {
         )}
       </View>
 
-      {/* Timer ring */}
+      {/* Timer ring — centered in remaining space, no flex grow */}
       <View style={styles.timerContainer}>
         <View style={styles.timerRing}>
           <Svg
@@ -499,12 +499,12 @@ export default function FocusModeScreen() {
         </View>
       )}
 
-      {/* Coaching message */}
+      {/* Coaching message — always below ring, above controls */}
       <Text style={styles.coachMessage}>
         {focusCoachMessage(focusedElapsedMs, totalDurationMs)}
       </Text>
 
-      {/* Controls */}
+      {/* Controls — fixed at bottom */}
       <View style={styles.controls}>
         {phase === "focusing" ? (
           <TouchableOpacity
@@ -811,18 +811,18 @@ const styles = StyleSheet.create({
     fontSize: 15,
   },
 
-  // ── Focus timer (unchanged) ──
+  // ── Focus timer ──
   sessionInfo: {
     alignItems: "center",
-    paddingTop: 60,
+    paddingTop: 40,
     paddingHorizontal: 32,
+    gap: 6,
   },
   sessionReason: {
     color: "#F8FAFC",
     fontSize: 18,
     fontWeight: "600",
     textAlign: "center",
-    marginBottom: 8,
   },
   sessionTime: {
     color: "#94A3B8",
@@ -831,8 +831,10 @@ const styles = StyleSheet.create({
   sessionGreeting: {
     color: "#94A3B8",
     fontSize: 13,
-    marginTop: 6,
+    marginTop: 2,
     fontStyle: "italic",
+    maxWidth: 280,
+    textAlign: "center",
   },
   timerContainer: {
     flex: 1,
@@ -840,8 +842,8 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   timerRing: {
-    width: 260,
-    height: 260,
+    width: 200,
+    height: 200,
     justifyContent: "center",
     alignItems: "center",
     position: "relative",
@@ -851,7 +853,7 @@ const styles = StyleSheet.create({
   },
   timerText: {
     color: "#F8FAFC",
-    fontSize: 56,
+    fontSize: 44,
     fontWeight: "200",
     fontVariant: ["tabular-nums"],
   },
@@ -885,12 +887,12 @@ const styles = StyleSheet.create({
     fontSize: 15,
     textAlign: "center",
     paddingHorizontal: 40,
-    marginBottom: 32,
+    marginBottom: 20,
     lineHeight: 22,
   },
   controls: {
     paddingHorizontal: 32,
-    paddingBottom: 60,
+    paddingBottom: 40,
     gap: 12,
   },
   controlButton: {
