@@ -12,8 +12,8 @@ import { Placeholder } from "@/components/Placeholder";
 // ── TabIcon ──
 
 describe("TabIcon", () => {
-  it("renders without crashing for each tab name", () => {
-    const tabs = ["today", "work", "plan", "social", "me"];
+  it("renders without crashing for each primary tab name", () => {
+    const tabs = ["today", "work", "plan", "progress", "me"];
     for (const name of tabs) {
       expect(() => render(<TabIcon name={name} color="#FFF" />)).not.toThrow();
     }
@@ -76,9 +76,12 @@ describe("Navigation file structure", () => {
     expect(fileExists("(plan)/plan.tsx")).toBe(true);
   });
 
-  it("has social group with index, friends, feed, search, and _layout", () => {
+  it("has progress group with index and _layout", () => {
+    expect(fileExists("(progress)/index.tsx")).toBe(true);
+  });
+
+  it("has social group preserved (not in primary tabs)", () => {
     expect(fileExists("(social)/_layout.tsx")).toBe(true);
-    expect(fileExists("(social)/index.tsx")).toBe(true);
     expect(fileExists("(social)/friends.tsx")).toBe(true);
     expect(fileExists("(social)/feed.tsx")).toBe(true);
     expect(fileExists("(social)/search.tsx")).toBe(true);
@@ -98,7 +101,7 @@ describe("Navigation file structure", () => {
   });
 
   it("all tab group _layout files import from expo-router", () => {
-    const groups = ["(today)", "(work)", "(plan)", "(social)", "(me)"];
+    const groups = ["(today)", "(work)", "(plan)", "(me)"];
     for (const group of groups) {
       const content = fs.readFileSync(
         path.join(appDir, group, "_layout.tsx"),
@@ -117,7 +120,7 @@ describe("Navigation file structure", () => {
     expect(content).toContain("expo-router");
   });
 
-  it("app _layout defines all 5 tab screens", () => {
+  it("app _layout defines 5 visible tab screens", () => {
     const content = fs.readFileSync(
       path.join(appDir, "_layout.tsx"),
       "utf8",
@@ -125,8 +128,28 @@ describe("Navigation file structure", () => {
     expect(content).toContain('"(today)"');
     expect(content).toContain('"(work)"');
     expect(content).toContain('"(plan)"');
-    expect(content).toContain('"(social)"');
+    expect(content).toContain('"(progress)"');
     expect(content).toContain('"(me)"');
+  });
+
+  it("social tab is hidden from primary navigation", () => {
+    const content = fs.readFileSync(
+      path.join(appDir, "_layout.tsx"),
+      "utf8",
+    );
+    expect(content).toContain('"(social)"');
+    expect(content).toContain("href: null");
+  });
+
+  it("social does not have a title in primary tabs", () => {
+    const content = fs.readFileSync(
+      path.join(appDir, "_layout.tsx"),
+      "utf8",
+    );
+    const socialSection = content.substring(
+      content.indexOf('"(social)"'),
+    );
+    expect(socialSection).not.toContain("title: \"Social\"");
   });
 
   it("today _layout uses Stack with focus as fullScreenModal", () => {

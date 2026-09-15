@@ -64,10 +64,7 @@ export default function AppLayout() {
       <Tabs.Screen
         name="(social)"
         options={{
-          title: "Social",
-          tabBarIcon: ({ color, size }) => (
-            <TabIcon name="social" color={color as string} size={size} />
-          ),
+          href: null,
         }}
       />
       <Tabs.Screen

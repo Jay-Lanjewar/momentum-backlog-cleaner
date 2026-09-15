@@ -17,6 +17,10 @@ import type {
   WeeklyScheduleData,
   WeeklyScheduleUpdatePayload,
   AnalyticsProgressResponse,
+  StudentProfileData,
+  ProfileUpdatePayload,
+  StreakAllData,
+  BalanceScoreData,
 } from "@/services/types";
 
 export function useDashboard() {
@@ -39,6 +43,65 @@ export function useAnalyticsProgress() {
       const result = await api.get<AnalyticsProgressResponse>(
         "/api/v1/analytics/progress",
       );
+      if (result.error) throw new Error(result.error);
+      return result.data;
+    },
+    staleTime: 1000 * 60,
+    retry: 1,
+  });
+}
+
+// ─── Profile ───
+
+export function useProfile() {
+  return useQuery({
+    queryKey: ["profile"],
+    queryFn: async () => {
+      const result = await api.get<StudentProfileData>("/api/v1/profile");
+      if (result.error) throw new Error(result.error);
+      return result.data;
+    },
+    staleTime: 1000 * 60,
+    retry: 1,
+  });
+}
+
+export function useSaveProfile() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (payload: ProfileUpdatePayload) => {
+      const result = await api.put<StudentProfileData>(
+        "/api/v1/profile",
+        payload,
+      );
+      if (result.error) throw new Error(result.error);
+      return result.data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["profile"] });
+      queryClient.invalidateQueries({ queryKey: ["dashboard"] });
+    },
+  });
+}
+
+export function useStreaks() {
+  return useQuery({
+    queryKey: ["streaks"],
+    queryFn: async () => {
+      const result = await api.get<StreakAllData>("/api/v1/streaks");
+      if (result.error) throw new Error(result.error);
+      return result.data;
+    },
+    staleTime: 1000 * 60,
+    retry: 1,
+  });
+}
+
+export function useBalanceScore() {
+  return useQuery({
+    queryKey: ["balance"],
+    queryFn: async () => {
+      const result = await api.get<BalanceScoreData>("/api/v1/streaks/balance");
       if (result.error) throw new Error(result.error);
       return result.data;
     },

@@ -56,6 +56,16 @@ export interface StudyWindow {
   latest_end: string;
 }
 
+export interface ProfileUpdatePayload {
+  name?: string | null;
+  class_name?: string | null;
+  board?: string | null;
+  sleep_schedule?: SleepTime | null;
+  energy_peak?: string | null;
+  preferred_study_window?: StudyWindow | null;
+  daily_target_minutes?: number | null;
+}
+
 // ─── Backlog ───
 
 export interface BacklogItem {
