@@ -307,3 +307,52 @@ export interface DashboardData {
   plan: PlanGenerateResponse;
   today_completed_minutes: number;
 }
+
+// ─── Analytics ───
+
+export interface TodayMetrics {
+  study_minutes: number;
+  sessions_completed: number;
+  estimated_minutes: number;
+}
+
+export interface DayBreakdown {
+  date: string;
+  study_minutes: number;
+  sessions_completed: number;
+}
+
+export interface WeekMetrics {
+  daily: DayBreakdown[];
+  total_study_minutes: number;
+  total_sessions: number;
+  total_estimated_minutes: number;
+}
+
+export interface SubjectMetrics {
+  course_id: string;
+  course_name: string;
+  course_color: string;
+  study_minutes: number;
+  sessions_completed: number;
+  estimated_minutes: number;
+}
+
+export interface StreakMilestone {
+  days: number;
+  achieved: boolean;
+}
+
+export interface StreakProgress {
+  current: number;
+  best: number;
+  total_study_days: number;
+  milestones: StreakMilestone[];
+}
+
+export interface AnalyticsProgressResponse {
+  today: TodayMetrics;
+  week: WeekMetrics;
+  subjects: SubjectMetrics[];
+  streaks: StreakProgress;
+}

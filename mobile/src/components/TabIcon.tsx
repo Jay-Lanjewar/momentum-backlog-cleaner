@@ -4,6 +4,7 @@ const SYMBOLS: Record<string, string> = {
   today: "\u25C9",
   work: "\u2630",
   plan: "\u25F7",
+  progress: "\u2662",
   social: "\u2661",
   me: "\u25CB",
 };

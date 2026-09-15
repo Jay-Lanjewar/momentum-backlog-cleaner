@@ -394,6 +394,55 @@ class DashboardResponse(BaseModel):
     today_completed_minutes: int = 0
 
 
+# ─── Analytics Schemas ───
+
+class TodayMetrics(BaseModel):
+    study_minutes: int = 0
+    sessions_completed: int = 0
+    estimated_minutes: int = 0
+
+
+class DayBreakdown(BaseModel):
+    date: str
+    study_minutes: int = 0
+    sessions_completed: int = 0
+
+
+class WeekMetrics(BaseModel):
+    daily: list[DayBreakdown] = Field(default_factory=list)
+    total_study_minutes: int = 0
+    total_sessions: int = 0
+    total_estimated_minutes: int = 0
+
+
+class SubjectMetrics(BaseModel):
+    course_id: str
+    course_name: str
+    course_color: str
+    study_minutes: int = 0
+    sessions_completed: int = 0
+    estimated_minutes: int = 0
+
+
+class StreakMilestone(BaseModel):
+    days: int
+    achieved: bool
+
+
+class StreakProgress(BaseModel):
+    current: int = 0
+    best: int = 0
+    total_study_days: int = 0
+    milestones: list[StreakMilestone] = Field(default_factory=list)
+
+
+class AnalyticsProgressResponse(BaseModel):
+    today: TodayMetrics = Field(default_factory=TodayMetrics)
+    week: WeekMetrics = Field(default_factory=WeekMetrics)
+    subjects: list[SubjectMetrics] = Field(default_factory=list)
+    streaks: StreakProgress = Field(default_factory=StreakProgress)
+
+
 # ─── Friend Schemas ───
 
 class FriendRequestCreate(BaseModel):

@@ -53,6 +53,15 @@ export default function AppLayout() {
         }}
       />
       <Tabs.Screen
+        name="(progress)"
+        options={{
+          title: "Progress",
+          tabBarIcon: ({ color, size }) => (
+            <TabIcon name="progress" color={color as string} size={size} />
+          ),
+        }}
+      />
+      <Tabs.Screen
         name="(social)"
         options={{
           title: "Social",

@@ -16,6 +16,7 @@ import type {
   GoalUpdatePayload,
   WeeklyScheduleData,
   WeeklyScheduleUpdatePayload,
+  AnalyticsProgressResponse,
 } from "@/services/types";
 
 export function useDashboard() {
@@ -23,6 +24,21 @@ export function useDashboard() {
     queryKey: ["dashboard"],
     queryFn: async () => {
       const result = await api.get<DashboardData>("/api/v1/dashboard");
+      if (result.error) throw new Error(result.error);
+      return result.data;
+    },
+    staleTime: 1000 * 60,
+    retry: 1,
+  });
+}
+
+export function useAnalyticsProgress() {
+  return useQuery({
+    queryKey: ["analytics", "progress"],
+    queryFn: async () => {
+      const result = await api.get<AnalyticsProgressResponse>(
+        "/api/v1/analytics/progress",
+      );
       if (result.error) throw new Error(result.error);
       return result.data;
     },
@@ -44,6 +60,7 @@ export function useCompleteSession() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["dashboard"] });
+      queryClient.invalidateQueries({ queryKey: ["analytics", "progress"] });
     },
   });
 }
