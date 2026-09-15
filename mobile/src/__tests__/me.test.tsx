@@ -164,13 +164,13 @@ describe("ProfileScreen", () => {
     expect(screen.getByText("Health")).toBeTruthy();
   });
 
-  it("Profile button navigates to /(me) (profile screen)", async () => {
+  it("Profile button navigates to /(me)/profile", async () => {
     mockPush.mockClear();
     await act(async () => {
       render(<ProfileScreen />);
     });
     fireEvent.press(screen.getByText("Profile"));
-    expect(mockPush).toHaveBeenCalledWith("/(me)");
+    expect(mockPush).toHaveBeenCalledWith("/(me)/profile");
   });
 
   it("Settings button navigates to /(me)/settings", async () => {
@@ -180,6 +180,24 @@ describe("ProfileScreen", () => {
     });
     fireEvent.press(screen.getByText("Settings"));
     expect(mockPush).toHaveBeenCalledWith("/(me)/settings");
+  });
+
+  it("Streaks button navigates to /(me)/streaks", async () => {
+    mockPush.mockClear();
+    await act(async () => {
+      render(<ProfileScreen />);
+    });
+    fireEvent.press(screen.getByText("Streaks"));
+    expect(mockPush).toHaveBeenCalledWith("/(me)/streaks");
+  });
+
+  it("Health button navigates to /(me)/health", async () => {
+    mockPush.mockClear();
+    await act(async () => {
+      render(<ProfileScreen />);
+    });
+    fireEvent.press(screen.getByText("Health"));
+    expect(mockPush).toHaveBeenCalledWith("/(me)/health");
   });
 });
 
@@ -209,6 +227,75 @@ describe("SettingsScreen", () => {
     });
     expect(screen.getByText("Account")).toBeTruthy();
     expect(screen.getByText("Preferences")).toBeTruthy();
+  });
+});
+
+// ─── Profile Edit Screen ───
+
+import ProfileEditScreen from "@/app/(app)/(me)/profile";
+
+describe("ProfileEditScreen", () => {
+  it("renders profile header", async () => {
+    await act(async () => {
+      render(<ProfileEditScreen />);
+    });
+    expect(screen.getByText("Profile")).toBeTruthy();
+  });
+
+  it("renders personal info fields with existing data", async () => {
+    await act(async () => {
+      render(<ProfileEditScreen />);
+    });
+    expect(screen.getByText("Name")).toBeTruthy();
+    expect(screen.getByText("Class")).toBeTruthy();
+    expect(screen.getByText("Board")).toBeTruthy();
+  });
+
+  it("renders study preferences section", async () => {
+    await act(async () => {
+      render(<ProfileEditScreen />);
+    });
+    expect(screen.getByText("Daily Target (minutes)")).toBeTruthy();
+    expect(screen.getByText("Energy Peak")).toBeTruthy();
+  });
+
+  it("renders schedule section", async () => {
+    await act(async () => {
+      render(<ProfileEditScreen />);
+    });
+    expect(screen.getByText("Sleep Schedule")).toBeTruthy();
+    expect(screen.getByText("Preferred Study Window")).toBeTruthy();
+  });
+
+  it("renders save button", async () => {
+    await act(async () => {
+      render(<ProfileEditScreen />);
+    });
+    expect(screen.getByText("Save Changes")).toBeTruthy();
+  });
+
+  it("renders energy peak options", async () => {
+    await act(async () => {
+      render(<ProfileEditScreen />);
+    });
+    expect(screen.getByText("Morning")).toBeTruthy();
+    expect(screen.getByText("Afternoon")).toBeTruthy();
+    expect(screen.getByText("Evening")).toBeTruthy();
+    expect(screen.getByText("Night")).toBeTruthy();
+  });
+
+  it("back button calls router.back", async () => {
+    const mockBack = jest.fn();
+    jest.spyOn(require("expo-router"), "useRouter").mockReturnValue({
+      push: mockPush,
+      back: mockBack,
+      replace: jest.fn(),
+    });
+    await act(async () => {
+      render(<ProfileEditScreen />);
+    });
+    fireEvent.press(screen.getByText("\u2190"));
+    expect(mockBack).toHaveBeenCalled();
   });
 });
 

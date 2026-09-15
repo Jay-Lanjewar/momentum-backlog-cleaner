@@ -1,11 +1,9 @@
 import { View, Text, ScrollView, StyleSheet } from "react-native";
-import { useRouter } from "expo-router";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { useBalanceScore, useStreaks, useDashboard } from "@/services/hooks";
 
 export default function HealthScreen() {
-  const router = useRouter();
   const { data: balance } = useBalanceScore();
   const { data: streaks } = useStreaks();
   const { data: dashboard } = useDashboard();

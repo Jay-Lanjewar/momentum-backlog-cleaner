@@ -61,7 +61,7 @@ export default function ProfileScreen() {
           <TouchableOpacity
             style={styles.row}
             activeOpacity={0.6}
-            onPress={() => router.push("/(me)")}
+            onPress={() => router.push("/(me)/profile")}
           >
             <Text style={styles.rowText}>Profile</Text>
             <Text style={styles.arrow}>{"\u2192"}</Text>
