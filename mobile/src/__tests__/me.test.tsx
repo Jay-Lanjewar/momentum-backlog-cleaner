@@ -10,16 +10,17 @@
  * 6. useSaveProfile invalidates correct caches
  */
 
-import { render, screen, act } from "@testing-library/react-native";
+import { render, screen, act, fireEvent } from "@testing-library/react-native";
 
 jest.mock("react-native-safe-area-context", () => ({
   SafeAreaView: ({ children, ...props }: any) =>
     require("react").createElement("SafeAreaView", props, children),
 }));
 
+const mockPush = jest.fn();
 jest.mock("expo-router", () => ({
   useRouter: () => ({
-    push: jest.fn(),
+    push: mockPush,
     back: jest.fn(),
     replace: jest.fn(),
   }),
@@ -161,6 +162,24 @@ describe("ProfileScreen", () => {
     expect(screen.getByText("Settings")).toBeTruthy();
     expect(screen.getByText("Streaks")).toBeTruthy();
     expect(screen.getByText("Health")).toBeTruthy();
+  });
+
+  it("Profile button navigates to /(me) (profile screen)", async () => {
+    mockPush.mockClear();
+    await act(async () => {
+      render(<ProfileScreen />);
+    });
+    fireEvent.press(screen.getByText("Profile"));
+    expect(mockPush).toHaveBeenCalledWith("/(me)");
+  });
+
+  it("Settings button navigates to /(me)/settings", async () => {
+    mockPush.mockClear();
+    await act(async () => {
+      render(<ProfileScreen />);
+    });
+    fireEvent.press(screen.getByText("Settings"));
+    expect(mockPush).toHaveBeenCalledWith("/(me)/settings");
   });
 });
 
