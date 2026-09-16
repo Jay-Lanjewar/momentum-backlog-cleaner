@@ -18,6 +18,10 @@ import * as Haptics from "expo-haptics";
 import { useFocusLock } from "@/hooks/useFocusLock";
 import { useCompleteSession } from "@/services/hooks";
 import {
+  cancelSessionNotifications,
+  showPlanChangedNotification,
+} from "@/services/notifications";
+import {
   formatHourMinute,
   formatTimeRange,
   formatMinutes,
@@ -125,6 +129,10 @@ export default function FocusModeScreen() {
         onSuccess: (data) => {
           Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
           setAdaptiveResult(data);
+          cancelSessionNotifications(params.sessionId);
+          if (data.changes.length > 0) {
+            showPlanChangedNotification(data.changes);
+          }
         },
         onError: (error) => {
           completingRef.current = false;

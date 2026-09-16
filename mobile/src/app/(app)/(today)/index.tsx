@@ -13,6 +13,7 @@ import { useRouter } from "expo-router";
 
 import { useDashboard } from "@/services/hooks";
 import { useAuth } from "@/hooks/useAuth";
+import { useNotificationScheduler } from "@/hooks/useNotificationScheduler";
 import {
   getGreeting,
   formatMinutes,
@@ -36,6 +37,8 @@ export default function TodayMissionPage() {
   const router = useRouter();
   const { user, logout } = useAuth();
   const { data, isLoading, refetch, isRefetching } = useDashboard();
+
+  useNotificationScheduler();
 
   const handleStartStudy = useCallback(
     (session: PlanSession, dashboard: DashboardData) => {
