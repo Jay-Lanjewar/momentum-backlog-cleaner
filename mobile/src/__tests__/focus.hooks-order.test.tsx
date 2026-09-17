@@ -56,6 +56,11 @@ jest.mock("../services/hooks", () => ({
     mutate: jest.fn(),
     isPending: false,
   }),
+  useDashboard: () => ({
+    data: null,
+    isLoading: false,
+    refetch: jest.fn(),
+  }),
 }));
 
 jest.mock("react-native", () => {

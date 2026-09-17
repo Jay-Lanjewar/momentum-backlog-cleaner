@@ -197,7 +197,7 @@ export async function scheduleSessionReminder(
         source: SOURCE,
         type: "session_reminder",
         sessionId: session.session_id,
-        url: "/(today)/focus",
+        url: `/(today)/focus?sessionId=${session.session_id}&backlogItemId=${session.backlog_item_id}`,
       } satisfies MomentumNotificationData,
     },
     trigger: {
@@ -241,7 +241,7 @@ export async function scheduleSessionStart(
         source: SOURCE,
         type: "session_start",
         sessionId: session.session_id,
-        url: "/(today)/focus",
+        url: `/(today)/focus?sessionId=${session.session_id}&backlogItemId=${session.backlog_item_id}`,
       } satisfies MomentumNotificationData,
     },
     trigger: {

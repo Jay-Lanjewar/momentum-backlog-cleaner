@@ -65,6 +65,14 @@ describe("formatHourMinute", () => {
   it("formats midnight", () => {
     expect(formatHourMinute("00:00")).toBe("12:00 AM");
   });
+
+  it("returns placeholder for empty string", () => {
+    expect(formatHourMinute("")).toBe("--:--");
+  });
+
+  it("returns placeholder for malformed time", () => {
+    expect(formatHourMinute("abc")).toBe("--:--");
+  });
 });
 
 describe("getGreeting", () => {

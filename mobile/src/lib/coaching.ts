@@ -12,7 +12,9 @@ export function formatTimeRange(start: string, end: string): string {
 }
 
 export function formatHourMinute(time: string): string {
+  if (!time || !time.includes(":")) return "--:--";
   const [h, m] = time.split(":").map(Number);
+  if (isNaN(h) || isNaN(m)) return "--:--";
   const period = h >= 12 ? "PM" : "AM";
   const hour = h % 12 || 12;
   return `${hour}:${String(m).padStart(2, "0")} ${period}`;

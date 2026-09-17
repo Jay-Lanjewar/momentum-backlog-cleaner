@@ -16,7 +16,7 @@ import Svg, { Circle } from "react-native-svg";
 import * as Haptics from "expo-haptics";
 
 import { useFocusLock } from "@/hooks/useFocusLock";
-import { useCompleteSession } from "@/services/hooks";
+import { useCompleteSession, useDashboard } from "@/services/hooks";
 import {
   cancelSessionNotifications,
   showPlanChangedNotification,
@@ -38,9 +38,11 @@ import {
 import { AdaptiveSessionLegend } from "@/components/adaptive/AdaptiveSessionLegend";
 import { AdaptiveChangeGroup } from "@/components/adaptive/AdaptiveChangeGroup";
 
-function parseDurationMs(start: string, end: string): number {
+function parseDurationMs(start: string | undefined, end: string | undefined): number {
+  if (!start || !end) return 0;
   const [sh, sm] = start.split(":").map(Number);
   const [eh, em] = end.split(":").map(Number);
+  if (isNaN(sh) || isNaN(sm) || isNaN(eh) || isNaN(em)) return 0;
   return (eh * 60 + em - (sh * 60 + sm)) * 60 * 1000;
 }
 
@@ -72,7 +74,30 @@ export default function FocusModeScreen() {
     userName: string;
   }>();
 
-  const totalDurationMs = parseDurationMs(params.startTime, params.endTime);
+  const { data: dashboard } = useDashboard();
+
+  // Resolve session data when opened via notification deep link
+  // (notification provides sessionId/backlogItemId but not full params)
+  const resolvedSession = useMemo(() => {
+    if (params.startTime && params.endTime && params.reason) {
+      return null; // All params present, no resolution needed
+    }
+    if (!dashboard || !params.sessionId) return null;
+
+    const sessions = dashboard.plan.plan.sessions;
+    return sessions.find((s) => s.session_id === params.sessionId) ?? null;
+  }, [params, dashboard]);
+
+  const startTime = params.startTime ?? resolvedSession?.start_time ?? "";
+  const endTime = params.endTime ?? resolvedSession?.end_time ?? "";
+  const reason = params.reason ?? resolvedSession?.reason ?? "";
+  const sessionId = params.sessionId ?? resolvedSession?.session_id ?? "";
+  const userName = params.userName ?? "";
+
+  // Redirect back if we can't identify the session at all
+  const isMissingSession = !sessionId || (!resolvedSession && !params.startTime);
+
+  const totalDurationMs = parseDurationMs(startTime, endTime);
   const { phase, focusedElapsedMs, remainingMs, pause, resume, complete } =
     useFocusLock(totalDurationMs);
 
@@ -122,14 +147,14 @@ export default function FocusModeScreen() {
     );
     completeSession.mutate(
       {
-        session_id: params.sessionId,
+        session_id: sessionId,
         actual_minutes: actualMinutes,
       },
       {
         onSuccess: (data) => {
           Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
           setAdaptiveResult(data);
-          cancelSessionNotifications(params.sessionId);
+          cancelSessionNotifications(sessionId);
           if (data.changes.length > 0) {
             showPlanChangedNotification(data.changes);
           }
@@ -140,7 +165,7 @@ export default function FocusModeScreen() {
         },
       },
     );
-  }, [complete, focusedElapsedMs, params.sessionId, completeSession]);
+  }, [complete, focusedElapsedMs, sessionId, completeSession]);
 
   const handleFinishEarly = useCallback(() => {
     Alert.alert("Finish Early?", "Your focused time will be recorded.", [
@@ -209,6 +234,25 @@ export default function FocusModeScreen() {
     outputRange: [circumference, 0],
   });
 
+  // ─── Session not found (notification deep link) ───
+  if (isMissingSession) {
+    return (
+      <SafeAreaView style={styles.container}>
+        <View style={styles.center}>
+          <Text style={{ color: "#666", fontSize: 16 }}>
+            Session not found. Return to Today.
+          </Text>
+          <TouchableOpacity
+            style={styles.primaryButton}
+            onPress={() => router.replace("/(app)")}
+          >
+            <Text style={styles.primaryButtonText}>Back to Today</Text>
+          </TouchableOpacity>
+        </View>
+      </SafeAreaView>
+    );
+  }
+
   // ─── Completion / adaptive result screen ───
   if (phase === "complete" || adaptiveResult) {
     if (!adaptiveResult) {
@@ -223,8 +267,8 @@ export default function FocusModeScreen() {
 
     const nextSession = nextSessionAfter(
       adaptiveResult.plan.sessions,
-      params.sessionId,
-      params.startTime,
+      sessionId,
+      startTime,
     );
 
     const hasChanges = adaptiveResult.changes.length > 0;
@@ -258,10 +302,10 @@ export default function FocusModeScreen() {
               </View>
               <View style={styles.summaryContent}>
                 <Text style={styles.summaryTopic} numberOfLines={2}>
-                  {topicFromSession({ reason: params.reason })}
+                  {topicFromSession({ reason })}
                 </Text>
                 <Text style={styles.summaryTime}>
-                  {formatTimeRange(params.startTime, params.endTime)}{" "}
+                  {formatTimeRange(startTime, endTime)}{" "}
                   {" \u00B7 "} {focusedMinutes} min
                 </Text>
               </View>
@@ -382,7 +426,7 @@ export default function FocusModeScreen() {
                       sessions: JSON.stringify(adaptiveResult.plan.sessions),
                       snapshotId: adaptiveResult.snapshot_id,
                       dailyMessage: adaptiveResult.plan.daily_message,
-                      userName: params.userName ?? "",
+                      userName,
                     },
                   })
                 }
@@ -425,14 +469,14 @@ export default function FocusModeScreen() {
       {/* Session info — fixed at top */}
       <View style={styles.sessionInfo}>
         <Text style={styles.sessionReason} numberOfLines={2}>
-          {params.reason}
+          {reason}
         </Text>
         <Text style={styles.sessionTime}>
-          {formatHourMinute(params.startTime)} – {formatHourMinute(params.endTime)}
+          {formatHourMinute(startTime)} – {formatHourMinute(endTime)}
         </Text>
-        {params.userName && (phase === "focusing" || phase === "entering") && (
+        {userName && (phase === "focusing" || phase === "entering") && (
           <Text style={styles.sessionGreeting}>
-            Let&apos;s finish this one, {params.userName}.
+            Let&apos;s finish this one, {userName}.
           </Text>
         )}
       </View>

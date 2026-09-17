@@ -232,10 +232,11 @@ describe("scheduleSessionStart", () => {
     expect(id).toBeNull();
   });
 
-  it("includes correct deep link URL", async () => {
+  it("includes correct deep link URL with query params", async () => {
     const startTime = futureDateTime(20);
     const session = makeSession({
       session_id: "sess-url",
+      backlog_item_id: "item-url",
       start_time: startTime,
     });
 
@@ -243,7 +244,9 @@ describe("scheduleSessionStart", () => {
 
     const call = (Notifications.scheduleNotificationAsync as jest.Mock).mock
       .calls[0][0];
-    expect(call.content.data.url).toBe("/(today)/focus");
+    expect(call.content.data.url).toBe(
+      "/(today)/focus?sessionId=sess-url&backlogItemId=item-url",
+    );
   });
 });
 
