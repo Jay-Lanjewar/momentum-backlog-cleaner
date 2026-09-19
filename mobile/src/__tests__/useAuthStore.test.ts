@@ -18,6 +18,7 @@ describe("useAuthStore", () => {
     useAuthStore.setState({
       isAuthenticated: false,
       isLoading: true,
+      confirming: false,
       user: null,
     });
   });
@@ -55,5 +56,19 @@ describe("useAuthStore", () => {
     useAuthStore.getState().setUser(mockUser);
     useAuthStore.getState().setUser(null);
     expect(useAuthStore.getState().isAuthenticated).toBe(false);
+  });
+
+  it("setConfirming updates the confirming flag", () => {
+    expect(useAuthStore.getState().confirming).toBe(false);
+    useAuthStore.getState().setConfirming(true);
+    expect(useAuthStore.getState().confirming).toBe(true);
+    useAuthStore.getState().setConfirming(false);
+    expect(useAuthStore.getState().confirming).toBe(false);
+  });
+
+  it("clearAuth resets confirming to false", () => {
+    useAuthStore.getState().setConfirming(true);
+    useAuthStore.getState().clearAuth();
+    expect(useAuthStore.getState().confirming).toBe(false);
   });
 });

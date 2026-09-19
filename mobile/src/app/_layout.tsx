@@ -6,6 +6,7 @@ import * as SplashScreen from "expo-splash-screen";
 import * as Notifications from "expo-notifications";
 
 import { useAuth } from "@/hooks/useAuth";
+import { useAuthStore } from "@/store/useAuthStore";
 import {
   setNotificationHandler,
   createNotificationChannels,
@@ -22,11 +23,12 @@ const queryClient = new QueryClient({
 
 function AuthGate() {
   const { user, isAuthenticated, isLoading } = useAuth();
+  const confirming = useAuthStore((s) => s.confirming);
   const segments = useSegments();
   const router = useRouter();
 
   useEffect(() => {
-    if (isLoading) return;
+    if (isLoading || confirming) return;
 
     const inAuthGroup = segments[0] === "(auth)";
     const inOnboardingGroup = segments[0] === "(onboarding)";

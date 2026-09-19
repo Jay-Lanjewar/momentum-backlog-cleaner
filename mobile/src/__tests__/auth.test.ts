@@ -34,6 +34,27 @@ describe("Auth screen files", () => {
   });
 });
 
+describe("Confirm deep-link screen", () => {
+  it("has confirm.tsx in app root (outside auth group)", () => {
+    expect(fileExists(path.join(SRC, "app", "confirm.tsx"))).toBe(true);
+  });
+
+  it("confirm.tsx imports Linking from expo-linking", () => {
+    const content = fs.readFileSync(path.join(SRC, "app", "confirm.tsx"), "utf-8");
+    expect(content).toContain("expo-linking");
+  });
+
+  it("confirm.tsx calls supabase.auth.setSession", () => {
+    const content = fs.readFileSync(path.join(SRC, "app", "confirm.tsx"), "utf-8");
+    expect(content).toContain("setSession");
+  });
+
+  it("confirm.tsx uses setConfirming to block AuthGate during processing", () => {
+    const content = fs.readFileSync(path.join(SRC, "app", "confirm.tsx"), "utf-8");
+    expect(content).toContain("setConfirming");
+  });
+});
+
 describe("Onboarding files", () => {
   it("has onboarding _layout.tsx", () => {
     expect(fileExists(path.join(ONBOARDING, "_layout.tsx"))).toBe(true);
@@ -69,6 +90,14 @@ describe("Auth layout includes all screens", () => {
   });
 });
 
+describe("Register flow includes email redirect", () => {
+  it("register.tsx passes emailRedirectTo with momentum scheme", () => {
+    const content = fs.readFileSync(path.join(AUTH, "register.tsx"), "utf-8");
+    expect(content).toContain("emailRedirectTo");
+    expect(content).toContain("momentum://confirm");
+  });
+});
+
 describe("Root layout has onboarding gate", () => {
   it("_layout.tsx references (onboarding)", () => {
     const content = fs.readFileSync(
@@ -77,6 +106,14 @@ describe("Root layout has onboarding gate", () => {
     );
     expect(content).toContain("(onboarding)");
     expect(content).toContain("profile");
+  });
+
+  it("_layout.tsx checks confirming flag before AuthGate redirect", () => {
+    const content = fs.readFileSync(
+      path.join(SRC, "app/_layout.tsx"),
+      "utf-8",
+    );
+    expect(content).toContain("confirming");
   });
 });
 

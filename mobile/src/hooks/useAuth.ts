@@ -7,7 +7,7 @@ import { useAuthStore } from "@/store/useAuthStore";
 import type { AuthLoginRequest, AuthMeResponse } from "@/services/types";
 
 export function useAuth() {
-  const { user, isAuthenticated, isLoading, setUser, setLoading, clearAuth } =
+  const { user, isAuthenticated, isLoading, setUser, setLoading, clearAuth, setConfirming } =
     useAuthStore();
 
   useEffect(() => {
@@ -42,7 +42,7 @@ export function useAuth() {
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange((_event, session) => {
-      if (!session) {
+      if (!session && !useAuthStore.getState().confirming) {
         clearAuth();
       }
     });
@@ -51,7 +51,7 @@ export function useAuth() {
       cancelled = true;
       subscription.unsubscribe();
     };
-  }, [setUser, setLoading, clearAuth]);
+  }, [setUser, setLoading, clearAuth, setConfirming]);
 
   const login = useCallback(
     async (email: string, password: string) => {
@@ -90,5 +90,6 @@ export function useAuth() {
     isLoading,
     login,
     logout,
+    setConfirming,
   };
 }

@@ -46,7 +46,10 @@ export default function RegisterScreen() {
       const { data, error: signupError } = await supabase.auth.signUp({
         email: trimmedEmail,
         password,
-        options: { data: { name: trimmedName } },
+        options: {
+          data: { name: trimmedName },
+          emailRedirectTo: "momentum://confirm",
+        },
       });
 
       if (signupError) {
