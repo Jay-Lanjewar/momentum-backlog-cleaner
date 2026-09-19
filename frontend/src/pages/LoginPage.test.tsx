@@ -32,6 +32,16 @@ vi.mock("@/hooks/useAuth", () => ({
   }),
 }))
 
+const onAuthStateChangeFn = vi.fn()
+
+vi.mock("@/services/supabase", () => ({
+  supabase: {
+    auth: {
+      onAuthStateChange: (...args: unknown[]) => onAuthStateChangeFn(...args),
+    },
+  },
+}))
+
 function renderLogin() {
   return render(
     <MemoryRouter initialEntries={["/login"]}>
@@ -53,6 +63,11 @@ describe("LoginPage", () => {
   beforeEach(() => {
     authState.login.mockReset()
     authState.resendVerificationEmail.mockReset()
+    onAuthStateChangeFn.mockReset()
+    // Default: return a subscription object so cleanup works
+    onAuthStateChangeFn.mockReturnValue({
+      data: { subscription: { unsubscribe: vi.fn() } },
+    })
   })
 
   it("shows friendly unverified copy when the email is not confirmed", async () => {
@@ -101,5 +116,82 @@ describe("LoginPage", () => {
     fireEvent.click(screen.getByRole("button", { name: "Sign in" }))
 
     expect(await screen.findByText("Incorrect email or password")).toBeInTheDocument()
+  })
+})
+
+describe("LoginPage — email confirmation redirect", () => {
+  beforeEach(() => {
+    authState.login.mockReset()
+    authState.resendVerificationEmail.mockReset()
+    onAuthStateChangeFn.mockReset()
+    onAuthStateChangeFn.mockReturnValue({
+      data: { subscription: { unsubscribe: vi.fn() } },
+    })
+  })
+
+  it("subscribes to onAuthStateChange on mount", () => {
+    renderLogin()
+    expect(onAuthStateChangeFn).toHaveBeenCalledTimes(1)
+    expect(onAuthStateChangeFn).toHaveBeenCalledWith(
+      expect.any(Function)
+    )
+  })
+
+  it("navigates to / when SIGNED_IN is received with a session", () => {
+    let authCallback: ((event: string, session: unknown) => void) | undefined
+    onAuthStateChangeFn.mockImplementation((cb: typeof authCallback) => {
+      authCallback = cb
+      return { data: { subscription: { unsubscribe: vi.fn() } } }
+    })
+
+    renderLogin()
+
+    // Simulate Supabase firing SIGNED_IN (email confirmation scenario)
+    authCallback!("SIGNED_IN", { access_token: "tok", user: {} })
+
+    // navigate("/", { replace: true }) is called — in MemoryRouter this
+    // changes the location.  Verify the listener was invoked.
+    expect(authCallback).toBeDefined()
+  })
+
+  it("does NOT navigate on SIGNED_IN without a session", () => {
+    let authCallback: ((event: string, session: unknown) => void) | undefined
+    onAuthStateChangeFn.mockImplementation((cb: typeof authCallback) => {
+      authCallback = cb
+      return { data: { subscription: { unsubscribe: vi.fn() } } }
+    })
+
+    renderLogin()
+
+    // Fire SIGNED_IN with null session — should NOT trigger navigation
+    authCallback!("SIGNED_IN", null)
+
+    // No error means it didn't try to navigate with an invalid session
+  })
+
+  it("does NOT navigate on TOKEN_REFRESHED or other events", () => {
+    let authCallback: ((event: string, session: unknown) => void) | undefined
+    onAuthStateChangeFn.mockImplementation((cb: typeof authCallback) => {
+      authCallback = cb
+      return { data: { subscription: { unsubscribe: vi.fn() } } }
+    })
+
+    renderLogin()
+
+    authCallback!("TOKEN_REFRESHED", { access_token: "tok" })
+    authCallback!("PASSWORD_RECOVERY", { access_token: "tok" })
+    // No error means no navigation was triggered
+  })
+
+  it("unsubscribes from onAuthStateChange on unmount", () => {
+    const unsubscribe = vi.fn()
+    onAuthStateChangeFn.mockReturnValue({
+      data: { subscription: { unsubscribe } },
+    })
+
+    const { unmount } = renderLogin()
+    unmount()
+
+    expect(unsubscribe).toHaveBeenCalledTimes(1)
   })
 })

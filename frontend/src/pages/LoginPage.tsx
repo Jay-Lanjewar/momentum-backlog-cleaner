@@ -1,14 +1,16 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { motion } from "framer-motion";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { Sparkles, Eye, EyeOff, Loader2, AlertCircle, RefreshCw, CheckCircle2 } from "lucide-react";
 
+import { supabase } from "@/services/supabase";
 import { Button } from "@/components/ui/button";
 import { FadeIn } from "@/components/ui/fade-in";
 import { AuthError, useAuth } from "@/hooks/useAuth";
 
 export function LoginPage() {
   const { login, signInWithGoogle, resendVerificationEmail } = useAuth();
+  const navigate = useNavigate();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
@@ -18,6 +20,21 @@ export function LoginPage() {
   const [unverified, setUnverified] = useState(false);
   const [resending, setResending] = useState(false);
   const [resendMessage, setResendMessage] = useState("");
+
+  // Redirect already-authenticated users (e.g. after email confirmation).
+  // Supabase processes the confirmation hash fragment, stores the session,
+  // then redirects to /login per the dashboard Site URL.  This listener
+  // catches the resulting SIGNED_IN event and sends the user to "/".
+  useEffect(() => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(
+      (event, session) => {
+        if (event === "SIGNED_IN" && session) {
+          navigate("/", { replace: true });
+        }
+      },
+    );
+    return () => subscription.unsubscribe();
+  }, [navigate]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
