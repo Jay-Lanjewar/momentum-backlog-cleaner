@@ -124,9 +124,10 @@ describe("Root layout has onboarding gate", () => {
     expect(content).toContain('(segments[0] as string) === "confirm"');
   });
 
-  it("confirm.tsx subscribes to addEventListener for warm-start URLs", () => {
+  it("confirm.tsx uses useLinkingURL from expo-linking for URL detection", () => {
     const content = fs.readFileSync(path.join(SRC, "app", "confirm.tsx"), "utf-8");
-    expect(content).toContain('addEventListener("url"');
+    expect(content).toContain("useLinkingURL");
+    expect(content).toContain("expo-linking");
   });
 
   it("confirm.tsx uses processed guard to prevent double-processing", () => {
