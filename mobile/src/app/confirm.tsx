@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { View, Text, TouchableOpacity, StyleSheet, ActivityIndicator } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
-import * as Linking from "expo-linking";
+import { useLinkingURL } from "expo-linking";
 
 import { supabase } from "@/lib/supabase";
 import { useAuthStore } from "@/store/useAuthStore";
@@ -26,28 +26,29 @@ function parseHashTokens(url: string): Record<string, string> | null {
 
 export default function ConfirmScreen() {
   const router = useRouter();
+  const linkingURL = useLinkingURL();
   const [state, setState] = useState<ConfirmState>("loading");
   const [errorMessage, setErrorMessage] = useState("");
-  const confirmingRef = useRef(false);
+  const processedRef = useRef(false);
 
   useEffect(() => {
-    let cancelled = false;
-    let processed = false;
-
     useAuthStore.getState().setConfirming(true);
-    confirmingRef.current = true;
+  }, []);
 
-    async function processUrl(url: string) {
-      if (processed || cancelled) return;
-      processed = true;
+  useEffect(() => {
+    if (processedRef.current || !linkingURL) return;
+    processedRef.current = true;
 
+    let cancelled = false;
+    const url = linkingURL;
+
+    async function process() {
       const tokens = parseHashTokens(url);
       if (!tokens?.access_token || !tokens.refresh_token) {
         if (!cancelled) {
           setErrorMessage("Invalid or expired confirmation link.");
           setState("error");
           useAuthStore.getState().setConfirming(false);
-          confirmingRef.current = false;
         }
         return;
       }
@@ -63,7 +64,6 @@ export default function ConfirmScreen() {
           setErrorMessage(error.message);
           setState("error");
           useAuthStore.getState().setConfirming(false);
-          confirmingRef.current = false;
         } else {
           setState("success");
         }
@@ -72,49 +72,23 @@ export default function ConfirmScreen() {
           setErrorMessage("Something went wrong. Please try again.");
           setState("error");
           useAuthStore.getState().setConfirming(false);
-          confirmingRef.current = false;
         }
       }
     }
 
-    const sub = Linking.addEventListener("url", ({ url }) => {
-      processUrl(url);
-    });
-
-    async function run() {
-      try {
-        const url = await Linking.getInitialURL();
-        if (cancelled) return;
-        if (url) {
-          await processUrl(url);
-        } else if (!processed) {
-          setErrorMessage("No confirmation data found.");
-          setState("error");
-          useAuthStore.getState().setConfirming(false);
-          confirmingRef.current = false;
-        }
-      } catch {
-        setErrorMessage("Something went wrong. Please try again.");
-        setState("error");
-        useAuthStore.getState().setConfirming(false);
-        confirmingRef.current = false;
-      }
-    }
-
-    run();
+    process();
 
     return () => {
       cancelled = true;
-      sub?.remove();
     };
-  }, []);
+  }, [linkingURL]);
 
   if (state === "loading") {
     return (
       <SafeAreaView style={styles.container}>
         <View style={styles.content}>
           <ActivityIndicator size="large" color="#2563EB" />
-          <Text style={styles.title}>Verifying your email…</Text>
+          <Text style={styles.title}>Verifying your email...</Text>
         </View>
       </SafeAreaView>
     );
@@ -125,10 +99,10 @@ export default function ConfirmScreen() {
       <SafeAreaView style={styles.container}>
         <View style={styles.content}>
           <View style={styles.iconCircle}>
-            <Text style={styles.icon}>✓</Text>
+            <Text style={styles.icon}>{"\u2713"}</Text>
           </View>
           <Text style={styles.title}>Email verified!</Text>
-          <Text style={styles.body}>Taking you to Momentum…</Text>
+          <Text style={styles.body}>Taking you to Momentum...</Text>
         </View>
       </SafeAreaView>
     );
@@ -138,7 +112,7 @@ export default function ConfirmScreen() {
     <SafeAreaView style={styles.container}>
       <View style={styles.content}>
         <View style={[styles.iconCircle, styles.iconCircleError]}>
-          <Text style={styles.icon}>✕</Text>
+          <Text style={styles.icon}>{"\u2715"}</Text>
         </View>
         <Text style={styles.title}>Confirmation failed</Text>
         <Text style={styles.body}>{errorMessage}</Text>
