@@ -32,50 +32,40 @@ export default function ConfirmScreen() {
 
   useEffect(() => {
     let cancelled = false;
+    let processed = false;
 
-    async function confirm() {
-      useAuthStore.getState().setConfirming(true);
-      confirmingRef.current = true;
+    useAuthStore.getState().setConfirming(true);
+    confirmingRef.current = true;
+
+    async function processUrl(url: string) {
+      if (processed || cancelled) return;
+      processed = true;
+
+      const tokens = parseHashTokens(url);
+      if (!tokens?.access_token || !tokens.refresh_token) {
+        if (!cancelled) {
+          setErrorMessage("Invalid or expired confirmation link.");
+          setState("error");
+          useAuthStore.getState().setConfirming(false);
+          confirmingRef.current = false;
+        }
+        return;
+      }
 
       try {
-        const url = await Linking.getInitialURL();
-        if (cancelled) return;
-
-        if (!url) {
-          if (!cancelled) {
-            setErrorMessage("No confirmation data found.");
-            setState("error");
-            useAuthStore.getState().setConfirming(false);
-            confirmingRef.current = false;
-          }
-          return;
-        }
-
-        const tokens = parseHashTokens(url);
-        if (!tokens?.access_token || !tokens.refresh_token) {
-          if (!cancelled) {
-            setErrorMessage("Invalid or expired confirmation link.");
-            setState("error");
-            useAuthStore.getState().setConfirming(false);
-            confirmingRef.current = false;
-          }
-          return;
-        }
-
         const { error } = await supabase.auth.setSession({
           access_token: tokens.access_token,
           refresh_token: tokens.refresh_token,
         });
 
-        if (!cancelled) {
-          if (error) {
-            setErrorMessage(error.message);
-            setState("error");
-            useAuthStore.getState().setConfirming(false);
-            confirmingRef.current = false;
-          } else {
-            setState("success");
-          }
+        if (cancelled) return;
+        if (error) {
+          setErrorMessage(error.message);
+          setState("error");
+          useAuthStore.getState().setConfirming(false);
+          confirmingRef.current = false;
+        } else {
+          setState("success");
         }
       } catch {
         if (!cancelled) {
@@ -87,10 +77,35 @@ export default function ConfirmScreen() {
       }
     }
 
-    confirm();
+    const sub = Linking.addEventListener("url", ({ url }) => {
+      processUrl(url);
+    });
+
+    async function run() {
+      try {
+        const url = await Linking.getInitialURL();
+        if (cancelled) return;
+        if (url) {
+          await processUrl(url);
+        } else if (!processed) {
+          setErrorMessage("No confirmation data found.");
+          setState("error");
+          useAuthStore.getState().setConfirming(false);
+          confirmingRef.current = false;
+        }
+      } catch {
+        setErrorMessage("Something went wrong. Please try again.");
+        setState("error");
+        useAuthStore.getState().setConfirming(false);
+        confirmingRef.current = false;
+      }
+    }
+
+    run();
 
     return () => {
       cancelled = true;
+      sub?.remove();
     };
   }, []);
 

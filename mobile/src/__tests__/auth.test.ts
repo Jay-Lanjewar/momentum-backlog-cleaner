@@ -115,6 +115,24 @@ describe("Root layout has onboarding gate", () => {
     );
     expect(content).toContain("confirming");
   });
+
+  it("_layout.tsx guards /confirm route from AuthGate redirect", () => {
+    const content = fs.readFileSync(
+      path.join(SRC, "app/_layout.tsx"),
+      "utf-8",
+    );
+    expect(content).toContain('(segments[0] as string) === "confirm"');
+  });
+
+  it("confirm.tsx subscribes to addEventListener for warm-start URLs", () => {
+    const content = fs.readFileSync(path.join(SRC, "app", "confirm.tsx"), "utf-8");
+    expect(content).toContain('addEventListener("url"');
+  });
+
+  it("confirm.tsx uses processed guard to prevent double-processing", () => {
+    const content = fs.readFileSync(path.join(SRC, "app", "confirm.tsx"), "utf-8");
+    expect(content).toContain("processed");
+  });
 });
 
 describe("Login screen has auth links", () => {

@@ -24,9 +24,13 @@ jest.mock("react-native-safe-area-context", () => {
 
 const mockSetSession = jest.fn();
 const mockGetInitialURL = jest.fn();
+const mockAddEventListener = jest.fn();
+const mockRemoveFn = jest.fn();
+let urlCallback: ((event: { url: string }) => void) | null = null;
 
 jest.mock("expo-linking", () => ({
   getInitialURL: (...args: any[]) => mockGetInitialURL(...args),
+  addEventListener: (...args: any[]) => mockAddEventListener(...args),
 }));
 
 jest.mock("@/lib/supabase", () => ({
@@ -48,12 +52,22 @@ jest.mock("@/store/useAuthStore", () => {
 
 const ConfirmScreen = require("@/app/confirm").default;
 
-afterEach(() => {
-  cleanup();
-  jest.clearAllMocks();
+beforeEach(() => {
+  urlCallback = null;
+  mockGetInitialURL.mockReset();
+  mockSetSession.mockReset();
+  mockAddEventListener.mockReset();
+  mockAddEventListener.mockReturnValue({ remove: mockRemoveFn });
+  mockRemoveFn.mockReset();
+  mockSetConfirming.mockReset();
+  mockReplace.mockReset();
 });
 
-describe("ConfirmScreen - valid confirmation deep link", () => {
+afterEach(() => {
+  cleanup();
+});
+
+describe("ConfirmScreen - cold start (getInitialURL)", () => {
   it("shows loading state initially", async () => {
     mockGetInitialURL.mockReturnValue(new Promise(() => {}));
     await act(async () => {
@@ -78,7 +92,7 @@ describe("ConfirmScreen - valid confirmation deep link", () => {
     });
   });
 
-  it("sets confirming=true to block AuthGate redirect", async () => {
+  it("sets confirming=true before processing", async () => {
     mockGetInitialURL.mockResolvedValue(
       "momentum://confirm#access_token=tok&refresh_token=ref"
     );
@@ -105,7 +119,7 @@ describe("ConfirmScreen - valid confirmation deep link", () => {
     expect(screen.getByText(/Taking you to Momentum/)).toBeTruthy();
   });
 
-  it("keeps confirming=true on success", async () => {
+  it("keeps confirming=true on success (not reset to false)", async () => {
     mockGetInitialURL.mockResolvedValue(
       "momentum://confirm#access_token=tok&refresh_token=ref"
     );
@@ -118,10 +132,177 @@ describe("ConfirmScreen - valid confirmation deep link", () => {
     });
     expect(mockSetConfirming).toHaveBeenCalledWith(true);
   });
+
+  it("handles URL with extra hash params", async () => {
+    mockGetInitialURL.mockResolvedValue(
+      "momentum://confirm#access_token=tok&refresh_token=ref&expires_in=3600&token_type=bearer&type=signup"
+    );
+    mockSetSession.mockResolvedValue({ error: null });
+
+    render(<ConfirmScreen />);
+
+    await waitFor(() => {
+      expect(screen.getByText("Email verified!")).toBeTruthy();
+    });
+    expect(mockSetSession).toHaveBeenCalledWith({
+      access_token: "tok",
+      refresh_token: "ref",
+    });
+  });
+
+  it("handles URL-encoded characters in tokens", async () => {
+    mockGetInitialURL.mockResolvedValue(
+      "momentum://confirm#access_token=tok%3D%3D&refresh_token=ref%2Babc"
+    );
+    mockSetSession.mockResolvedValue({ error: null });
+
+    render(<ConfirmScreen />);
+
+    await waitFor(() => {
+      expect(mockSetSession).toHaveBeenCalledWith({
+        access_token: "tok==",
+        refresh_token: "ref+abc",
+      });
+    });
+  });
 });
 
-describe("ConfirmScreen - invalid or expired link", () => {
-  it("shows error when no URL returned", async () => {
+describe("ConfirmScreen - warm start (addEventListener)", () => {
+  it("processes URL delivered via addEventListener when getInitialURL is pending", async () => {
+    mockAddEventListener.mockImplementation((event: string, cb: any) => {
+      if (event === "url") urlCallback = cb;
+      return { remove: mockRemoveFn };
+    });
+    mockGetInitialURL.mockReturnValue(new Promise(() => {}));
+    mockSetSession.mockResolvedValue({ error: null });
+
+    await act(async () => {
+      render(<ConfirmScreen />);
+    });
+
+    await act(async () => {
+      urlCallback?.({
+        url: "momentum://confirm#access_token=warm&refresh_token=start&type=signup",
+      });
+    });
+
+    await waitFor(() => {
+      expect(mockSetSession).toHaveBeenCalledWith({
+        access_token: "warm",
+        refresh_token: "start",
+      });
+    });
+  });
+
+  it("shows success for warm-start URL", async () => {
+    mockAddEventListener.mockImplementation((event: string, cb: any) => {
+      if (event === "url") urlCallback = cb;
+      return { remove: mockRemoveFn };
+    });
+    mockGetInitialURL.mockReturnValue(new Promise(() => {}));
+    mockSetSession.mockResolvedValue({ error: null });
+
+    await act(async () => {
+      render(<ConfirmScreen />);
+    });
+
+    await act(async () => {
+      urlCallback?.({
+        url: "momentum://confirm#access_token=tok&refresh_token=ref",
+      });
+    });
+
+    await waitFor(() => {
+      expect(screen.getByText("Email verified!")).toBeTruthy();
+    });
+  });
+
+  it("shows error for invalid warm-start URL", async () => {
+    mockAddEventListener.mockImplementation((event: string, cb: any) => {
+      if (event === "url") urlCallback = cb;
+      return { remove: mockRemoveFn };
+    });
+    mockGetInitialURL.mockReturnValue(new Promise(() => {}));
+
+    await act(async () => {
+      render(<ConfirmScreen />);
+    });
+
+    await act(async () => {
+      urlCallback?.({
+        url: "momentum://confirm#bad",
+      });
+    });
+
+    await waitFor(() => {
+      expect(screen.getByText("Invalid or expired confirmation link.")).toBeTruthy();
+    });
+  });
+});
+
+describe("ConfirmScreen - dual delivery (both paths fire)", () => {
+  it("processes getInitialURL URL first, ignores addEventListener", async () => {
+    mockAddEventListener.mockImplementation((event: string, cb: any) => {
+      if (event === "url") urlCallback = cb;
+      return { remove: mockRemoveFn };
+    });
+    mockGetInitialURL.mockResolvedValue(
+      "momentum://confirm#access_token=cold&refresh_token=start"
+    );
+    mockSetSession.mockResolvedValue({ error: null });
+
+    await act(async () => {
+      render(<ConfirmScreen />);
+    });
+
+    await waitFor(() => {
+      expect(mockSetSession).toHaveBeenCalledTimes(1);
+    });
+
+    await act(async () => {
+      urlCallback?.({
+        url: "momentum://confirm#access_token=warm&refresh_token=event",
+      });
+    });
+
+    expect(mockSetSession).toHaveBeenCalledTimes(1);
+    expect(mockSetSession).toHaveBeenCalledWith({
+      access_token: "cold",
+      refresh_token: "start",
+    });
+  });
+
+  it("processes addEventListener URL when getInitialURL is pending", async () => {
+    mockAddEventListener.mockImplementation((event: string, cb: any) => {
+      if (event === "url") urlCallback = cb;
+      return { remove: mockRemoveFn };
+    });
+    mockGetInitialURL.mockReturnValue(new Promise(() => {}));
+    mockSetSession.mockResolvedValue({ error: null });
+
+    await act(async () => {
+      render(<ConfirmScreen />);
+    });
+
+    await act(async () => {
+      urlCallback?.({
+        url: "momentum://confirm#access_token=warm&refresh_token=event",
+      });
+    });
+
+    await waitFor(() => {
+      expect(mockSetSession).toHaveBeenCalledTimes(1);
+    });
+
+    expect(mockSetSession).toHaveBeenCalledWith({
+      access_token: "warm",
+      refresh_token: "event",
+    });
+  });
+});
+
+describe("ConfirmScreen - error states", () => {
+  it("shows error when getInitialURL returns null", async () => {
     mockGetInitialURL.mockResolvedValue(null);
 
     render(<ConfirmScreen />);
@@ -130,6 +311,16 @@ describe("ConfirmScreen - invalid or expired link", () => {
       expect(screen.getByText("Confirmation failed")).toBeTruthy();
     });
     expect(screen.getByText("No confirmation data found.")).toBeTruthy();
+  });
+
+  it("sets confirming=false on null URL error", async () => {
+    mockGetInitialURL.mockResolvedValue(null);
+
+    render(<ConfirmScreen />);
+
+    await waitFor(() => {
+      expect(mockSetConfirming).toHaveBeenCalledWith(false);
+    });
   });
 
   it("shows error when URL has no hash", async () => {
@@ -176,15 +367,18 @@ describe("ConfirmScreen - invalid or expired link", () => {
     expect(screen.getByText("Invalid token")).toBeTruthy();
   });
 
-  it("sets confirming=false on error", async () => {
-    mockGetInitialURL.mockResolvedValue(null);
+  it("handles setSession throwing", async () => {
+    mockGetInitialURL.mockResolvedValue(
+      "momentum://confirm#access_token=tok&refresh_token=ref"
+    );
+    mockSetSession.mockRejectedValue(new Error("Network error"));
 
     render(<ConfirmScreen />);
 
     await waitFor(() => {
-      expect(mockSetConfirming).toHaveBeenCalledWith(false);
+      expect(screen.getByText("Something went wrong. Please try again.")).toBeTruthy();
     });
-    expect(mockSetConfirming).toHaveBeenCalledWith(true);
+    expect(mockSetConfirming).toHaveBeenCalledWith(false);
   });
 });
 
@@ -214,51 +408,34 @@ describe("ConfirmScreen - error recovery", () => {
   });
 });
 
-describe("ConfirmScreen - edge cases", () => {
-  it("handles setSession throwing", async () => {
-    mockGetInitialURL.mockResolvedValue(
-      "momentum://confirm#access_token=tok&refresh_token=ref"
-    );
-    mockSetSession.mockRejectedValue(new Error("Network error"));
+describe("ConfirmScreen - cleanup and unmount", () => {
+  it("renders without crashing when getInitialURL hangs", async () => {
+    mockGetInitialURL.mockReturnValue(new Promise(() => {}));
 
-    render(<ConfirmScreen />);
-
-    await waitFor(() => {
-      expect(screen.getByText("Something went wrong. Please try again.")).toBeTruthy();
+    await act(async () => {
+      render(<ConfirmScreen />);
     });
-    expect(mockSetConfirming).toHaveBeenCalledWith(false);
+
+    expect(screen.getByText(/Verifying your email/)).toBeTruthy();
   });
 
-  it("handles URL with extra hash params", async () => {
-    mockGetInitialURL.mockResolvedValue(
-      "momentum://confirm#access_token=tok&refresh_token=ref&expires_in=3600&token_type=bearer&type=signup"
-    );
-    mockSetSession.mockResolvedValue({ error: null });
+  it("does not call setSession when URL never arrives", async () => {
+    mockGetInitialURL.mockReturnValue(new Promise(() => {}));
 
-    render(<ConfirmScreen />);
+    await act(async () => {
+      render(<ConfirmScreen />);
+    });
 
-    await waitFor(() => {
-      expect(screen.getByText("Email verified!")).toBeTruthy();
-    });
-    expect(mockSetSession).toHaveBeenCalledWith({
-      access_token: "tok",
-      refresh_token: "ref",
-    });
+    expect(mockSetSession).not.toHaveBeenCalled();
   });
 
-  it("handles URL-encoded characters in tokens", async () => {
-    mockGetInitialURL.mockResolvedValue(
-      "momentum://confirm#access_token=tok%3D%3D&refresh_token=ref%2Babc"
-    );
-    mockSetSession.mockResolvedValue({ error: null });
+  it("has addEventListener registered for URL events", async () => {
+    mockGetInitialURL.mockReturnValue(new Promise(() => {}));
 
-    render(<ConfirmScreen />);
-
-    await waitFor(() => {
-      expect(mockSetSession).toHaveBeenCalledWith({
-        access_token: "tok==",
-        refresh_token: "ref+abc",
-      });
+    await act(async () => {
+      render(<ConfirmScreen />);
     });
+
+    expect(mockAddEventListener).toHaveBeenCalledWith("url", expect.any(Function));
   });
 });

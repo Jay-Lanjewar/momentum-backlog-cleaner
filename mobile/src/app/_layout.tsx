@@ -32,6 +32,9 @@ function AuthGate() {
 
     const inAuthGroup = segments[0] === "(auth)";
     const inOnboardingGroup = segments[0] === "(onboarding)";
+    const inConfirmRoute = (segments[0] as string) === "confirm";
+
+    if (inConfirmRoute) return;
 
     if (!isAuthenticated && !inAuthGroup) {
       router.replace("/(auth)/login");
