@@ -46,14 +46,24 @@ jest.mock("@/lib/supabase", () => ({
   },
 }));
 
+const mockGetMe = jest.fn();
+
+jest.mock("@/lib/api", () => ({
+  api: {
+    get: (...args: any[]) => mockGetMe(...args),
+  },
+}));
+
 const mockSetConfirming = jest.fn();
+const mockSetUser = jest.fn();
 
 jest.mock("@/store/useAuthStore", () => {
   const useAuthStore = (selector: any) =>
-    selector({ setConfirming: mockSetConfirming });
+    selector({ setConfirming: mockSetConfirming, setUser: mockSetUser });
   useAuthStore.getState = () => ({
     confirming: false,
     setConfirming: mockSetConfirming,
+    setUser: mockSetUser,
   });
   useAuthStore.setState = jest.fn();
   return { useAuthStore };
@@ -75,11 +85,16 @@ jest.mock("expo-linking", () => ({
 
 const ConfirmScreen = require("@/app/confirm").default;
 
+const mockProfile = { id: "user-1", email: "test@example.com" };
+
 beforeEach(() => {
+  jest.useRealTimers();
   mockInitialURL = null;
   mockLinkingURLSetter = null;
   mockSetSession.mockReset();
+  mockGetMe.mockReset();
   mockSetConfirming.mockReset();
+  mockSetUser.mockReset();
   mockReplace.mockReset();
 });
 
@@ -93,6 +108,7 @@ describe("ConfirmScreen - cold start (initial URL available)", () => {
     mockInitialURL =
       "momentum://confirm#access_token=tok123&refresh_token=ref456&type=signup";
     mockSetSession.mockResolvedValue({ error: null });
+    mockGetMe.mockResolvedValue({ data: mockProfile, error: null, errorCode: null });
 
     await render(<ConfirmScreen />);
 
@@ -108,6 +124,7 @@ describe("ConfirmScreen - cold start (initial URL available)", () => {
     mockInitialURL =
       "momentum://confirm#access_token=tok&refresh_token=ref";
     mockSetSession.mockResolvedValue({ error: null });
+    mockGetMe.mockResolvedValue({ data: mockProfile, error: null, errorCode: null });
 
     await render(<ConfirmScreen />);
 
@@ -120,6 +137,7 @@ describe("ConfirmScreen - cold start (initial URL available)", () => {
     mockInitialURL =
       "momentum://confirm#access_token=tok&refresh_token=ref";
     mockSetSession.mockResolvedValue({ error: null });
+    mockGetMe.mockResolvedValue({ data: mockProfile, error: null, errorCode: null });
 
     await render(<ConfirmScreen />);
 
@@ -129,23 +147,11 @@ describe("ConfirmScreen - cold start (initial URL available)", () => {
     expect(screen.getByText(/Taking you to Momentum/)).toBeTruthy();
   });
 
-  it("keeps confirming=true on success (not reset to false)", async () => {
-    mockInitialURL =
-      "momentum://confirm#access_token=tok&refresh_token=ref";
-    mockSetSession.mockResolvedValue({ error: null });
-
-    await render(<ConfirmScreen />);
-
-    await waitFor(() => {
-      expect(mockSetConfirming).toHaveBeenCalledTimes(1);
-    });
-    expect(mockSetConfirming).toHaveBeenCalledWith(true);
-  });
-
   it("handles URL with extra hash params", async () => {
     mockInitialURL =
       "momentum://confirm#access_token=tok&refresh_token=ref&expires_in=3600&token_type=bearer&type=signup";
     mockSetSession.mockResolvedValue({ error: null });
+    mockGetMe.mockResolvedValue({ data: mockProfile, error: null, errorCode: null });
 
     await render(<ConfirmScreen />);
 
@@ -162,6 +168,7 @@ describe("ConfirmScreen - cold start (initial URL available)", () => {
     mockInitialURL =
       "momentum://confirm#access_token=tok%3D%3D&refresh_token=ref%2Babc";
     mockSetSession.mockResolvedValue({ error: null });
+    mockGetMe.mockResolvedValue({ data: mockProfile, error: null, errorCode: null });
 
     await render(<ConfirmScreen />);
 
@@ -177,6 +184,7 @@ describe("ConfirmScreen - cold start (initial URL available)", () => {
 describe("ConfirmScreen - warm start (URL arrives later)", () => {
   it("processes URL when it becomes available after mount", async () => {
     mockSetSession.mockResolvedValue({ error: null });
+    mockGetMe.mockResolvedValue({ data: mockProfile, error: null, errorCode: null });
 
     await render(<ConfirmScreen />);
 
@@ -201,6 +209,7 @@ describe("ConfirmScreen - warm start (URL arrives later)", () => {
 
   it("shows success for warm-start URL", async () => {
     mockSetSession.mockResolvedValue({ error: null });
+    mockGetMe.mockResolvedValue({ data: mockProfile, error: null, errorCode: null });
 
     await render(<ConfirmScreen />);
 
@@ -235,6 +244,7 @@ describe("ConfirmScreen - duplicate URL processing", () => {
     mockInitialURL =
       "momentum://confirm#access_token=tok&refresh_token=ref";
     mockSetSession.mockResolvedValue({ error: null });
+    mockGetMe.mockResolvedValue({ data: mockProfile, error: null, errorCode: null });
 
     const result = await render(<ConfirmScreen />);
 
@@ -245,6 +255,142 @@ describe("ConfirmScreen - duplicate URL processing", () => {
     await result.rerender(<ConfirmScreen />);
 
     expect(mockSetSession).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("ConfirmScreen - success flow", () => {
+  it("calls GET /api/v1/auth/me after successful setSession", async () => {
+    mockInitialURL =
+      "momentum://confirm#access_token=tok&refresh_token=ref";
+    mockSetSession.mockResolvedValue({ error: null });
+    mockGetMe.mockResolvedValue({ data: mockProfile, error: null, errorCode: null });
+
+    await render(<ConfirmScreen />);
+
+    await waitFor(() => {
+      expect(mockGetMe).toHaveBeenCalledWith("/api/v1/auth/me");
+    });
+  });
+
+  it("calls setUser with profile data after successful /auth/me", async () => {
+    mockInitialURL =
+      "momentum://confirm#access_token=tok&refresh_token=ref";
+    mockSetSession.mockResolvedValue({ error: null });
+    mockGetMe.mockResolvedValue({ data: mockProfile, error: null, errorCode: null });
+
+    await render(<ConfirmScreen />);
+
+    await waitFor(() => {
+      expect(mockSetUser).toHaveBeenCalledWith(mockProfile);
+    });
+  });
+
+  it("calls setConfirming(false) on success", async () => {
+    mockInitialURL =
+      "momentum://confirm#access_token=tok&refresh_token=ref";
+    mockSetSession.mockResolvedValue({ error: null });
+    mockGetMe.mockResolvedValue({ data: mockProfile, error: null, errorCode: null });
+
+    await render(<ConfirmScreen />);
+
+    await waitFor(() => {
+      expect(mockSetConfirming).toHaveBeenCalledWith(false);
+    });
+  });
+
+  it("navigates to root after 1500ms delay", async () => {
+    jest.useFakeTimers();
+    try {
+      mockInitialURL =
+        "momentum://confirm#access_token=tok&refresh_token=ref";
+      mockSetSession.mockResolvedValue({ error: null });
+      mockGetMe.mockResolvedValue({ data: mockProfile, error: null, errorCode: null });
+
+      await render(<ConfirmScreen />);
+
+      await waitFor(() => {
+        expect(screen.getByText("Email verified!")).toBeTruthy();
+      });
+
+      expect(mockReplace).not.toHaveBeenCalled();
+
+      await act(async () => {
+        jest.advanceTimersByTime(1500);
+      });
+
+      expect(mockReplace).toHaveBeenCalledWith("/");
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+
+  it("does not call setUser when /auth/me returns no data", async () => {
+    mockInitialURL =
+      "momentum://confirm#access_token=tok&refresh_token=ref";
+    mockSetSession.mockResolvedValue({ error: null });
+    mockGetMe.mockResolvedValue({ data: null, error: "Not found", errorCode: null });
+
+    await render(<ConfirmScreen />);
+
+    await waitFor(() => {
+      expect(screen.getByText("Email verified!")).toBeTruthy();
+    });
+    expect(mockSetUser).not.toHaveBeenCalled();
+  });
+
+  it("/auth/me failure does not turn successful confirmation into an error", async () => {
+    mockInitialURL =
+      "momentum://confirm#access_token=tok&refresh_token=ref";
+    mockSetSession.mockResolvedValue({ error: null });
+    mockGetMe.mockResolvedValue({ data: null, error: "Not found", errorCode: null });
+
+    await render(<ConfirmScreen />);
+
+    await waitFor(() => {
+      expect(screen.getByText("Email verified!")).toBeTruthy();
+    });
+    expect(mockSetConfirming).toHaveBeenCalledWith(false);
+  });
+
+  it("/auth/me network error does not turn successful confirmation into an error", async () => {
+    mockInitialURL =
+      "momentum://confirm#access_token=tok&refresh_token=ref";
+    mockSetSession.mockResolvedValue({ error: null });
+    mockGetMe.mockRejectedValue(new Error("Network error"));
+
+    await render(<ConfirmScreen />);
+
+    await waitFor(() => {
+      expect(screen.getByText("Email verified!")).toBeTruthy();
+    });
+    expect(mockSetConfirming).toHaveBeenCalledWith(false);
+    expect(mockSetUser).not.toHaveBeenCalled();
+  });
+
+  it("does not navigate immediately before delay elapses", async () => {
+    jest.useFakeTimers();
+    try {
+      mockInitialURL =
+        "momentum://confirm#access_token=tok&refresh_token=ref";
+      mockSetSession.mockResolvedValue({ error: null });
+      mockGetMe.mockResolvedValue({ data: mockProfile, error: null, errorCode: null });
+
+      await render(<ConfirmScreen />);
+
+      await waitFor(() => {
+        expect(screen.getByText("Email verified!")).toBeTruthy();
+      });
+
+      expect(mockReplace).not.toHaveBeenCalled();
+
+      await act(async () => {
+        jest.advanceTimersByTime(1499);
+      });
+
+      expect(mockReplace).not.toHaveBeenCalled();
+    } finally {
+      jest.useRealTimers();
+    }
   });
 });
 
@@ -322,6 +468,32 @@ describe("ConfirmScreen - error states", () => {
       expect(mockSetConfirming).toHaveBeenCalledWith(false);
     });
   });
+
+  it("does not call getMe when setSession fails", async () => {
+    mockInitialURL =
+      "momentum://confirm#access_token=tok&refresh_token=ref";
+    mockSetSession.mockResolvedValue({ error: { message: "Invalid token" } });
+
+    await render(<ConfirmScreen />);
+
+    await waitFor(() => {
+      expect(screen.getByText("Confirmation failed")).toBeTruthy();
+    });
+    expect(mockGetMe).not.toHaveBeenCalled();
+  });
+
+  it("does not call getMe when tokens are invalid", async () => {
+    mockInitialURL = "momentum://confirm#bad";
+
+    await render(<ConfirmScreen />);
+
+    await waitFor(() => {
+      expect(
+        screen.getByText("Invalid or expired confirmation link."),
+      ).toBeTruthy();
+    });
+    expect(mockGetMe).not.toHaveBeenCalled();
+  });
 });
 
 describe("ConfirmScreen - error recovery", () => {
@@ -385,6 +557,7 @@ describe("ConfirmScreen - cleanup and unmount", () => {
       resolveSetSession({ error: null });
     });
 
+    expect(mockSetUser).not.toHaveBeenCalled();
     expect(mockSetConfirming).not.toHaveBeenCalledWith(false);
   });
 });

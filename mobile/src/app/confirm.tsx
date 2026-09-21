@@ -5,7 +5,9 @@ import { useRouter } from "expo-router";
 import { useLinkingURL } from "expo-linking";
 
 import { supabase } from "@/lib/supabase";
+import { api } from "@/lib/api";
 import { useAuthStore } from "@/store/useAuthStore";
+import type { AuthMeResponse } from "@/services/types";
 
 type ConfirmState = "loading" | "success" | "error";
 
@@ -65,7 +67,21 @@ export default function ConfirmScreen() {
           setState("error");
           useAuthStore.getState().setConfirming(false);
         } else {
-          setState("success");
+          try {
+            const meResult = await api.get<AuthMeResponse>("/api/v1/auth/me");
+            if (!cancelled && meResult.data) {
+              useAuthStore.getState().setUser(meResult.data);
+            }
+          } catch {
+            // Profile fetch failed — Supabase session is valid, proceed anyway
+          }
+          if (!cancelled) {
+            useAuthStore.getState().setConfirming(false);
+            setState("success");
+            setTimeout(() => {
+              if (!cancelled) router.replace("/");
+            }, 1500);
+          }
         }
       } catch {
         if (!cancelled) {
