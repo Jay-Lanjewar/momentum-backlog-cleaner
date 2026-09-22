@@ -522,6 +522,224 @@ describe("ConfirmScreen - error recovery", () => {
   });
 });
 
+describe("ConfirmScreen - password recovery (type=recovery)", () => {
+  it("recognizes type=recovery and calls setSession", async () => {
+    mockInitialURL =
+      "momentum://confirm#access_token=tok&refresh_token=ref&type=recovery";
+    mockSetSession.mockResolvedValue({ error: null });
+    mockGetMe.mockResolvedValue({ data: mockProfile, error: null, errorCode: null });
+
+    await render(<ConfirmScreen />);
+
+    await waitFor(() => {
+      expect(mockSetSession).toHaveBeenCalledWith({
+        access_token: "tok",
+        refresh_token: "ref",
+      });
+    });
+  });
+
+  it("calls GET /api/v1/auth/me after successful setSession", async () => {
+    mockInitialURL =
+      "momentum://confirm#access_token=tok&refresh_token=ref&type=recovery";
+    mockSetSession.mockResolvedValue({ error: null });
+    mockGetMe.mockResolvedValue({ data: mockProfile, error: null, errorCode: null });
+
+    await render(<ConfirmScreen />);
+
+    await waitFor(() => {
+      expect(mockGetMe).toHaveBeenCalledWith("/api/v1/auth/me");
+    });
+  });
+
+  it("populates Zustand auth state via setUser", async () => {
+    mockInitialURL =
+      "momentum://confirm#access_token=tok&refresh_token=ref&type=recovery";
+    mockSetSession.mockResolvedValue({ error: null });
+    mockGetMe.mockResolvedValue({ data: mockProfile, error: null, errorCode: null });
+
+    await render(<ConfirmScreen />);
+
+    await waitFor(() => {
+      expect(mockSetUser).toHaveBeenCalledWith(mockProfile);
+    });
+  });
+
+  it("routes to /(auth)/reset-password", async () => {
+    mockInitialURL =
+      "momentum://confirm#access_token=tok&refresh_token=ref&type=recovery";
+    mockSetSession.mockResolvedValue({ error: null });
+    mockGetMe.mockResolvedValue({ data: mockProfile, error: null, errorCode: null });
+
+    await render(<ConfirmScreen />);
+
+    await waitFor(() => {
+      expect(mockReplace).toHaveBeenCalledWith("/(auth)/reset-password");
+    });
+  });
+
+  it("keeps confirming=true while transitioning", async () => {
+    mockInitialURL =
+      "momentum://confirm#access_token=tok&refresh_token=ref&type=recovery";
+    mockSetSession.mockResolvedValue({ error: null });
+    mockGetMe.mockResolvedValue({ data: mockProfile, error: null, errorCode: null });
+
+    await render(<ConfirmScreen />);
+
+    await waitFor(() => {
+      expect(mockReplace).toHaveBeenCalledWith("/(auth)/reset-password");
+    });
+    expect(mockSetConfirming).toHaveBeenCalledWith(true);
+    expect(mockSetConfirming).not.toHaveBeenCalledWith(false);
+  });
+
+  it("does not show the verified-email success screen for recovery", async () => {
+    mockInitialURL =
+      "momentum://confirm#access_token=tok&refresh_token=ref&type=recovery";
+    mockSetSession.mockResolvedValue({ error: null });
+    mockGetMe.mockResolvedValue({ data: mockProfile, error: null, errorCode: null });
+
+    await render(<ConfirmScreen />);
+
+    await waitFor(() => {
+      expect(mockReplace).toHaveBeenCalledWith("/(auth)/reset-password");
+    });
+    expect(screen.queryByText("Email verified!")).toBeNull();
+  });
+
+  it("does not navigate to root for recovery", async () => {
+    jest.useFakeTimers();
+    try {
+      mockInitialURL =
+        "momentum://confirm#access_token=tok&refresh_token=ref&type=recovery";
+      mockSetSession.mockResolvedValue({ error: null });
+      mockGetMe.mockResolvedValue({ data: mockProfile, error: null, errorCode: null });
+
+      await render(<ConfirmScreen />);
+
+      await waitFor(() => {
+        expect(mockReplace).toHaveBeenCalledWith("/(auth)/reset-password");
+      });
+
+      await act(async () => {
+        jest.advanceTimersByTime(2000);
+      });
+
+      expect(mockReplace).not.toHaveBeenCalledWith("/");
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+
+  it("shows error for malformed recovery link (no tokens)", async () => {
+    mockInitialURL = "momentum://confirm#type=recovery";
+
+    await render(<ConfirmScreen />);
+
+    await waitFor(() => {
+      expect(
+        screen.getByText("Invalid or expired confirmation link."),
+      ).toBeTruthy();
+    });
+    expect(mockSetSession).not.toHaveBeenCalled();
+  });
+
+  it("shows error when setSession fails for recovery", async () => {
+    mockInitialURL =
+      "momentum://confirm#access_token=tok&refresh_token=ref&type=recovery";
+    mockSetSession.mockResolvedValue({ error: { message: "Invalid token" } });
+
+    await render(<ConfirmScreen />);
+
+    await waitFor(() => {
+      expect(screen.getByText("Confirmation failed")).toBeTruthy();
+    });
+    expect(screen.getByText("Invalid token")).toBeTruthy();
+    expect(mockGetMe).not.toHaveBeenCalled();
+    expect(mockReplace).not.toHaveBeenCalledWith("/(auth)/reset-password");
+  });
+
+  it("still routes to reset-password when /auth/me fails after successful setSession", async () => {
+    mockInitialURL =
+      "momentum://confirm#access_token=tok&refresh_token=ref&type=recovery";
+    mockSetSession.mockResolvedValue({ error: null });
+    mockGetMe.mockResolvedValue({ data: null, error: "Not found", errorCode: null });
+
+    await render(<ConfirmScreen />);
+
+    await waitFor(() => {
+      expect(mockReplace).toHaveBeenCalledWith("/(auth)/reset-password");
+    });
+    expect(mockSetUser).not.toHaveBeenCalled();
+    expect(screen.queryByText("Confirmation failed")).toBeNull();
+  });
+
+  it("still routes to reset-password when /auth/me rejects for recovery", async () => {
+    mockInitialURL =
+      "momentum://confirm#access_token=tok&refresh_token=ref&type=recovery";
+    mockSetSession.mockResolvedValue({ error: null });
+    mockGetMe.mockRejectedValue(new Error("Network error"));
+
+    await render(<ConfirmScreen />);
+
+    await waitFor(() => {
+      expect(mockReplace).toHaveBeenCalledWith("/(auth)/reset-password");
+    });
+    expect(mockSetUser).not.toHaveBeenCalled();
+  });
+
+  it("preserves signup flow: type=signup still routes to root after delay", async () => {
+    jest.useFakeTimers();
+    try {
+      mockInitialURL =
+        "momentum://confirm#access_token=tok&refresh_token=ref&type=signup";
+      mockSetSession.mockResolvedValue({ error: null });
+      mockGetMe.mockResolvedValue({ data: mockProfile, error: null, errorCode: null });
+
+      await render(<ConfirmScreen />);
+
+      await waitFor(() => {
+        expect(screen.getByText("Email verified!")).toBeTruthy();
+      });
+      expect(mockReplace).not.toHaveBeenCalledWith("/(auth)/reset-password");
+
+      await act(async () => {
+        jest.advanceTimersByTime(1500);
+      });
+
+      expect(mockReplace).toHaveBeenCalledWith("/");
+      expect(mockSetConfirming).toHaveBeenCalledWith(false);
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+
+  it("preserves signup flow: no type still routes to root after delay", async () => {
+    jest.useFakeTimers();
+    try {
+      mockInitialURL =
+        "momentum://confirm#access_token=tok&refresh_token=ref";
+      mockSetSession.mockResolvedValue({ error: null });
+      mockGetMe.mockResolvedValue({ data: mockProfile, error: null, errorCode: null });
+
+      await render(<ConfirmScreen />);
+
+      await waitFor(() => {
+        expect(screen.getByText("Email verified!")).toBeTruthy();
+      });
+
+      await act(async () => {
+        jest.advanceTimersByTime(1500);
+      });
+
+      expect(mockReplace).toHaveBeenCalledWith("/");
+      expect(mockReplace).not.toHaveBeenCalledWith("/(auth)/reset-password");
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+});
+
 describe("ConfirmScreen - cleanup and unmount", () => {
   it("renders without crashing when URL is null", async () => {
     await render(<ConfirmScreen />);

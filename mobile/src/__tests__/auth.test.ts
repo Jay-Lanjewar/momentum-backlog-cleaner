@@ -29,6 +29,10 @@ describe("Auth screen files", () => {
     expect(fileExists(path.join(AUTH, "forgot-password.tsx"))).toBe(true);
   });
 
+  it("has reset-password.tsx", () => {
+    expect(fileExists(path.join(AUTH, "reset-password.tsx"))).toBe(true);
+  });
+
   it("has auth _layout.tsx", () => {
     expect(fileExists(path.join(AUTH, "_layout.tsx"))).toBe(true);
   });
@@ -81,12 +85,60 @@ describe("Settings screen", () => {
 });
 
 describe("Auth layout includes all screens", () => {
-  it("layout references login, register, forgot-password, verify-email", () => {
+  it("layout references login, register, forgot-password, reset-password, verify-email", () => {
     const content = fs.readFileSync(path.join(AUTH, "_layout.tsx"), "utf-8");
     expect(content).toContain("login");
     expect(content).toContain("register");
     expect(content).toContain("forgot-password");
+    expect(content).toContain("reset-password");
     expect(content).toContain("verify-email");
+  });
+});
+
+describe("Forgot password supplies redirectTo", () => {
+  it("forgot-password.tsx passes redirectTo momentum://confirm", () => {
+    const content = fs.readFileSync(
+      path.join(AUTH, "forgot-password.tsx"),
+      "utf-8",
+    );
+    expect(content).toContain("resetPasswordForEmail");
+    expect(content).toContain('redirectTo: "momentum://confirm"');
+  });
+});
+
+describe("Reset password screen", () => {
+  it("reset-password.tsx calls supabase.auth.updateUser", () => {
+    const content = fs.readFileSync(
+      path.join(AUTH, "reset-password.tsx"),
+      "utf-8",
+    );
+    expect(content).toContain("updateUser");
+    expect(content).toContain("password");
+  });
+
+  it("reset-password.tsx requires an active session", () => {
+    const content = fs.readFileSync(
+      path.join(AUTH, "reset-password.tsx"),
+      "utf-8",
+    );
+    expect(content).toContain("getSession");
+    expect(content).toContain("/(auth)/login");
+  });
+
+  it("reset-password.tsx clears confirming", () => {
+    const content = fs.readFileSync(
+      path.join(AUTH, "reset-password.tsx"),
+      "utf-8",
+    );
+    expect(content).toContain("setConfirming");
+  });
+
+  it("reset-password.tsx navigates to (app) after successful update", () => {
+    const content = fs.readFileSync(
+      path.join(AUTH, "reset-password.tsx"),
+      "utf-8",
+    );
+    expect(content).toContain('router.replace("/(app)")');
   });
 });
 
@@ -122,6 +174,15 @@ describe("Root layout has onboarding gate", () => {
       "utf-8",
     );
     expect(content).toContain('(segments[0] as string) === "confirm"');
+  });
+
+  it("_layout.tsx guards /reset-password route from AuthGate redirect", () => {
+    const content = fs.readFileSync(
+      path.join(SRC, "app/_layout.tsx"),
+      "utf-8",
+    );
+    expect(content).toContain("reset-password");
+    expect(content).toContain("inResetRoute");
   });
 
   it("confirm.tsx uses useLinkingURL from expo-linking for URL detection", () => {

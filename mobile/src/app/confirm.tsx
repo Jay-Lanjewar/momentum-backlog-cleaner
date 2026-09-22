@@ -66,23 +66,34 @@ export default function ConfirmScreen() {
           setErrorMessage(error.message);
           setState("error");
           useAuthStore.getState().setConfirming(false);
-        } else {
-          try {
-            const meResult = await api.get<AuthMeResponse>("/api/v1/auth/me");
-            if (!cancelled && meResult.data) {
-              useAuthStore.getState().setUser(meResult.data);
-            }
-          } catch {
-            // Profile fetch failed — Supabase session is valid, proceed anyway
-          }
-          if (!cancelled) {
-            useAuthStore.getState().setConfirming(false);
-            setState("success");
-            setTimeout(() => {
-              if (!cancelled) router.replace("/");
-            }, 1500);
-          }
+          return;
         }
+
+        const isRecovery = tokens.type === "recovery";
+
+        try {
+          const meResult = await api.get<AuthMeResponse>("/api/v1/auth/me");
+          if (!cancelled && meResult.data) {
+            useAuthStore.getState().setUser(meResult.data);
+          }
+        } catch {
+          // Profile fetch failed — Supabase session is valid, proceed anyway
+        }
+
+        if (cancelled) return;
+
+        if (isRecovery) {
+          // Keep confirming=true while transitioning to the reset-password
+          // screen so AuthGate does not redirect the recovery session away.
+          router.replace("/(auth)/reset-password");
+          return;
+        }
+
+        useAuthStore.getState().setConfirming(false);
+        setState("success");
+        setTimeout(() => {
+          if (!cancelled) router.replace("/");
+        }, 1500);
       } catch {
         if (!cancelled) {
           setErrorMessage("Something went wrong. Please try again.");
