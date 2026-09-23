@@ -23,14 +23,18 @@ import type {
   BalanceScoreData,
 } from "@/services/types";
 
+export const dashboardQueryKey = ["dashboard"] as const;
+
+export async function fetchDashboard(): Promise<DashboardData> {
+  const result = await api.get<DashboardData>("/api/v1/dashboard");
+  if (result.error) throw new Error(result.error);
+  return result.data;
+}
+
 export function useDashboard() {
   return useQuery({
-    queryKey: ["dashboard"],
-    queryFn: async () => {
-      const result = await api.get<DashboardData>("/api/v1/dashboard");
-      if (result.error) throw new Error(result.error);
-      return result.data;
-    },
+    queryKey: dashboardQueryKey,
+    queryFn: fetchDashboard,
     staleTime: 1000 * 60,
     retry: 1,
   });

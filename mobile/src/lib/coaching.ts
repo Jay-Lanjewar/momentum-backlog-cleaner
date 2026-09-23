@@ -183,11 +183,15 @@ export function healthTone(
 export function buildRecommendationReason(
   item: { overdue: boolean; due_date: string | null; priority: number },
   healthScore: string,
+  options?: { isTopPriority?: boolean },
 ): string {
   if (item.overdue) return "This task is overdue — highest priority.";
   if (healthScore === "critical")
     return "Your backlog needs attention. Let's clear some items.";
   if (item.priority === 1) return "High-priority task — important to tackle first.";
+  if (options?.isTopPriority)
+    return "Top of your prioritized backlog — best next match.";
+  if (item.due_date) return "Has a due date — good to tackle before it slips.";
   return "This is the best next task for your study session.";
 }
 

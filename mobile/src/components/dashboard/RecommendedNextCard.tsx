@@ -7,6 +7,7 @@ interface RecommendedNextCardProps {
   backlogItem: PrioritizedBacklogItem | undefined;
   isCurrent: boolean;
   healthScore: string;
+  isTopPriority?: boolean;
   onStart: () => void;
 }
 
@@ -15,6 +16,7 @@ export function RecommendedNextCard({
   backlogItem,
   isCurrent,
   healthScore,
+  isTopPriority = false,
   onStart,
 }: RecommendedNextCardProps) {
   const courseColor = backlogItem?.course_color ?? "#6B7280";
@@ -23,6 +25,7 @@ export function RecommendedNextCard({
   const reason = buildRecommendationReason(
     { overdue, due_date: backlogItem?.due_date ?? null, priority: backlogItem?.priority ?? 3 },
     healthScore,
+    { isTopPriority },
   );
 
   return (

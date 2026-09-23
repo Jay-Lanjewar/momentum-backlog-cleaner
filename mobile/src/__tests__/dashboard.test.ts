@@ -59,6 +59,7 @@ describe("RecommendedNextCard", () => {
     expect(content).toContain("isCurrent: boolean");
     expect(content).toContain("healthScore: string");
     expect(content).toContain("onStart: () => void");
+    expect(content).toContain("isTopPriority?: boolean");
   });
 
   it("shows NOW label when isCurrent is true", () => {
@@ -313,6 +314,34 @@ describe("Today screen integration", () => {
     expect(content).toContain("backlogItem=");
     expect(content).toContain("isCurrent=");
     expect(content).toContain("onStart=");
+    expect(content).toContain("isTopPriority=");
+  });
+
+  it("shows daily_message near recommendation", () => {
+    expect(content).toContain("dailyMessage");
+    expect(content).toContain("data.plan.plan.daily_message");
+  });
+
+  it("distinguishes empty backlog from no-time-left", () => {
+    expect(content).toContain("hasEmptyBacklog");
+    expect(content).toContain("Add your first task");
+    expect(content).toContain("Add Work");
+    expect(content).toContain("No study time left today");
+    expect(content).toContain("totalBacklogItems");
+  });
+
+  it("keeps RecommendedNextCard as first meaningful content section", () => {
+    const cardIdx = content.indexOf("Recommended Next Session");
+    const progressIdx = content.indexOf("Progress Overview");
+    const backlogIdx = content.indexOf("Backlog Health");
+    expect(cardIdx).toBeGreaterThan(-1);
+    expect(progressIdx).toBeGreaterThan(cardIdx);
+    expect(backlogIdx).toBeGreaterThan(cardIdx);
+  });
+
+  it("keeps existing empty states", () => {
+    expect(content).toContain("All caught up!");
+    expect(content).toContain("No more sessions today");
   });
 
   it("renders BacklogHealthCard with health data", () => {
@@ -360,6 +389,8 @@ describe("Today screen integration", () => {
   it("retains empty states", () => {
     expect(content).toContain("All caught up!");
     expect(content).toContain("No more sessions today");
+    expect(content).toContain("No study time left today");
+    expect(content).toContain("Add your first task");
   });
 
   it("retains pull-to-refresh", () => {
@@ -435,6 +466,8 @@ describe("Dashboard data fields reused from API", () => {
     expect(hooksContent).toContain("useDashboard");
     expect(hooksContent).toContain("/api/v1/dashboard");
     expect(hooksContent).toContain("DashboardData");
+    expect(hooksContent).toContain("dashboardQueryKey");
+    expect(hooksContent).toContain("fetchDashboard");
   });
 
   it("no additional API endpoints were added", () => {

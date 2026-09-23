@@ -13,19 +13,16 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
+import { useQueryClient } from "@tanstack/react-query";
 
 import { api } from "@/lib/api";
 import { useAuthStore } from "@/store/useAuthStore";
 import type { AuthMeResponse } from "@/services/types";
+import { dashboardQueryKey, fetchDashboard } from "@/services/hooks";
 import { parseBacklogInput, getTotalTopics, COURSE_COLORS } from "@/lib/onboarding";
 
-const LOADING_MESSAGES = [
-  "Understanding your work...",
-  "Organizing subjects...",
-  "Planning your study time...",
-  "Building your study plan...",
-  "Almost there...",
-];
+const SAVING_MSG = "Saving your work...";
+const BUILDING_MSG = "Building your plan...";
 
 // Default school-day schedule (Mon–Fri). Editable later from Plan → Schedule.
 const DEFAULT_SCHOOL_BLOCK = { type: "school", start: "08:00", end: "15:00" };
@@ -54,13 +51,14 @@ function buildDefaultSchedule(): Record<
 export default function OnboardingScreen() {
   const router = useRouter();
   const setUser = useAuthStore((s) => s.setUser);
+  const queryClient = useQueryClient();
 
   // step: 0 = backlog input / parsed confirmation, 1 = loading
   const [step, setStep] = useState(0);
   const [backlogText, setBacklogText] = useState("");
   const [showConfirm, setShowConfirm] = useState(false);
   const [submitting, setSubmitting] = useState(false);
-  const [loadingMsg, setLoadingMsg] = useState(LOADING_MESSAGES[0]);
+  const [loadingMsg, setLoadingMsg] = useState(SAVING_MSG);
   const submittingRef = useRef(false);
 
   const parsed = parseBacklogInput(backlogText);
@@ -71,6 +69,7 @@ export default function OnboardingScreen() {
     submittingRef.current = true;
     setSubmitting(true);
     setStep(1);
+    setLoadingMsg(SAVING_MSG);
 
     const courses = parsed
       .filter((g) => g.items.length > 0)
@@ -108,17 +107,10 @@ export default function OnboardingScreen() {
       schedule: { schedule: buildDefaultSchedule() },
     };
 
-    let msgIdx = 0;
-    const msgTimer = setInterval(() => {
-      msgIdx = (msgIdx + 1) % LOADING_MESSAGES.length;
-      setLoadingMsg(LOADING_MESSAGES[msgIdx]);
-    }, 2500);
-
     try {
       const result = await api.post<AuthMeResponse>("/api/v1/onboarding", payload);
 
       if (result.error) {
-        clearInterval(msgTimer);
         Alert.alert("Error", result.error);
         setSubmitting(false);
         submittingRef.current = false;
@@ -127,14 +119,22 @@ export default function OnboardingScreen() {
         return;
       }
 
-      clearInterval(msgTimer);
-      const meResult = await api.get<AuthMeResponse>("/api/v1/auth/me");
+      // Onboarding session is authenticated; plan is created by GET /dashboard.
+      // Overlap auth restore with dashboard prefetch so Today has data on first paint.
+      setLoadingMsg(BUILDING_MSG);
+      const [meResult] = await Promise.all([
+        api.get<AuthMeResponse>("/api/v1/auth/me"),
+        queryClient.prefetchQuery({
+          queryKey: dashboardQueryKey,
+          queryFn: fetchDashboard,
+        }),
+      ]);
+
       if (meResult.data) {
         setUser(meResult.data);
       }
       router.replace("/(app)");
     } catch {
-      clearInterval(msgTimer);
       Alert.alert("Error", "Something went wrong. Please try again.");
       setSubmitting(false);
       submittingRef.current = false;

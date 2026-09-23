@@ -247,6 +247,21 @@ describe("Root layout has onboarding gate", () => {
     expect(content).toContain("buildDefaultSchedule");
   });
 
+  it("onboarding prefetches dashboard after onboarding POST", () => {
+    const content = fs.readFileSync(
+      path.join(ONBOARDING, "index.tsx"),
+      "utf-8",
+    );
+    expect(content).toContain("prefetchQuery");
+    expect(content).toContain("dashboardQueryKey");
+    expect(content).toContain("fetchDashboard");
+    expect(content).toContain("Promise.all");
+    expect(content).toContain('api.get<AuthMeResponse>("/api/v1/auth/me"');
+    expect(content).toContain("Saving your work...");
+    expect(content).toContain("Building your plan...");
+    expect(content).not.toContain("Understanding your work");
+  });
+
   it("onboarding no longer contains removed Welcome/Name/Exam/Weekday steps", () => {
     const content = fs.readFileSync(
       path.join(ONBOARDING, "index.tsx"),

@@ -221,6 +221,33 @@ describe("buildRecommendationReason", () => {
     );
     expect(result).toContain("High-priority");
   });
+
+  it("returns top-of-backlog message when isTopPriority", () => {
+    const result = buildRecommendationReason(
+      { overdue: false, due_date: null, priority: 3 },
+      "good",
+      { isTopPriority: true },
+    );
+    expect(result).toContain("Top of your prioritized backlog");
+  });
+
+  it("prefers overdue over isTopPriority", () => {
+    const result = buildRecommendationReason(
+      { overdue: true, due_date: "2026-09-01", priority: 3 },
+      "good",
+      { isTopPriority: true },
+    );
+    expect(result).toContain("overdue");
+  });
+
+  it("returns due-date message when has due_date and not top priority", () => {
+    const result = buildRecommendationReason(
+      { overdue: false, due_date: "2026-09-30", priority: 3 },
+      "good",
+      { isTopPriority: false },
+    );
+    expect(result).toContain("due date");
+  });
 });
 
 describe("formatTimeRange", () => {

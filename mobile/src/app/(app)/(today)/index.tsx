@@ -61,38 +61,22 @@ export default function TodayMissionPage() {
     [router, user?.name],
   );
 
-  if (isLoading) {
-    return (
-      <SafeAreaView style={styles.container}>
-        <View style={styles.center}>
-          <ActivityIndicator size="large" color="#2563EB" />
-        </View>
-      </SafeAreaView>
-    );
-  }
-
-  if (!data) {
-    return (
-      <SafeAreaView style={styles.container}>
-        <View style={styles.center}>
-          <Text style={styles.errorText}>Could not load dashboard.</Text>
-          <TouchableOpacity onPress={() => refetch()} style={styles.retryButton}>
-            <Text style={styles.retryText}>Retry</Text>
-          </TouchableOpacity>
-        </View>
-      </SafeAreaView>
-    );
-  }
-
-  const allSessions = data.plan.plan.sessions;
+  const prioritizedBacklog = useMemo(
+    () => data?.planning.prioritized_backlog ?? [],
+    [data?.planning.prioritized_backlog],
+  );
+  const allSessions = useMemo(
+    () => data?.plan.plan.sessions ?? [],
+    [data?.plan.plan.sessions],
+  );
 
   const backlogItemMap: BacklogItemMap = useMemo(() => {
-    const map = new Map<string, (typeof data.planning.prioritized_backlog)[0]>();
-    for (const item of data.planning.prioritized_backlog) {
+    const map = new Map<string, (typeof prioritizedBacklog)[number]>();
+    for (const item of prioritizedBacklog) {
       map.set(String(item.id), item);
     }
     return map;
-  }, [data.planning.prioritized_backlog]);
+  }, [prioritizedBacklog]);
 
   const activeSessions = useMemo(
     () => getActiveSessions(allSessions, backlogItemMap),
@@ -119,15 +103,6 @@ export default function TodayMissionPage() {
     return future.filter((s) => s.session_id !== missionSession?.session_id);
   }, [activeSessions, nowMin, missionSession]);
 
-  const allPlanSessionsCompleted = allSessions.length > 0 &&
-    allSessions.every((s) => isSessionCompleted(s, backlogItemMap));
-
-  const healthScore = data.planning.backlog_health.health_score;
-
-  // Study time: actual completed minutes from SessionCompletion (authoritative source)
-  const studyMinutes = data.today_completed_minutes ?? 0;
-
-  // Find deadline from today's planned sessions only (matching web)
   const nextDeadline = useMemo(() => {
     const scheduledItems = allSessions
       .map((s) => backlogItemMap.get(String(s.backlog_item_id)))
@@ -140,6 +115,41 @@ export default function TodayMissionPage() {
     const d = new Date(scheduledItems[0].due_date!);
     return d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
   }, [allSessions, backlogItemMap]);
+
+  if (isLoading) {
+    return (
+      <SafeAreaView style={styles.container}>
+        <View style={styles.center}>
+          <ActivityIndicator size="large" color="#2563EB" />
+        </View>
+      </SafeAreaView>
+    );
+  }
+
+  if (!data) {
+    return (
+      <SafeAreaView style={styles.container}>
+        <View style={styles.center}>
+          <Text style={styles.errorText}>Could not load dashboard.</Text>
+          <TouchableOpacity onPress={() => refetch()} style={styles.retryButton}>
+            <Text style={styles.retryText}>Retry</Text>
+          </TouchableOpacity>
+        </View>
+      </SafeAreaView>
+    );
+  }
+
+  const allPlanSessionsCompleted = allSessions.length > 0 &&
+    allSessions.every((s) => isSessionCompleted(s, backlogItemMap));
+
+  const healthScore = data.planning.backlog_health.health_score;
+  const totalBacklogItems = data.planning.backlog_health.total_items;
+  const hasEmptyBacklog = totalBacklogItems === 0;
+  const dailyMessage = data.plan.plan.daily_message?.trim() ?? "";
+  const topBacklogId = prioritizedBacklog[0]?.id;
+
+  // Study time: actual completed minutes from SessionCompletion (authoritative source)
+  const studyMinutes = data.today_completed_minutes ?? 0;
 
   return (
     <SafeAreaView style={styles.container}>
@@ -161,6 +171,11 @@ export default function TodayMissionPage() {
           </TouchableOpacity>
         </View>
 
+        {/* Daily plan message (near recommendation) */}
+        {dailyMessage ? (
+          <Text style={styles.dailyMessage}>{dailyMessage}</Text>
+        ) : null}
+
         {/* 1. Recommended Next Session */}
         {missionSession ? (
           <RecommendedNextCard
@@ -168,14 +183,46 @@ export default function TodayMissionPage() {
             backlogItem={backlogItemMap.get(String(missionSession.backlog_item_id))}
             isCurrent={missionSession === currentSession}
             healthScore={healthScore}
+            isTopPriority={
+              topBacklogId !== undefined &&
+              String(missionSession.backlog_item_id) === String(topBacklogId)
+            }
             onStart={() => handleStartStudy(missionSession, data)}
           />
+        ) : hasEmptyBacklog ? (
+          <View style={styles.emptyCard}>
+            <Text style={styles.emptyTitle}>Add your first task</Text>
+            <Text style={styles.emptySubtitle}>
+              Your backlog is empty. Add work so Momentum can build today&apos;s plan.
+            </Text>
+            <TouchableOpacity
+              onPress={() => router.push("/(app)/(work)")}
+              style={styles.emptyCta}
+              activeOpacity={0.8}
+            >
+              <Text style={styles.emptyCtaText}>Add Work</Text>
+            </TouchableOpacity>
+          </View>
         ) : allPlanSessionsCompleted ? (
           <View style={styles.emptyCard}>
             <Text style={styles.emptyTitle}>All caught up!</Text>
             <Text style={styles.emptySubtitle}>
               You&apos;ve completed all of today&apos;s planned work.
             </Text>
+          </View>
+        ) : allSessions.length === 0 ? (
+          <View style={styles.emptyCard}>
+            <Text style={styles.emptyTitle}>No study time left today</Text>
+            <Text style={styles.emptySubtitle}>
+              You have {totalBacklogItems} task{totalBacklogItems === 1 ? "" : "s"} waiting, but no free window remains today. Tomorrow&apos;s plan will pick these up.
+            </Text>
+            <TouchableOpacity
+              onPress={() => router.push("/(app)/(plan)")}
+              style={styles.emptyCta}
+              activeOpacity={0.8}
+            >
+              <Text style={styles.emptyCtaText}>View schedule</Text>
+            </TouchableOpacity>
           </View>
         ) : (
           <View style={styles.emptyCard}>
@@ -310,6 +357,26 @@ const styles = StyleSheet.create({
   emptySubtitle: {
     fontSize: 15,
     color: "#666",
+    textAlign: "center",
+  },
+  emptyCta: {
+    marginTop: 16,
+    backgroundColor: "#2563EB",
+    borderRadius: 12,
+    paddingVertical: 14,
+    paddingHorizontal: 24,
+    alignItems: "center",
+  },
+  emptyCtaText: {
+    color: "#FFF",
+    fontSize: 16,
+    fontWeight: "600",
+  },
+  dailyMessage: {
+    fontSize: 14,
+    color: "#555",
+    marginBottom: 12,
+    lineHeight: 20,
   },
   insightCard: {
     backgroundColor: "#F0F4FF",

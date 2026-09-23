@@ -46,6 +46,21 @@ jest.mock("@/lib/api", () => ({
   },
 }));
 
+const mockPrefetchQuery = jest.fn().mockResolvedValue(undefined);
+
+jest.mock("@tanstack/react-query", () => {
+  const actual = jest.requireActual("@tanstack/react-query");
+  return {
+    ...actual,
+    useQueryClient: () => ({
+      prefetchQuery: (...args: any[]) => mockPrefetchQuery(...args),
+      invalidateQueries: jest.fn(),
+      getQueryData: jest.fn(),
+      setQueryData: jest.fn(),
+    }),
+  };
+});
+
 const mockSetUser = jest.fn();
 const mockSetConfirming = jest.fn();
 
@@ -179,6 +194,7 @@ function mockAlertSpy() {
 
 beforeEach(() => {
   jest.clearAllMocks();
+  mockPrefetchQuery.mockResolvedValue(undefined);
   mockSegments = ["(app)", "(today)"];
   mockIsAuthenticated = true;
   mockIsLoading = false;
@@ -347,6 +363,135 @@ describe("Onboarding simplified first-run flow", () => {
     expect(mockGet).toHaveBeenCalledWith("/api/v1/auth/me");
   });
 
+  it("successful onboarding prefetches dashboard after authenticated POST", async () => {
+    mockPost.mockResolvedValue({ data: { ok: true }, error: null, errorCode: null });
+    mockGet.mockResolvedValue({ data: makeProfileUser(), error: null, errorCode: null });
+
+    await render(<OnboardingScreen />);
+    await reachConfirmation();
+    await fireEvent.press(screen.getByText("Looks correct"));
+
+    await waitFor(() => {
+      expect(mockPrefetchQuery).toHaveBeenCalledTimes(1);
+    });
+
+    const prefetchArgs = mockPrefetchQuery.mock.calls[0][0];
+    expect(prefetchArgs.queryKey).toEqual(["dashboard"]);
+    expect(typeof prefetchArgs.queryFn).toBe("function");
+
+    // Prefetch only after onboarding POST (authenticated session ready)
+    expect(mockPost).toHaveBeenCalledTimes(1);
+    const postOrder = mockPost.mock.invocationCallOrder[0];
+    const prefetchOrder = mockPrefetchQuery.mock.invocationCallOrder[0];
+    expect(prefetchOrder).toBeGreaterThan(postOrder);
+
+    await waitFor(() => {
+      expect(mockReplace).toHaveBeenCalledWith("/(app)");
+    });
+  });
+
+  it("does not prefetch dashboard before onboarding POST succeeds", async () => {
+    let resolvePost!: (value: any) => void;
+    mockPost.mockImplementation(
+      () => new Promise((r) => { resolvePost = r; }),
+    );
+    mockGet.mockResolvedValue({ data: makeProfileUser(), error: null, errorCode: null });
+
+    await render(<OnboardingScreen />);
+    await reachConfirmation();
+    await fireEvent.press(screen.getByText("Looks correct"));
+
+    await waitFor(() => {
+      expect(screen.getByText("Saving your work...")).toBeTruthy();
+    });
+    expect(mockPrefetchQuery).not.toHaveBeenCalled();
+    expect(mockReplace).not.toHaveBeenCalled();
+
+    resolvePost({ data: { ok: true }, error: null, errorCode: null });
+
+    await waitFor(() => {
+      expect(mockPrefetchQuery).toHaveBeenCalledTimes(1);
+    });
+    expect(screen.getByText("Building your plan...")).toBeTruthy();
+  });
+
+  it("overlaps auth/me with dashboard prefetch after POST success", async () => {
+    mockPost.mockResolvedValue({ data: { ok: true }, error: null, errorCode: null });
+
+    let resolveMe!: (value: any) => void;
+    let resolvePrefetch!: (value: any) => void;
+    mockGet.mockImplementation(
+      () => new Promise((r) => { resolveMe = r; }),
+    );
+    mockPrefetchQuery.mockImplementation(
+      () => new Promise((r) => { resolvePrefetch = r; }),
+    );
+
+    await render(<OnboardingScreen />);
+    await reachConfirmation();
+    await fireEvent.press(screen.getByText("Looks correct"));
+
+    await waitFor(() => {
+      expect(mockGet).toHaveBeenCalledWith("/api/v1/auth/me");
+      expect(mockPrefetchQuery).toHaveBeenCalledTimes(1);
+    });
+
+    // Both in flight before either finishes → overlapped
+    expect(mockReplace).not.toHaveBeenCalled();
+
+    resolvePrefetch(undefined);
+    resolveMe({ data: makeProfileUser(), error: null, errorCode: null });
+
+    await waitFor(() => {
+      expect(mockReplace).toHaveBeenCalledWith("/(app)");
+    });
+  });
+
+  it("does not prefetch dashboard when onboarding POST fails", async () => {
+    mockPost.mockResolvedValue({
+      data: null,
+      error: "Something went wrong",
+      errorCode: null,
+    });
+
+    await render(<OnboardingScreen />);
+    await reachConfirmation();
+    await fireEvent.press(screen.getByText("Looks correct"));
+
+    await waitFor(() => {
+      expect(mockPost).toHaveBeenCalledTimes(1);
+    });
+
+    expect(mockPrefetchQuery).not.toHaveBeenCalled();
+    expect(mockReplace).not.toHaveBeenCalledWith("/(app)");
+  });
+
+  it("uses honest loading copy only", async () => {
+    mockPost.mockResolvedValue({ data: { ok: true }, error: null, errorCode: null });
+    mockGet.mockResolvedValue({ data: makeProfileUser(), error: null, errorCode: null });
+
+    await render(<OnboardingScreen />);
+    await reachConfirmation();
+
+    const fs = require("fs");
+    const path = require("path");
+    const content = fs.readFileSync(
+      path.resolve(__dirname, "../app/(onboarding)/index.tsx"),
+      "utf-8",
+    );
+    expect(content).toContain("Saving your work...");
+    expect(content).toContain("Building your plan...");
+    expect(content).not.toContain("Understanding your work");
+    expect(content).not.toContain("Organizing subjects");
+    expect(content).not.toContain("Planning your study time");
+    expect(content).not.toContain("Almost there...");
+
+    await fireEvent.press(screen.getByText("Looks correct"));
+    await waitFor(() => {
+      expect(mockReplace).toHaveBeenCalledWith("/(app)");
+    });
+  });
+
   it("handles onboarding POST failure with Alert and returns to confirmation", async () => {
     const alertSpy = mockAlertSpy();
     mockPost.mockResolvedValue({
@@ -364,11 +509,12 @@ describe("Onboarding simplified first-run flow", () => {
     });
 
     expect(mockReplace).not.toHaveBeenCalledWith("/(app)");
+    expect(mockPrefetchQuery).not.toHaveBeenCalled();
 
     await waitFor(() => {
       expect(screen.getByText("Here's what I understood")).toBeTruthy();
     });
-    expect(screen.queryByText(/Understanding your work/)).toBeNull();
+    expect(screen.queryByText(/Saving your work/)).toBeNull();
 
     alertSpy.mockRestore();
   });
