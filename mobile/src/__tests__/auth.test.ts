@@ -185,6 +185,44 @@ describe("Root layout has onboarding gate", () => {
     expect(content).toContain("inResetRoute");
   });
 
+  it("_layout.tsx redirects authenticated profile-less users outside auth/onboarding to onboarding", () => {
+    const content = fs.readFileSync(
+      path.join(SRC, "app/_layout.tsx"),
+      "utf-8",
+    );
+    expect(content).toContain("isAuthenticated && !user?.profile");
+    expect(content).toContain('router.replace("/(onboarding)")');
+  });
+
+  it("onboarding final action calls handleFinish", () => {
+    const content = fs.readFileSync(
+      path.join(ONBOARDING, "index.tsx"),
+      "utf-8",
+    );
+    expect(content).toContain("handleFinish");
+    expect(content).toContain('api.post<AuthMeResponse>("/api/v1/onboarding"');
+    expect(content).toContain('router.replace("/(app)")');
+  });
+
+  it("onboarding final submit guards against duplicate submission", () => {
+    const content = fs.readFileSync(
+      path.join(ONBOARDING, "index.tsx"),
+      "utf-8",
+    );
+    expect(content).toContain("submittingRef");
+    expect(content).toContain("if (submittingRef.current) return");
+  });
+
+  it("onboarding final submit handles errors with Alert", () => {
+    const content = fs.readFileSync(
+      path.join(ONBOARDING, "index.tsx"),
+      "utf-8",
+    );
+    expect(content).toContain("Alert.alert");
+    expect(content).toContain("setSubmitting(false)");
+    expect(content).toContain("submittingRef.current = false");
+  });
+
   it("confirm.tsx uses useLinkingURL from expo-linking for URL detection", () => {
     const content = fs.readFileSync(path.join(SRC, "app", "confirm.tsx"), "utf-8");
     expect(content).toContain("useLinkingURL");

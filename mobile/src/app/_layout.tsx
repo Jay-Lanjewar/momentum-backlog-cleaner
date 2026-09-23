@@ -53,8 +53,12 @@ function AuthGate() {
       if (hasProfile) {
         router.replace("/(app)");
       }
+    } else if (isAuthenticated && !user?.profile) {
+      // Authenticated but profile-less outside auth/onboarding
+      // (e.g. after email confirmation). Send to onboarding.
+      router.replace("/(onboarding)");
     }
-  }, [isAuthenticated, isLoading, user, segments, router]);
+  }, [isAuthenticated, isLoading, confirming, user, segments, router]);
 
   useEffect(() => {
     if (!isLoading) {

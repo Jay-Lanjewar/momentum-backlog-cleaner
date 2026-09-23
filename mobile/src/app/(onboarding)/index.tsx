@@ -1,4 +1,4 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useRef } from "react";
 import {
   View,
   Text,
@@ -58,6 +58,7 @@ export default function OnboardingScreen() {
   const [coachingEnd, setCoachingEnd] = useState("17:00");
   const [submitting, setSubmitting] = useState(false);
   const [loadingMsg, setLoadingMsg] = useState(LOADING_MESSAGES[0]);
+  const submittingRef = useRef(false);
 
   const parsed = parseBacklogInput(backlogText);
   const totalTopics = getTotalTopics(parsed);
@@ -68,6 +69,11 @@ export default function OnboardingScreen() {
 
   // ── Submit ──
   async function handleFinish() {
+    if (submittingRef.current) return;
+    submittingRef.current = true;
+    setSubmitting(true);
+    advance();
+
     // Build courses + backlog from parsed text
     const courses = parsed
       .filter((g) => g.items.length > 0)
@@ -145,7 +151,6 @@ export default function OnboardingScreen() {
       setLoadingMsg(LOADING_MESSAGES[msgIdx]);
     }, 2500);
 
-    setSubmitting(true);
     try {
       const result = await api.post<AuthMeResponse>("/api/v1/onboarding", payload);
 
@@ -153,6 +158,8 @@ export default function OnboardingScreen() {
         clearInterval(msgTimer);
         Alert.alert("Error", result.error);
         setSubmitting(false);
+        submittingRef.current = false;
+        setStep(4);
         return;
       }
 
@@ -167,6 +174,8 @@ export default function OnboardingScreen() {
       clearInterval(msgTimer);
       Alert.alert("Error", "Something went wrong. Please try again.");
       setSubmitting(false);
+      submittingRef.current = false;
+      setStep(4);
     }
   }
 
@@ -410,9 +419,15 @@ export default function OnboardingScreen() {
             ) : null}
 
             <TouchableOpacity
-              style={[styles.primaryButton, !weekdayType && styles.disabled]}
-              onPress={advance}
-              disabled={!weekdayType}
+              style={[
+                styles.primaryButton,
+                (!weekdayType || submitting) && styles.disabled,
+              ]}
+              onPress={() => {
+                if (!weekdayType || submittingRef.current) return;
+                handleFinish();
+              }}
+              disabled={!weekdayType || submitting}
               activeOpacity={0.8}
             >
               <Text style={styles.primaryButtonText}>Continue</Text>
