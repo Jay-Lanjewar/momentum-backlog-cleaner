@@ -151,6 +151,15 @@ export default function TodayMissionPage() {
   // Study time: actual completed minutes from SessionCompletion (authoritative source)
   const studyMinutes = data.today_completed_minutes ?? 0;
 
+  // Brand-new student: no study days yet and no minutes completed today.
+  // Same DashboardData / fetch path — only secondary zero-state cards are deferred.
+  const isFirstRun =
+    data.streaks.momentum.total_study_days === 0 && studyMinutes === 0;
+
+  const firstRunUpcoming = isFirstRun
+    ? upcomingSessions.slice(0, 2)
+    : upcomingSessions;
+
   return (
     <SafeAreaView style={styles.container}>
       <ScrollView
@@ -171,12 +180,14 @@ export default function TodayMissionPage() {
           </TouchableOpacity>
         </View>
 
-        {/* Daily plan message (near recommendation) */}
+        {/* Daily plan message — subordinate to recommendation */}
         {dailyMessage ? (
-          <Text style={styles.dailyMessage}>{dailyMessage}</Text>
+          <Text style={isFirstRun ? styles.dailyMessageFirstRun : styles.dailyMessage}>
+            {dailyMessage}
+          </Text>
         ) : null}
 
-        {/* 1. Recommended Next Session */}
+        {/* 1. Recommended Next Session (dominant first-run content) */}
         {missionSession ? (
           <RecommendedNextCard
             session={missionSession}
@@ -233,33 +244,49 @@ export default function TodayMissionPage() {
           </View>
         )}
 
-        {/* 2. Insight */}
-        {data.insight && (
+        {/* 2. Insight — deferred on first-run (zero-state noise) */}
+        {!isFirstRun && data.insight && (
           <View style={styles.insightCard}>
             <Text style={styles.insightTitle}>{data.insight.title}</Text>
             <Text style={styles.insightMessage}>{data.insight.message}</Text>
           </View>
         )}
 
-        {/* 3. Progress Overview */}
-        <ProgressOverview
-          totalTasks={data.planning.backlog_health.total_items}
-          completedTasks={data.planning.backlog_health.completed_items}
-          studyMinutes={studyMinutes}
-          streak={data.streaks.momentum}
-          deadlineLabel={nextDeadline ?? undefined}
-        />
+        {/* 3. Progress Overview — deferred on first-run */}
+        {!isFirstRun && (
+          <ProgressOverview
+            totalTasks={data.planning.backlog_health.total_items}
+            completedTasks={data.planning.backlog_health.completed_items}
+            studyMinutes={studyMinutes}
+            streak={data.streaks.momentum}
+            deadlineLabel={nextDeadline ?? undefined}
+          />
+        )}
 
-        {/* 4. Upcoming Sessions */}
-        {upcomingSessions.length > 0 && (
-          <View style={styles.upcomingSection}>
-            <Text style={styles.sectionTitle}>Upcoming Today</Text>
-            {upcomingSessions.map((s) => {
+        {/* 4. Upcoming Sessions — kept on first-run but visually subordinate */}
+        {firstRunUpcoming.length > 0 && (
+          <View
+            style={
+              isFirstRun ? styles.upcomingSectionFirstRun : styles.upcomingSection
+            }
+          >
+            <Text
+              style={
+                isFirstRun
+                  ? styles.sectionTitleFirstRun
+                  : styles.sectionTitle
+              }
+            >
+              Upcoming Today
+            </Text>
+            {firstRunUpcoming.map((s) => {
               const item = backlogItemMap.get(String(s.backlog_item_id));
               return (
                 <TouchableOpacity
                   key={s.session_id}
-                  style={styles.sessionRow}
+                  style={
+                    isFirstRun ? styles.sessionRowFirstRun : styles.sessionRow
+                  }
                   onPress={() => handleStartStudy(s, data)}
                 >
                   <View style={[styles.sessionDot, { backgroundColor: item?.course_color ?? "#6B7280" }]} />
@@ -280,14 +307,14 @@ export default function TodayMissionPage() {
           </View>
         )}
 
-        {/* 5. Backlog Health */}
-        <BacklogHealthCard health={data.planning.backlog_health} />
-
-        {/* 6. Streak */}
-        <StreakCard streaks={data.streaks} />
-
-        {/* 7. Balance Score */}
-        <BalanceScoreCard balance={data.balance} />
+        {/* 5–7. Secondary analytics — deferred until student has activity */}
+        {!isFirstRun && (
+          <>
+            <BacklogHealthCard health={data.planning.backlog_health} />
+            <StreakCard streaks={data.streaks} />
+            <BalanceScoreCard balance={data.balance} />
+          </>
+        )}
 
         {/* Dev-only Focus Preview */}
         {__DEV__ && (
@@ -378,6 +405,12 @@ const styles = StyleSheet.create({
     marginBottom: 12,
     lineHeight: 20,
   },
+  dailyMessageFirstRun: {
+    fontSize: 13,
+    color: "#6B7280",
+    marginBottom: 8,
+    lineHeight: 18,
+  },
   insightCard: {
     backgroundColor: "#F0F4FF",
     borderRadius: 12,
@@ -398,11 +431,21 @@ const styles = StyleSheet.create({
   upcomingSection: {
     marginBottom: 16,
   },
+  upcomingSectionFirstRun: {
+    marginTop: 4,
+    marginBottom: 8,
+  },
   sectionTitle: {
     fontSize: 16,
     fontWeight: "600",
     color: "#1A1A1A",
     marginBottom: 12,
+  },
+  sectionTitleFirstRun: {
+    fontSize: 13,
+    fontWeight: "500",
+    color: "#6B7280",
+    marginBottom: 8,
   },
   sessionRow: {
     flexDirection: "row",
@@ -413,6 +456,17 @@ const styles = StyleSheet.create({
     marginBottom: 8,
     borderWidth: 1,
     borderColor: "#E8E8E8",
+    gap: 12,
+  },
+  sessionRowFirstRun: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "transparent",
+    borderRadius: 10,
+    paddingVertical: 8,
+    paddingHorizontal: 0,
+    marginBottom: 4,
+    borderWidth: 0,
     gap: 12,
   },
   sessionDot: {

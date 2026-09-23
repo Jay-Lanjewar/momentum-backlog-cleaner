@@ -1,6 +1,11 @@
 import { View, Text, TouchableOpacity, StyleSheet } from "react-native";
 import type { PlanSession, PrioritizedBacklogItem } from "@/services/types";
-import { formatMinutes, formatTimeRange, buildRecommendationReason } from "@/lib/coaching";
+import {
+  formatMinutes,
+  formatTimeRange,
+  buildRecommendationReason,
+  topicFromSession,
+} from "@/lib/coaching";
 
 interface RecommendedNextCardProps {
   session: PlanSession;
@@ -54,9 +59,9 @@ export function RecommendedNextCard({
           </Text>
         </View>
 
-        {/* Title */}
+        {/* Title — concrete topic from backend reason string */}
         <Text style={styles.title} numberOfLines={2}>
-          {session.reason}
+          {topicFromSession(session)}
         </Text>
 
         {/* Time + Duration */}

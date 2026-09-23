@@ -77,6 +77,11 @@ describe("RecommendedNextCard", () => {
     expect(content).toContain("subject");
   });
 
+  it("shows concrete topic title via topicFromSession", () => {
+    expect(content).toContain("topicFromSession(session)");
+    expect(content).not.toContain("{session.reason}");
+  });
+
   it("displays course color as accent", () => {
     expect(content).toContain("course_color");
     expect(content).toContain("accentBar");
@@ -333,10 +338,34 @@ describe("Today screen integration", () => {
   it("keeps RecommendedNextCard as first meaningful content section", () => {
     const cardIdx = content.indexOf("Recommended Next Session");
     const progressIdx = content.indexOf("Progress Overview");
-    const backlogIdx = content.indexOf("Backlog Health");
+    const backlogIdx = content.indexOf("<BacklogHealthCard");
     expect(cardIdx).toBeGreaterThan(-1);
     expect(progressIdx).toBeGreaterThan(cardIdx);
     expect(backlogIdx).toBeGreaterThan(cardIdx);
+  });
+
+  it("hides secondary analytics on first-run via isFirstRun flag", () => {
+    expect(content).toContain("isFirstRun");
+    expect(content).toContain(
+      "data.streaks.momentum.total_study_days === 0 && studyMinutes === 0",
+    );
+    expect(content).toContain("{!isFirstRun && (");
+    expect(content).toContain("{!isFirstRun && (");
+    expect(content).toContain("{!isFirstRun && (");
+  });
+
+  it("keeps greeting, daily_message, and RecommendedNextCard on first-run", () => {
+    expect(content).toContain("getGreeting");
+    expect(content).toContain("dailyMessage");
+    expect(content).toContain("<RecommendedNextCard");
+    expect(content).toContain("Start");
+  });
+
+  it("does not remove secondary card components from imports", () => {
+    expect(content).toContain("BacklogHealthCard");
+    expect(content).toContain("ProgressOverview");
+    expect(content).toContain("StreakCard");
+    expect(content).toContain("BalanceScoreCard");
   });
 
   it("keeps existing empty states", () => {

@@ -138,6 +138,21 @@ function makeDashboard(overrides: Partial<Record<string, any>> = {}) {
   };
 }
 
+/** Established student: activity today and/or historical study days. */
+function makeEstablishedDashboard(
+  overrides: Partial<Record<string, any>> = {},
+) {
+  const dash: any = makeDashboard(overrides);
+  dash.streaks.momentum = {
+    ...dash.streaks.momentum,
+    current_streak: 1,
+    total_study_days: 3,
+    last_completed_date: "2026-01-01",
+  };
+  dash.today_completed_minutes = 25;
+  return dash;
+}
+
 function setDashboard(result: {
   data?: any;
   isLoading?: boolean;
@@ -163,7 +178,7 @@ describe("Today first-load with prefetched dashboard", () => {
 
     expect(screen.queryByText("Could not load dashboard")).toBeNull();
     // Full-screen loading only when isLoading (cold fetch), not when cache warm
-    expect(screen.getByText("Work on Motion 1")).toBeTruthy();
+    expect(screen.getByText("Motion 1")).toBeTruthy();
     expect(screen.getByText(/Start (Focus|Next) Session/)).toBeTruthy();
   });
 
@@ -185,11 +200,11 @@ describe("Today first-load with prefetched dashboard", () => {
     await render(<Today />);
 
     expect(screen.queryByText(/Planned \d+ of \d+/)).toBeNull();
-    expect(screen.getByText("Work on Motion 1")).toBeTruthy();
+    expect(screen.getByText("Motion 1")).toBeTruthy();
   });
 
   it("keeps recommendation as first meaningful content after greeting", async () => {
-    setDashboard({ data: makeDashboard(), isLoading: false });
+    setDashboard({ data: makeEstablishedDashboard(), isLoading: false });
 
     const { toJSON } = await render(<Today />);
     const tree = toJSON();
@@ -212,7 +227,7 @@ describe("Today first-load with prefetched dashboard", () => {
     const greetingIdx = texts.findIndex((t) =>
       /Good (morning|afternoon|evening)/.test(t),
     );
-    const recIdx = texts.indexOf("Work on Motion 1");
+    const recIdx = texts.indexOf("Motion 1");
     const progressIdx = texts.indexOf("Progress");
     const streakIdx = texts.indexOf("Momentum");
 
@@ -223,16 +238,133 @@ describe("Today first-load with prefetched dashboard", () => {
   });
 
   it("passes isTopPriority when session matches top prioritized backlog", async () => {
+    setDashboard({ data: makeEstablishedDashboard(), isLoading: false });
+
+    await render(<Today />);
+
+    expect(screen.getByText("Motion 1")).toBeTruthy();
+    expect(
+      screen.getByText("Top of your prioritized backlog — best next match."),
+    ).toBeTruthy();
+  });
+});
+
+describe("Today first-run focus mode", () => {
+  it("uses exact first-run condition (total_study_days=0 and today_completed_minutes=0)", async () => {
     setDashboard({ data: makeDashboard(), isLoading: false });
 
     await render(<Today />);
 
-    // Top item reason shown when applicable (priority 3 + top → top reason path)
-    // Title still comes from session.reason
-    expect(screen.getByText("Work on Motion 1")).toBeTruthy();
+    expect(screen.getByText("Motion 1")).toBeTruthy();
+    expect(screen.queryByText("Progress")).toBeNull();
+    expect(screen.queryByText("Momentum")).toBeNull();
+    expect(screen.queryByText("Study Balance")).toBeNull();
+    expect(screen.queryByText("Backlog Health")).toBeNull();
+    expect(screen.queryByText("Keep Going")).toBeNull();
+  });
+
+  it("first-run shows RecommendedNextCard and Start Focus", async () => {
+    setDashboard({ data: makeDashboard(), isLoading: false });
+
+    await render(<Today />);
+
+    expect(screen.getByText("Motion 1")).toBeTruthy();
+    expect(screen.getByText(/Start (Focus|Next) Session/)).toBeTruthy();
+    expect(screen.getByText(/^(NOW|NEXT UP)$/)).toBeTruthy();
+  });
+
+  it("first-run shows daily_message", async () => {
+    setDashboard({ data: makeDashboard(), isLoading: false });
+
+    await render(<Today />);
+
     expect(
-      screen.getByText("Top of your prioritized backlog — best next match."),
+      screen.getByText("Planned 1 of 1 items. All tasks scheduled!"),
     ).toBeTruthy();
+  });
+
+  it("established user still sees secondary analytics", async () => {
+    setDashboard({ data: makeEstablishedDashboard(), isLoading: false });
+
+    await render(<Today />);
+
+    expect(screen.getByText("Progress")).toBeTruthy();
+    expect(screen.getByText("Momentum")).toBeTruthy();
+    expect(screen.getByText("Study Balance")).toBeTruthy();
+    expect(screen.getByText("Backlog Health")).toBeTruthy();
+    expect(screen.getByText("Motion 1")).toBeTruthy();
+    expect(screen.getByText(/Start (Focus|Next) Session/)).toBeTruthy();
+  });
+
+  it("first-run → active transition makes secondary cards appear", async () => {
+    const firstRun = makeDashboard();
+    setDashboard({ data: firstRun, isLoading: false });
+
+    const { rerender } = await render(<Today />);
+    expect(screen.queryByText("Progress")).toBeNull();
+    expect(screen.queryByText("Momentum")).toBeNull();
+
+    const active = makeDashboard({
+      streaks: {
+        ...firstRun.streaks,
+        momentum: { ...firstRun.streaks.momentum, total_study_days: 1 },
+      },
+      today_completed_minutes: 30,
+    });
+    setDashboard({ data: active, isLoading: false });
+
+    await rerender(<Today />);
+
+    expect(screen.getByText("Progress")).toBeTruthy();
+    expect(screen.getByText("Momentum")).toBeTruthy();
+    expect(screen.getByText("Study Balance")).toBeTruthy();
+    expect(screen.getByText("Backlog Health")).toBeTruthy();
+  });
+
+  it("first-run defers Upcoming but keeps it subordinate and present", async () => {
+    const now = new Date();
+    const nowMin = now.getHours() * 60 + now.getMinutes();
+    const fmt = (m: number) =>
+      `${String(Math.floor(m / 60) % 24).padStart(2, "0")}:${String(m % 60).padStart(2, "0")}`;
+    const start1 = Math.max(nowMin - 10, 0);
+    const start2 = Math.min(start1 + 70, 1439);
+    const end2 = Math.min(start2 + 60, 1439);
+
+    const dash = makeDashboard({
+      plan: {
+        plan: {
+          sessions: [
+            {
+              backlog_item_id: "item-1",
+              session_id: "item-1:s1",
+              start_time: fmt(start1),
+              end_time: fmt(Math.min(start1 + 60, 1439)),
+              reason: "Work on Motion 1",
+              remaining_minutes: 60,
+            },
+            {
+              backlog_item_id: "item-1",
+              session_id: "item-1:s2",
+              start_time: fmt(start2),
+              end_time: fmt(end2),
+              reason: "Work on Motion 1 (cont.)",
+              remaining_minutes: 60,
+            },
+          ],
+          daily_message: "Planned 2 of 2 items. All tasks scheduled!",
+          overflow: [],
+        },
+        source: "deterministic",
+        snapshot_id: "snap-1",
+      },
+    });
+    setDashboard({ data: dash, isLoading: false });
+
+    await render(<Today />);
+
+    expect(screen.getByText("Upcoming Today")).toBeTruthy();
+    expect(screen.queryByText("Progress")).toBeNull();
+    expect(screen.queryByText("Momentum")).toBeNull();
   });
 });
 
@@ -258,6 +390,7 @@ describe("Today empty states", () => {
     expect(screen.getByText("Add Work")).toBeTruthy();
     expect(screen.queryByText("No more sessions today")).toBeNull();
     expect(screen.queryByText("No study time left today")).toBeNull();
+    expect(screen.queryByText("Progress")).toBeNull();
 
     await fireEvent.press(screen.getByText("Add Work"));
     expect(mockPush).toHaveBeenCalledWith("/(app)/(work)");
