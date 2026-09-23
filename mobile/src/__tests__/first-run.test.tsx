@@ -1,5 +1,6 @@
 /**
- * First-run flow tests: onboarding final submit + AuthGate routing.
+ * First-run flow tests: simplified onboarding (backlog → confirm → submit)
+ * + AuthGate routing.
  *
  * RNTL v14: render() and fireEvent.* return promises and must be awaited.
  */
@@ -49,7 +50,6 @@ const mockSetUser = jest.fn();
 const mockSetConfirming = jest.fn();
 
 jest.mock("@/store/useAuthStore", () => {
-  // mockConfirmingRef is hoisted-safe: accessed lazily inside selectors.
   const useAuthStore = (selector: any) =>
     selector({
       setUser: mockSetUser,
@@ -152,22 +152,25 @@ function makeNoProfileUser() {
   };
 }
 
-async function advanceToFinalStep() {
-  await fireEvent.press(screen.getByText("Get Started"));
-
-  await fireEvent.changeText(screen.getByPlaceholderText("Your name"), "Ada");
-  await fireEvent.press(screen.getByText("Continue"));
-
+async function enterBacklogAndConfirm() {
   await fireEvent.changeText(
     screen.getByPlaceholderText(/Physics/),
     "Physics\nMotion",
   );
   await fireEvent.press(screen.getByText("Build My Plan"));
-  await fireEvent.press(screen.getByText("Looks correct"));
+}
 
-  await fireEvent.press(screen.getByText("Continue"));
+async function enterMultiGroupBacklogAndConfirm() {
+  await fireEvent.changeText(
+    screen.getByPlaceholderText(/Physics/),
+    "Physics\nMotion\n\nMaths\nTriangles",
+  );
+  await fireEvent.press(screen.getByText("Build My Plan"));
+}
 
-  await fireEvent.press(screen.getByText("School only"));
+async function reachConfirmation() {
+  await enterBacklogAndConfirm();
+  expect(screen.getByText("Here's what I understood")).toBeTruthy();
 }
 
 function mockAlertSpy() {
@@ -183,46 +186,72 @@ beforeEach(() => {
   mockUser = null;
 });
 
-describe("Onboarding final action (handleFinish)", () => {
-  it("final weekday Continue calls onboarding POST (handleFinish)", async () => {
+describe("Onboarding simplified first-run flow", () => {
+  it("shows backlog input on launch (no Welcome step)", async () => {
+    await render(<OnboardingScreen />);
+
+    expect(screen.getByText("What are you studying?")).toBeTruthy();
+    expect(screen.queryByText("Welcome to Momentum")).toBeNull();
+    expect(screen.queryByText("Get Started")).toBeNull();
+  });
+
+  it("does not ask for name, exams, or weekday type", async () => {
+    await render(<OnboardingScreen />);
+
+    expect(screen.queryByText("What's your name?")).toBeNull();
+    expect(screen.queryByText("Any exam deadlines?")).toBeNull();
+    expect(screen.queryByText("What does your weekday look like?")).toBeNull();
+    expect(screen.queryByText("School only")).toBeNull();
+    expect(screen.queryByPlaceholderText("Your name")).toBeNull();
+    expect(screen.queryByText("Your name")).toBeNull();
+  });
+
+  it("parses backlog and shows confirmation on Build My Plan", async () => {
+    await render(<OnboardingScreen />);
+
+    await fireEvent.changeText(
+      screen.getByPlaceholderText(/Physics/),
+      "Physics\nMotion\n\nMaths\nTriangles",
+    );
+    await fireEvent.press(screen.getByText("Build My Plan"));
+
+    expect(screen.getByText("Here's what I understood")).toBeTruthy();
+    expect(screen.getByText("Physics")).toBeTruthy();
+    expect(screen.getByText("Maths")).toBeTruthy();
+    expect(screen.getAllByText("1 topic")).toHaveLength(2);
+    expect(screen.getByText("Looks correct")).toBeTruthy();
+    expect(screen.getByText("Edit")).toBeTruthy();
+  });
+
+  it("Edit returns to backlog input", async () => {
+    await render(<OnboardingScreen />);
+    await reachConfirmation();
+
+    await fireEvent.press(screen.getByText("Edit"));
+
+    expect(screen.getByText("What are you studying?")).toBeTruthy();
+    expect(screen.queryByText("Here's what I understood")).toBeNull();
+  });
+
+  it("confirmation triggers onboarding POST exactly once", async () => {
     mockPost.mockResolvedValue({ data: { ok: true }, error: null, errorCode: null });
     mockGet.mockResolvedValue({ data: makeProfileUser(), error: null, errorCode: null });
 
     await render(<OnboardingScreen />);
-    await advanceToFinalStep();
+    await reachConfirmation();
 
-    await fireEvent.press(screen.getByText("Continue"));
-
-    await waitFor(() => {
-      expect(mockPost).toHaveBeenCalledWith(
-        "/api/v1/onboarding",
-        expect.objectContaining({
-          courses: expect.any(Array),
-          backlog: expect.any(Array),
-          goals: expect.any(Array),
-          profile: expect.objectContaining({ name: "Ada" }),
-          schedule: expect.any(Object),
-        }),
-      );
-    });
-  });
-
-  it("successful onboarding POST routes to authenticated app", async () => {
-    mockPost.mockResolvedValue({ data: { ok: true }, error: null, errorCode: null });
-    mockGet.mockResolvedValue({ data: makeProfileUser(), error: null, errorCode: null });
-
-    await render(<OnboardingScreen />);
-    await advanceToFinalStep();
-
-    await fireEvent.press(screen.getByText("Continue"));
+    await fireEvent.press(screen.getByText("Looks correct"));
 
     await waitFor(() => {
-      expect(mockReplace).toHaveBeenCalledWith("/(app)");
+      expect(mockPost).toHaveBeenCalledTimes(1);
     });
-    expect(mockSetUser).toHaveBeenCalledWith(makeProfileUser());
+    expect(mockPost).toHaveBeenCalledWith(
+      "/api/v1/onboarding",
+      expect.any(Object),
+    );
   });
 
-  it("prevents duplicate final submission while request is in progress", async () => {
+  it("prevents duplicate submission while request is in progress", async () => {
     let resolvePost!: (value: any) => void;
     mockPost.mockImplementation(
       () => new Promise((r) => { resolvePost = r; }),
@@ -230,12 +259,12 @@ describe("Onboarding final action (handleFinish)", () => {
     mockGet.mockResolvedValue({ data: makeProfileUser(), error: null, errorCode: null });
 
     await render(<OnboardingScreen />);
-    await advanceToFinalStep();
+    await reachConfirmation();
 
-    const continueBtn = screen.getByText("Continue");
-    await fireEvent.press(continueBtn);
-    await fireEvent.press(continueBtn);
-    await fireEvent.press(continueBtn);
+    const confirmBtn = screen.getByText("Looks correct");
+    await fireEvent.press(confirmBtn);
+    await fireEvent.press(confirmBtn);
+    await fireEvent.press(confirmBtn);
 
     expect(mockPost).toHaveBeenCalledTimes(1);
 
@@ -246,7 +275,79 @@ describe("Onboarding final action (handleFinish)", () => {
     expect(mockPost).toHaveBeenCalledTimes(1);
   });
 
-  it("handles onboarding POST failure with Alert and returns to editable step", async () => {
+  it("payload satisfies backend OnboardingRequest contract", async () => {
+    mockPost.mockResolvedValue({ data: { ok: true }, error: null, errorCode: null });
+    mockGet.mockResolvedValue({ data: makeProfileUser(), error: null, errorCode: null });
+
+    await render(<OnboardingScreen />);
+    await enterMultiGroupBacklogAndConfirm();
+    expect(screen.getByText("Here's what I understood")).toBeTruthy();
+    await fireEvent.press(screen.getByText("Looks correct"));
+
+    await waitFor(() => {
+      expect(mockPost).toHaveBeenCalledTimes(1);
+    });
+
+    const [, payload] = mockPost.mock.calls[0];
+
+    // courses + backlog derived from parser
+    expect(payload.courses).toEqual([
+      { name: "Physics", color: expect.stringMatching(/^#[0-9a-fA-F]{6}$/) },
+      { name: "Maths", color: expect.stringMatching(/^#[0-9a-fA-F]{6}$/) },
+    ]);
+    expect(payload.backlog).toEqual([
+      { title: "Motion", course_index: 0 },
+      { title: "Triangles", course_index: 1 },
+    ]);
+
+    // first-run: no exam goals
+    expect(payload.goals).toEqual([]);
+
+    // default profile (no user-specific commitments)
+    expect(payload.profile).toEqual({
+      sleep_schedule: { start: "22:00", end: "06:00" },
+      energy_peak: "morning",
+      preferred_study_window: { earliest_start: "16:00", latest_end: "22:00" },
+      daily_target_minutes: 120,
+      class_name: "Student",
+    });
+
+    // default Mon–Fri school schedule
+    expect(payload.schedule).toEqual({
+      schedule: {
+        monday: [{ type: "school", start: "08:00", end: "15:00" }],
+        tuesday: [{ type: "school", start: "08:00", end: "15:00" }],
+        wednesday: [{ type: "school", start: "08:00", end: "15:00" }],
+        thursday: [{ type: "school", start: "08:00", end: "15:00" }],
+        friday: [{ type: "school", start: "08:00", end: "15:00" }],
+      },
+    });
+
+    // course_index must reference an existing course (backend 400 guard)
+    const courseCount = payload.courses.length;
+    for (const item of payload.backlog) {
+      expect(item.course_index).toBeGreaterThanOrEqual(0);
+      expect(item.course_index).toBeLessThan(courseCount);
+      expect(item.title.length).toBeGreaterThan(0);
+    }
+  });
+
+  it("successful onboarding reaches authenticated app (Today flow)", async () => {
+    mockPost.mockResolvedValue({ data: { ok: true }, error: null, errorCode: null });
+    mockGet.mockResolvedValue({ data: makeProfileUser(), error: null, errorCode: null });
+
+    await render(<OnboardingScreen />);
+    await reachConfirmation();
+    await fireEvent.press(screen.getByText("Looks correct"));
+
+    await waitFor(() => {
+      expect(mockReplace).toHaveBeenCalledWith("/(app)");
+    });
+    expect(mockSetUser).toHaveBeenCalledWith(makeProfileUser());
+    expect(mockGet).toHaveBeenCalledWith("/api/v1/auth/me");
+  });
+
+  it("handles onboarding POST failure with Alert and returns to confirmation", async () => {
     const alertSpy = mockAlertSpy();
     mockPost.mockResolvedValue({
       data: null,
@@ -255,9 +356,8 @@ describe("Onboarding final action (handleFinish)", () => {
     });
 
     await render(<OnboardingScreen />);
-    await advanceToFinalStep();
-
-    await fireEvent.press(screen.getByText("Continue"));
+    await reachConfirmation();
+    await fireEvent.press(screen.getByText("Looks correct"));
 
     await waitFor(() => {
       expect(alertSpy).toHaveBeenCalledWith("Error", "Something went wrong");
@@ -266,21 +366,20 @@ describe("Onboarding final action (handleFinish)", () => {
     expect(mockReplace).not.toHaveBeenCalledWith("/(app)");
 
     await waitFor(() => {
-      expect(screen.getByText("What does your weekday look like?")).toBeTruthy();
+      expect(screen.getByText("Here's what I understood")).toBeTruthy();
     });
     expect(screen.queryByText(/Understanding your work/)).toBeNull();
 
     alertSpy.mockRestore();
   });
 
-  it("handles thrown network error with Alert and returns to editable step", async () => {
+  it("handles thrown network error with Alert and returns to confirmation", async () => {
     const alertSpy = mockAlertSpy();
     mockPost.mockRejectedValue(new Error("Network error"));
 
     await render(<OnboardingScreen />);
-    await advanceToFinalStep();
-
-    await fireEvent.press(screen.getByText("Continue"));
+    await reachConfirmation();
+    await fireEvent.press(screen.getByText("Looks correct"));
 
     await waitFor(() => {
       expect(alertSpy).toHaveBeenCalledWith(
@@ -291,10 +390,66 @@ describe("Onboarding final action (handleFinish)", () => {
     expect(mockReplace).not.toHaveBeenCalledWith("/(app)");
 
     await waitFor(() => {
-      expect(screen.getByText("What does your weekday look like?")).toBeTruthy();
+      expect(screen.getByText("Here's what I understood")).toBeTruthy();
     });
 
     alertSpy.mockRestore();
+  });
+
+  it("Build My Plan is disabled when backlog is empty", async () => {
+    await render(<OnboardingScreen />);
+
+    const btn = screen.getByText("Build My Plan");
+    const touchable = btn.parent ?? btn;
+    expect(
+      touchable.props?.accessibilityState?.disabled ??
+        touchable.props?.disabled,
+    ).toBe(true);
+
+    await fireEvent.press(btn);
+    expect(screen.queryByText("Here's what I understood")).toBeNull();
+    expect(screen.getByText("What are you studying?")).toBeTruthy();
+  });
+});
+
+describe("No references to removed first-run steps", () => {
+  const fs = require("fs");
+  const path = require("path");
+  const content = fs.readFileSync(
+    path.resolve(__dirname, "../app/(onboarding)/index.tsx"),
+    "utf-8",
+  );
+
+  it("does not contain Welcome step copy", () => {
+    expect(content).not.toContain("Welcome to Momentum");
+    expect(content).not.toContain("Get Started");
+  });
+
+  it("does not contain Name step", () => {
+    expect(content).not.toContain("What's your name?");
+    expect(content).not.toContain("Your name");
+    expect(content).not.toContain("charCount");
+  });
+
+  it("does not contain Exam deadlines step", () => {
+    expect(content).not.toContain("Any exam deadlines?");
+    expect(content).not.toContain("examTitle");
+    expect(content).not.toContain("examDate");
+    expect(content).not.toContain("setExams");
+  });
+
+  it("does not contain Weekday type step", () => {
+    expect(content).not.toContain("What does your weekday look like?");
+    expect(content).not.toContain("WEEKDAY_TYPES");
+    expect(content).not.toContain("weekdayType");
+    expect(content).not.toContain("School only");
+    expect(content).not.toContain("coachingEnd");
+  });
+
+  it("does not reference multi-step progress counters", () => {
+    expect(content).not.toContain("/ 4");
+    expect(content).not.toContain("totalSteps");
+    expect(content).not.toContain("displayStep");
   });
 });
 
@@ -367,7 +522,6 @@ describe("AuthGate first-run routing", () => {
     await render(<RootLayout />);
 
     await waitFor(() => {
-      // allow effects to run
       expect(mockReplace).not.toHaveBeenCalled();
     });
   });
@@ -454,7 +608,6 @@ describe("AuthGate first-run routing", () => {
     await waitFor(() => {
       expect(mockReplace).toHaveBeenCalledWith("/(app)");
     });
-    // once in app with profile, no further redirects would fire — covered by profile-in-app test
     expect(mockReplace).not.toHaveBeenCalledWith("/(onboarding)");
     expect(mockReplace).not.toHaveBeenCalledWith("/(auth)/login");
   });

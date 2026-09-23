@@ -223,6 +223,44 @@ describe("Root layout has onboarding gate", () => {
     expect(content).toContain("submittingRef.current = false");
   });
 
+  it("onboarding keeps backlog parser UI and parsed confirmation", () => {
+    const content = fs.readFileSync(
+      path.join(ONBOARDING, "index.tsx"),
+      "utf-8",
+    );
+    expect(content).toContain("What are you studying?");
+    expect(content).toContain("Here&apos;s what I understood");
+    expect(content).toContain("Build My Plan");
+    expect(content).toContain("Looks correct");
+    expect(content).toContain("parseBacklogInput");
+  });
+
+  it("onboarding first-run uses default profile/schedule and empty goals", () => {
+    const content = fs.readFileSync(
+      path.join(ONBOARDING, "index.tsx"),
+      "utf-8",
+    );
+    expect(content).toContain("goals: []");
+    expect(content).toContain('earliest_start: "16:00"');
+    expect(content).toContain('daily_target_minutes: 120');
+    expect(content).toContain('type: "school"');
+    expect(content).toContain("buildDefaultSchedule");
+  });
+
+  it("onboarding no longer contains removed Welcome/Name/Exam/Weekday steps", () => {
+    const content = fs.readFileSync(
+      path.join(ONBOARDING, "index.tsx"),
+      "utf-8",
+    );
+    expect(content).not.toContain("Welcome to Momentum");
+    expect(content).not.toContain("Get Started");
+    expect(content).not.toContain("What's your name?");
+    expect(content).not.toContain("Any exam deadlines?");
+    expect(content).not.toContain("What does your weekday look like?");
+    expect(content).not.toContain("WEEKDAY_TYPES");
+    expect(content).not.toContain("displayStep");
+  });
+
   it("confirm.tsx uses useLinkingURL from expo-linking for URL detection", () => {
     const content = fs.readFileSync(path.join(SRC, "app", "confirm.tsx"), "utf-8");
     expect(content).toContain("useLinkingURL");
