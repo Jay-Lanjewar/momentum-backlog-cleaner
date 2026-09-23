@@ -104,43 +104,16 @@ export default function FocusModeScreen() {
   const completeSession = useCompleteSession();
   const [adaptiveResult, setAdaptiveResult] =
     useState<AdaptivePlanResponse | null>(null);
+  const [completionError, setCompletionError] = useState<string | null>(null);
   const completingRef = useRef(false);
   const [animatedProgress] = useState(() => new Animated.Value(0));
 
   useKeepAwake("focus-session");
 
-  // Auto-complete when timer reaches zero
-  useEffect(() => {
-    if (phase === "focusing" && remainingMs <= 0) {
-      handleComplete();
-    }
-  }, [phase, remainingMs]);
-
-  // Android back button handling
-  useEffect(() => {
-    const handler = BackHandler.addEventListener("hardwareBackPress", () => {
-      if (phase === "focusing" || phase === "paused_by_user" || phase === "paused_lost_focus" || phase === "focus_returned") {
-        Alert.alert("Leave Focus Session?", "Your progress will be saved.", [
-          { text: "Stay", style: "cancel" },
-          {
-            text: "Leave",
-            onPress: () => {
-              complete();
-              router.back();
-            },
-          },
-        ]);
-        return true;
-      }
-      return false;
-    });
-    return () => handler.remove();
-  }, [phase, complete, router]);
-
   const handleComplete = useCallback(() => {
     if (completingRef.current || completeSession.isPending) return;
     completingRef.current = true;
-    complete();
+    setCompletionError(null);
     const actualMinutes = Math.max(
       1,
       Math.ceil(focusedElapsedMs / 60000),
@@ -152,6 +125,8 @@ export default function FocusModeScreen() {
       },
       {
         onSuccess: (data) => {
+          // Local "complete" only after the API succeeds
+          complete();
           Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
           setAdaptiveResult(data);
           cancelSessionNotifications(sessionId);
@@ -161,11 +136,52 @@ export default function FocusModeScreen() {
         },
         onError: (error) => {
           completingRef.current = false;
-          Alert.alert("Error", error.message);
+          setCompletionError(
+            error?.message ||
+              "Could not save your progress. Please try again.",
+          );
+          pause();
         },
       },
     );
-  }, [complete, focusedElapsedMs, sessionId, completeSession]);
+  }, [complete, pause, focusedElapsedMs, sessionId, completeSession]);
+
+  // Auto-complete when timer reaches zero (skip if already saving or failed)
+  useEffect(() => {
+    if (
+      phase === "focusing" &&
+      remainingMs <= 0 &&
+      !completionError &&
+      !completeSession.isPending
+    ) {
+      handleComplete();
+    }
+  }, [phase, remainingMs, completionError, completeSession.isPending, handleComplete]);
+
+  // Android back button handling
+  useEffect(() => {
+    const handler = BackHandler.addEventListener("hardwareBackPress", () => {
+      if (phase === "focusing" || phase === "paused_by_user" || phase === "paused_lost_focus" || phase === "focus_returned") {
+        Alert.alert(
+          "Leave Focus Session?",
+          "Your progress will not be saved. Finish the session to record your focused time.",
+          [
+            { text: "Stay", style: "cancel" },
+            {
+              text: "Leave",
+              style: "destructive",
+              onPress: () => {
+                router.back();
+              },
+            },
+          ],
+        );
+        return true;
+      }
+      return false;
+    });
+    return () => handler.remove();
+  }, [phase, router]);
 
   const handleFinishEarly = useCallback(() => {
     Alert.alert("Finish Early?", "Your focused time will be recorded.", [
@@ -248,6 +264,52 @@ export default function FocusModeScreen() {
           >
             <Text style={styles.primaryButtonText}>Back to Today</Text>
           </TouchableOpacity>
+        </View>
+      </SafeAreaView>
+    );
+  }
+
+  // ─── Completion error (recoverable) ───
+  if (completionError && !adaptiveResult) {
+    return (
+      <SafeAreaView style={styles.container} edges={["bottom"]}>
+        <View style={styles.errorContainer}>
+          <Text style={styles.errorTitle}>Couldn&apos;t save your session</Text>
+          <Text style={styles.errorBody}>{completionError}</Text>
+          <Text style={styles.errorHint}>
+            Your focused time was not recorded yet.
+          </Text>
+          <TouchableOpacity
+            style={[styles.primaryButton, styles.errorPrimaryButton]}
+            onPress={handleComplete}
+            disabled={completeSession.isPending}
+            activeOpacity={0.8}
+          >
+            <Text style={styles.primaryButtonText}>
+              {completeSession.isPending ? "Saving..." : "Try Again"}
+            </Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={styles.errorLeaveButton}
+            onPress={handleBackToMission}
+            activeOpacity={0.8}
+          >
+            <Text style={styles.errorLeaveText}>Leave without saving</Text>
+          </TouchableOpacity>
+        </View>
+      </SafeAreaView>
+    );
+  }
+
+  // ─── Saving in progress (API pending, or legacy phase without result) ───
+  if (
+    !adaptiveResult &&
+    (completeSession.isPending || phase === "complete")
+  ) {
+    return (
+      <SafeAreaView style={styles.container} edges={["bottom"]}>
+        <View style={styles.center}>
+          <Text style={styles.loadingText}>Saving your progress...</Text>
         </View>
       </SafeAreaView>
     );
@@ -605,6 +667,43 @@ const styles = StyleSheet.create({
   loadingText: {
     color: "#94A3B8",
     fontSize: 16,
+  },
+  errorContainer: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    paddingHorizontal: 32,
+    gap: 12,
+  },
+  errorTitle: {
+    color: "#F8FAFC",
+    fontSize: 20,
+    fontWeight: "700",
+    textAlign: "center",
+  },
+  errorBody: {
+    color: "#FCA5A5",
+    fontSize: 14,
+    textAlign: "center",
+    lineHeight: 20,
+  },
+  errorHint: {
+    color: "#94A3B8",
+    fontSize: 13,
+    textAlign: "center",
+    marginBottom: 8,
+  },
+  errorPrimaryButton: {
+    width: "100%",
+  },
+  errorLeaveButton: {
+    paddingVertical: 14,
+    alignItems: "center",
+    width: "100%",
+  },
+  errorLeaveText: {
+    color: "#64748B",
+    fontSize: 15,
   },
 
   // ── Completion screen ──
