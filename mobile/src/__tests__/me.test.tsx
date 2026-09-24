@@ -10,7 +10,7 @@
  * 6. useSaveProfile invalidates correct caches
  */
 
-import { render, screen, act, fireEvent } from "@testing-library/react-native";
+import { render, screen, act, fireEvent, waitFor } from "@testing-library/react-native";
 
 jest.mock("react-native-safe-area-context", () => ({
   SafeAreaView: ({ children, ...props }: any) =>
@@ -119,6 +119,14 @@ jest.mock("@/services/hooks", () => ({
   }),
 }));
 
+let mockNotificationPermissionStatus = "granted";
+
+jest.mock("@/services/notifications", () => ({
+  getPermissionState: jest.fn(async () => ({
+    status: mockNotificationPermissionStatus,
+  })),
+}));
+
 // ─── Profile Screen ───
 
 import ProfileScreen from "@/app/(app)/(me)/index";
@@ -206,6 +214,10 @@ describe("ProfileScreen", () => {
 import SettingsScreen from "@/app/(app)/(me)/settings";
 
 describe("SettingsScreen", () => {
+  beforeEach(() => {
+    mockNotificationPermissionStatus = "granted";
+  });
+
   it("renders user name and email", async () => {
     await act(async () => {
       render(<SettingsScreen />);
@@ -227,6 +239,35 @@ describe("SettingsScreen", () => {
     });
     expect(screen.getByText("Account")).toBeTruthy();
     expect(screen.getByText("Preferences")).toBeTruthy();
+  });
+
+  it("Notifications row is not Coming soon", async () => {
+    await act(async () => {
+      render(<SettingsScreen />);
+    });
+    expect(screen.queryByText("Coming soon")).toBeNull();
+    expect(screen.getByText("Notifications")).toBeTruthy();
+  });
+
+  it("shows On when notification permission is granted", async () => {
+    mockNotificationPermissionStatus = "granted";
+    await act(async () => {
+      render(<SettingsScreen />);
+    });
+    await waitFor(() => {
+      expect(screen.getByText("On")).toBeTruthy();
+    });
+  });
+
+  it("shows Off when notification permission is denied", async () => {
+    mockNotificationPermissionStatus = "denied";
+    await act(async () => {
+      render(<SettingsScreen />);
+    });
+    await waitFor(() => {
+      expect(screen.getByText("Off")).toBeTruthy();
+    });
+    expect(screen.queryByText("Coming soon")).toBeNull();
   });
 });
 

@@ -1,13 +1,44 @@
+import { useEffect, useState } from "react";
 import { View, Text, TouchableOpacity, StyleSheet, Alert, ScrollView } from "react-native";
 import { useRouter } from "expo-router";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { supabase } from "@/lib/supabase";
 import { useAuthStore } from "@/store/useAuthStore";
+import { getPermissionState } from "@/services/notifications";
+
+type NotificationHint = "loading" | "on" | "off";
 
 export default function SettingsScreen() {
   const router = useRouter();
   const { user, clearAuth } = useAuthStore();
+  const [notificationHint, setNotificationHint] =
+    useState<NotificationHint>("loading");
+
+  useEffect(() => {
+    let cancelled = false;
+
+    getPermissionState()
+      .then((status) => {
+        if (cancelled) return;
+        setNotificationHint(status.status === "granted" ? "on" : "off");
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setNotificationHint("off");
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const notificationHintText =
+    notificationHint === "loading"
+      ? "…"
+      : notificationHint === "on"
+        ? "On"
+        : "Off";
 
   async function handleSignOut() {
     const confirmed = await new Promise<boolean>((resolve) => {
@@ -57,10 +88,12 @@ export default function SettingsScreen() {
 
         <View style={styles.section}>
           <Text style={styles.sectionHeader}>Preferences</Text>
-          <TouchableOpacity style={styles.row} activeOpacity={0.6}>
+          <View style={styles.row}>
             <Text style={styles.rowText}>Notifications</Text>
-            <Text style={styles.hint}>Coming soon</Text>
-          </TouchableOpacity>
+            <Text style={styles.hint} testID="notifications-status">
+              {notificationHintText}
+            </Text>
+          </View>
           <TouchableOpacity style={styles.row} activeOpacity={0.6}>
             <Text style={styles.rowText}>Theme</Text>
             <Text style={styles.hint}>Dark</Text>

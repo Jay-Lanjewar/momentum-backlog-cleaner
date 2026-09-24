@@ -69,16 +69,44 @@ export async function createNotificationChannels(): Promise<void> {
 
 // ─── Permissions ───
 
+/**
+ * True after we have attempted the system permission prompt once this
+ * app session. Prevents re-prompting on every dashboard render/refetch.
+ */
+let permissionRequestedThisSession = false;
+
 export async function getPermissionState(): Promise<Notifications.NotificationPermissionsStatus> {
   return Notifications.getPermissionsAsync();
 }
 
+/**
+ * Request notification permission at most once per app session.
+ *
+ * - Already granted → returns true without calling the system prompt.
+ * - Already denied → returns false without re-prompting (no nagging).
+ * - Undetermined → prompts once, then never again this session.
+ * - Any failure → returns false (never throws; callers stay non-blocking).
+ *
+ * Android API differences are handled by Expo's Notifications API.
+ */
 export async function requestNotificationPermission(): Promise<boolean> {
-  const { status: existing } = await Notifications.getPermissionsAsync();
-  if (existing === "granted") return true;
+  try {
+    const { status: existing } = await Notifications.getPermissionsAsync();
+    if (existing === "granted") return true;
+    if (existing === "denied") return false;
+    if (permissionRequestedThisSession) return false;
 
-  const { status } = await Notifications.requestPermissionsAsync();
-  return status === "granted";
+    permissionRequestedThisSession = true;
+    const { status } = await Notifications.requestPermissionsAsync();
+    return status === "granted";
+  } catch {
+    return false;
+  }
+}
+
+/** Test helper: allow a fresh permission prompt attempt in the next test. */
+export function resetNotificationPermissionSession(): void {
+  permissionRequestedThisSession = false;
 }
 
 // ─── Identification ───

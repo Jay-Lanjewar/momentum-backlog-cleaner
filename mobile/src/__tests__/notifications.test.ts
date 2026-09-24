@@ -5,6 +5,7 @@ import {
   createNotificationChannels,
   getPermissionState,
   requestNotificationPermission,
+  resetNotificationPermissionSession,
   scheduleSessionReminder,
   scheduleSessionStart,
   showPlanChangedNotification,
@@ -42,10 +43,17 @@ function futureDateTime(minutesFromNow: number): string {
 
 beforeEach(() => {
   jest.clearAllMocks();
+  resetNotificationPermissionSession();
   Platform.OS = "android";
   (Notifications.getAllScheduledNotificationsAsync as jest.Mock).mockResolvedValue(
     [],
   );
+  (Notifications.getPermissionsAsync as jest.Mock).mockResolvedValue({
+    status: "undetermined",
+  });
+  (Notifications.requestPermissionsAsync as jest.Mock).mockResolvedValue({
+    status: "granted",
+  });
 });
 
 describe("createNotificationChannels", () => {
@@ -76,7 +84,7 @@ describe("getPermissionState", () => {
 });
 
 describe("requestNotificationPermission", () => {
-  it("returns true when permission is already granted", async () => {
+  it("returns true when permission is already granted without prompting", async () => {
     (Notifications.getPermissionsAsync as jest.Mock).mockResolvedValue({
       status: "granted",
     });
@@ -97,7 +105,7 @@ describe("requestNotificationPermission", () => {
     expect(Notifications.requestPermissionsAsync).toHaveBeenCalled();
   });
 
-  it("returns false when permission is denied", async () => {
+  it("returns false and does not re-prompt when already denied", async () => {
     (Notifications.getPermissionsAsync as jest.Mock).mockResolvedValue({
       status: "denied",
     });
@@ -106,6 +114,41 @@ describe("requestNotificationPermission", () => {
     });
     const result = await requestNotificationPermission();
     expect(result).toBe(false);
+    expect(Notifications.requestPermissionsAsync).not.toHaveBeenCalled();
+  });
+
+  it("does not request again on subsequent dashboard entries in the same session", async () => {
+    (Notifications.getPermissionsAsync as jest.Mock).mockResolvedValue({
+      status: "undetermined",
+    });
+    (Notifications.requestPermissionsAsync as jest.Mock).mockResolvedValue({
+      status: "denied",
+    });
+
+    await requestNotificationPermission();
+    await requestNotificationPermission();
+    await requestNotificationPermission();
+
+    expect(Notifications.requestPermissionsAsync).toHaveBeenCalledTimes(1);
+  });
+
+  it("is non-blocking when permission APIs fail", async () => {
+    (Notifications.getPermissionsAsync as jest.Mock).mockRejectedValue(
+      new Error("permission API unavailable"),
+    );
+
+    await expect(requestNotificationPermission()).resolves.toBe(false);
+  });
+
+  it("does not throw when the system request fails", async () => {
+    (Notifications.getPermissionsAsync as jest.Mock).mockResolvedValue({
+      status: "undetermined",
+    });
+    (Notifications.requestPermissionsAsync as jest.Mock).mockRejectedValue(
+      new Error("request failed"),
+    );
+
+    await expect(requestNotificationPermission()).resolves.toBe(false);
   });
 });
 

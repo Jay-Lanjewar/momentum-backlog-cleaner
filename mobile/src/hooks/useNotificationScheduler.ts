@@ -2,12 +2,20 @@ import { useEffect, useRef } from "react";
 
 import { useDashboard } from "@/services/hooks";
 import {
+  requestNotificationPermission,
   rescheduleTodayNotifications,
 } from "@/services/notifications";
 
 export function useNotificationScheduler() {
   const { data: dashboard } = useDashboard();
   const prevSessionIdsRef = useRef<string>("");
+
+  // First authenticated Today/dashboard entry only (this hook is not used
+  // on auth screens). Fire-and-forget so permission never blocks the UI.
+  // The service centralizes granted/denied/once-per-session checks.
+  useEffect(() => {
+    requestNotificationPermission().catch(() => {});
+  }, []);
 
   useEffect(() => {
     if (!dashboard) return;
