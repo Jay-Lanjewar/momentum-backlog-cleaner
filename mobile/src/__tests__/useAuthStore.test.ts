@@ -19,6 +19,7 @@ describe("useAuthStore", () => {
       isAuthenticated: false,
       isLoading: true,
       confirming: false,
+      meError: null,
       user: null,
     });
   });
@@ -28,6 +29,7 @@ describe("useAuthStore", () => {
     expect(state.isLoading).toBe(true);
     expect(state.isAuthenticated).toBe(false);
     expect(state.user).toBeNull();
+    expect(state.meError).toBeNull();
   });
 
   it("sets user and marks as authenticated", () => {
@@ -70,5 +72,25 @@ describe("useAuthStore", () => {
     useAuthStore.getState().setConfirming(true);
     useAuthStore.getState().clearAuth();
     expect(useAuthStore.getState().confirming).toBe(false);
+  });
+
+  it("setMeError stores recoverable /me error", () => {
+    useAuthStore.getState().setMeError("Couldn't load your account.");
+    expect(useAuthStore.getState().meError).toBe(
+      "Couldn't load your account.",
+    );
+    expect(useAuthStore.getState().isAuthenticated).toBe(false);
+  });
+
+  it("setUser clears meError", () => {
+    useAuthStore.getState().setMeError("Network error");
+    useAuthStore.getState().setUser(mockUser);
+    expect(useAuthStore.getState().meError).toBeNull();
+  });
+
+  it("clearAuth clears meError", () => {
+    useAuthStore.getState().setMeError("Network error");
+    useAuthStore.getState().clearAuth();
+    expect(useAuthStore.getState().meError).toBeNull();
   });
 });

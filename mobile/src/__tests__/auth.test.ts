@@ -106,6 +106,18 @@ describe("Forgot password supplies redirectTo", () => {
   });
 });
 
+describe("Verify-email resend uses Android redirect", () => {
+  it("verify-email.tsx resend passes emailRedirectTo momentum://confirm", () => {
+    const content = fs.readFileSync(
+      path.join(AUTH, "verify-email.tsx"),
+      "utf-8",
+    );
+    expect(content).toContain("resend");
+    expect(content).toContain("emailRedirectTo");
+    expect(content).toContain('emailRedirectTo: "momentum://confirm"');
+  });
+});
+
 describe("Reset password screen", () => {
   it("reset-password.tsx calls supabase.auth.updateUser", () => {
     const content = fs.readFileSync(
@@ -200,7 +212,8 @@ describe("Root layout has onboarding gate", () => {
       "utf-8",
     );
     expect(content).toContain("handleFinish");
-    expect(content).toContain('api.post<AuthMeResponse>("/api/v1/onboarding"');
+    expect(content).toContain("api.post");
+    expect(content).toContain('"/api/v1/onboarding"');
     expect(content).toContain('router.replace("/(app)")');
   });
 

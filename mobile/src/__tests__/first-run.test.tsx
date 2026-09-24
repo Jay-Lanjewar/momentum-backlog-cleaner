@@ -542,6 +542,81 @@ describe("Onboarding simplified first-run flow", () => {
     alertSpy.mockRestore();
   });
 
+  it("onboarding POST succeeds + /me fails → no navigation to empty app", async () => {
+    mockPost.mockResolvedValue({ data: { ok: true }, error: null, errorCode: null });
+    mockGet.mockResolvedValue({
+      data: null,
+      error: "Network error",
+      errorCode: null,
+    });
+
+    await render(<OnboardingScreen />);
+    await reachConfirmation();
+    await fireEvent.press(screen.getByText("Looks correct"));
+
+    await waitFor(() => {
+      expect(mockPost).toHaveBeenCalledTimes(1);
+    });
+    await waitFor(() => {
+      expect(screen.getByText("Almost there")).toBeTruthy();
+    });
+
+    expect(mockReplace).not.toHaveBeenCalledWith("/(app)");
+    expect(mockSetUser).not.toHaveBeenCalled();
+  });
+
+  it("onboarding retry after /me failure does not duplicate POST", async () => {
+    mockPost.mockResolvedValue({ data: { ok: true }, error: null, errorCode: null });
+    mockGet
+      .mockResolvedValueOnce({
+        data: null,
+        error: "Network error",
+        errorCode: null,
+      })
+      .mockResolvedValueOnce({
+        data: makeProfileUser(),
+        error: null,
+        errorCode: null,
+      });
+
+    await render(<OnboardingScreen />);
+    await reachConfirmation();
+    await fireEvent.press(screen.getByText("Looks correct"));
+
+    await waitFor(() => {
+      expect(screen.getByText("Almost there")).toBeTruthy();
+    });
+    expect(mockPost).toHaveBeenCalledTimes(1);
+
+    await fireEvent.press(screen.getByText("Retry"));
+
+    await waitFor(() => {
+      expect(mockReplace).toHaveBeenCalledWith("/(app)");
+    });
+    expect(mockPost).toHaveBeenCalledTimes(1);
+    expect(mockSetUser).toHaveBeenCalledWith(makeProfileUser());
+  });
+
+  it("onboarding /me failure surface keeps plan saved messaging", async () => {
+    mockPost.mockResolvedValue({ data: { ok: true }, error: null, errorCode: null });
+    mockGet.mockResolvedValue({
+      data: null,
+      error: "Network error",
+      errorCode: null,
+    });
+
+    await render(<OnboardingScreen />);
+    await reachConfirmation();
+    await fireEvent.press(screen.getByText("Looks correct"));
+
+    await waitFor(() => {
+      expect(screen.getByText("Almost there")).toBeTruthy();
+    });
+    expect(screen.getByText(/Network error/)).toBeTruthy();
+    expect(screen.queryByText(/Saving your work/)).toBeNull();
+    expect(screen.queryByText("Here's what I understood")).toBeNull();
+  });
+
   it("Build My Plan is disabled when backlog is empty", async () => {
     await render(<OnboardingScreen />);
 

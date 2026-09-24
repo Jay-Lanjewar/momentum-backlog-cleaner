@@ -53,22 +53,57 @@ export default function OnboardingScreen() {
   const setUser = useAuthStore((s) => s.setUser);
   const queryClient = useQueryClient();
 
-  // step: 0 = backlog input / parsed confirmation, 1 = loading
+  // step: 0 = backlog input / parsed confirmation, 1 = loading,
+  // 2 = recoverable /me error after successful onboarding POST
   const [step, setStep] = useState(0);
   const [backlogText, setBacklogText] = useState("");
   const [showConfirm, setShowConfirm] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [loadingMsg, setLoadingMsg] = useState(SAVING_MSG);
+  const [meError, setMeError] = useState<string | null>(null);
   const submittingRef = useRef(false);
+  const onboardingPostedRef = useRef(false);
 
   const parsed = parseBacklogInput(backlogText);
   const totalTopics = getTotalTopics(parsed);
+
+  /**
+   * After onboarding POST succeeded: load profile + prefetch dashboard.
+   * Navigates to /(app) only when profile is present — never into a
+   * profile-less app. Does not re-POST onboarding.
+   */
+  async function completeAfterPost(): Promise<boolean> {
+    setLoadingMsg(BUILDING_MSG);
+    const [meResult] = await Promise.all([
+      api.get<AuthMeResponse>("/api/v1/auth/me"),
+      queryClient.prefetchQuery({
+        queryKey: dashboardQueryKey,
+        queryFn: fetchDashboard,
+      }),
+    ]);
+
+    if (meResult.data?.profile) {
+      setUser(meResult.data);
+      router.replace("/(app)");
+      return true;
+    }
+
+    setMeError(
+      meResult.error ||
+        "Your plan was saved, but we couldn't load your account. Please retry.",
+    );
+    setStep(2);
+    setSubmitting(false);
+    submittingRef.current = false;
+    return false;
+  }
 
   async function handleFinish() {
     if (submittingRef.current) return;
     submittingRef.current = true;
     setSubmitting(true);
     setStep(1);
+    setMeError(null);
     setLoadingMsg(SAVING_MSG);
 
     const courses = parsed
@@ -108,38 +143,80 @@ export default function OnboardingScreen() {
     };
 
     try {
-      const result = await api.post<AuthMeResponse>("/api/v1/onboarding", payload);
+      // POST at most once per screen mount — /me retry must not duplicate it.
+      if (!onboardingPostedRef.current) {
+        const result = await api.post<AuthMeResponse>(
+          "/api/v1/onboarding",
+          payload,
+        );
 
-      if (result.error) {
-        Alert.alert("Error", result.error);
-        setSubmitting(false);
-        submittingRef.current = false;
-        setStep(0);
-        setShowConfirm(true);
-        return;
+        if (result.error) {
+          Alert.alert("Error", result.error);
+          setSubmitting(false);
+          submittingRef.current = false;
+          setStep(0);
+          setShowConfirm(true);
+          return;
+        }
+
+        onboardingPostedRef.current = true;
       }
 
       // Onboarding session is authenticated; plan is created by GET /dashboard.
       // Overlap auth restore with dashboard prefetch so Today has data on first paint.
-      setLoadingMsg(BUILDING_MSG);
-      const [meResult] = await Promise.all([
-        api.get<AuthMeResponse>("/api/v1/auth/me"),
-        queryClient.prefetchQuery({
+      await completeAfterPost();
+    } catch {
+      if (onboardingPostedRef.current) {
+        // POST already succeeded — only /me/prefetch failed. Recoverable.
+        setMeError(
+          "Your plan was saved, but we couldn't finish loading. Please retry.",
+        );
+        setStep(2);
+        setSubmitting(false);
+        submittingRef.current = false;
+      } else {
+        Alert.alert("Error", "Something went wrong. Please try again.");
+        setSubmitting(false);
+        submittingRef.current = false;
+        setStep(0);
+        setShowConfirm(true);
+      }
+    }
+  }
+
+  /** Retry only /me after onboarding already POSTed — never POST again. */
+  async function handleRetryMe() {
+    if (submittingRef.current) return;
+    submittingRef.current = true;
+    setSubmitting(true);
+    setStep(1);
+    setLoadingMsg(BUILDING_MSG);
+
+    try {
+      const meResult = await api.get<AuthMeResponse>("/api/v1/auth/me");
+      if (meResult.data?.profile) {
+        setUser(meResult.data);
+        await queryClient.prefetchQuery({
           queryKey: dashboardQueryKey,
           queryFn: fetchDashboard,
-        }),
-      ]);
-
-      if (meResult.data) {
-        setUser(meResult.data);
+        });
+        router.replace("/(app)");
+      } else {
+        setMeError(
+          meResult.error ||
+            "Your plan was saved, but we couldn't load your account. Please retry.",
+        );
+        setStep(2);
+        setSubmitting(false);
+        submittingRef.current = false;
       }
-      router.replace("/(app)");
     } catch {
-      Alert.alert("Error", "Something went wrong. Please try again.");
+      setMeError(
+        "Your plan was saved, but we couldn't finish loading. Please retry.",
+      );
+      setStep(2);
       setSubmitting(false);
       submittingRef.current = false;
-      setStep(0);
-      setShowConfirm(true);
     }
   }
 
@@ -151,6 +228,33 @@ export default function OnboardingScreen() {
           <Text style={[styles.stepTitle, { marginTop: 24 }]}>
             {loadingMsg}
           </Text>
+        </View>
+      );
+    }
+
+    if (step === 2) {
+      return (
+        <View style={styles.stepContent} testID="onboarding-me-error">
+          <Text style={styles.stepTitle}>Almost there</Text>
+          <Text style={styles.stepSubtitle}>
+            {meError ??
+              "Your plan was saved, but we couldn't load your account."}
+          </Text>
+          <TouchableOpacity
+            style={[styles.primaryButton, submitting && styles.disabled]}
+            onPress={() => {
+              if (submittingRef.current) return;
+              handleRetryMe();
+            }}
+            disabled={submitting}
+            activeOpacity={0.8}
+          >
+            {submitting ? (
+              <ActivityIndicator color="#fff" />
+            ) : (
+              <Text style={styles.primaryButtonText}>Retry</Text>
+            )}
+          </TouchableOpacity>
         </View>
       );
     }

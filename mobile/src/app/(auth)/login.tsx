@@ -18,10 +18,11 @@ import { useAuth } from "@/hooks/useAuth";
 
 export default function LoginScreen() {
   const router = useRouter();
-  const { login } = useAuth();
+  const { login, meError, retryMe } = useAuth();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
+  const [retrying, setRetrying] = useState(false);
 
   async function handleLogin() {
     if (!email.trim() || !password.trim()) {
@@ -39,6 +40,16 @@ export default function LoginScreen() {
     }
   }
 
+  async function handleRetryMe() {
+    if (retrying) return;
+    setRetrying(true);
+    try {
+      await retryMe();
+    } finally {
+      setRetrying(false);
+    }
+  }
+
   return (
     <SafeAreaView style={styles.container}>
       <KeyboardAvoidingView
@@ -53,6 +64,24 @@ export default function LoginScreen() {
             <Text style={styles.title}>Momentum</Text>
             <Text style={styles.subtitle}>Pick up where you left off.</Text>
           </View>
+
+          {meError ? (
+            <View style={styles.meErrorBox} testID="me-error">
+              <Text style={styles.meErrorText}>{meError}</Text>
+              <TouchableOpacity
+                style={styles.retryButton}
+                onPress={handleRetryMe}
+                disabled={retrying}
+                activeOpacity={0.8}
+              >
+                {retrying ? (
+                  <ActivityIndicator color="#2563EB" size="small" />
+                ) : (
+                  <Text style={styles.retryButtonText}>Retry</Text>
+                )}
+              </TouchableOpacity>
+            </View>
+          ) : null}
 
           <View style={styles.form}>
             <Text style={styles.label}>Email</Text>
@@ -142,6 +171,33 @@ const styles = StyleSheet.create({
   },
   form: {
     gap: 16,
+  },
+  meErrorBox: {
+    backgroundColor: "#FEF2F2",
+    borderWidth: 1,
+    borderColor: "#FECACA",
+    borderRadius: 10,
+    padding: 12,
+    marginBottom: 16,
+  },
+  meErrorText: {
+    color: "#991B1B",
+    fontSize: 14,
+    marginBottom: 8,
+  },
+  retryButton: {
+    alignSelf: "flex-start",
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+    backgroundColor: "#EFF6FF",
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: "#BFDBFE",
+  },
+  retryButtonText: {
+    color: "#2563EB",
+    fontSize: 14,
+    fontWeight: "600",
   },
   label: {
     fontSize: 14,

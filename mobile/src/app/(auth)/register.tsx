@@ -14,15 +14,19 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
 
 import { supabase } from "@/lib/supabase";
+import { loadAuthMe } from "@/hooks/useAuth";
+import { useAuthStore } from "@/store/useAuthStore";
 import { isValidEmail, passwordStrength } from "@/lib/onboarding";
 
 export default function RegisterScreen() {
   const router = useRouter();
+  const meError = useAuthStore((s) => s.meError);
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [confirm, setConfirm] = useState("");
   const [loading, setLoading] = useState(false);
+  const [retrying, setRetrying] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const trimmedName = name.trim();
@@ -57,16 +61,43 @@ export default function RegisterScreen() {
         return;
       }
 
-      if (data.user && !data.session) {
+      if (data.session) {
+        // Auto-confirmed signup: Supabase session already exists.
+        // Load profile via the same /me path as login, then route.
+        const user = await loadAuthMe();
+        if (user) {
+          router.replace(user.profile ? "/(app)" : "/(onboarding)");
+        }
+        // /me failure leaves meError set; stay here with Retry (no dead end).
+        return;
+      }
+
+      if (data.user) {
         router.replace({
           pathname: "/(auth)/verify-email",
           params: { email: trimmedEmail },
         });
+        return;
       }
+
+      setError("Something went wrong. Please try again.");
     } catch {
       setError("Something went wrong. Please try again.");
     } finally {
       setLoading(false);
+    }
+  }
+
+  async function handleRetryMe() {
+    if (retrying) return;
+    setRetrying(true);
+    try {
+      const user = await loadAuthMe();
+      if (user) {
+        router.replace(user.profile ? "/(app)" : "/(onboarding)");
+      }
+    } finally {
+      setRetrying(false);
     }
   }
 
@@ -88,6 +119,24 @@ export default function RegisterScreen() {
           {error ? (
             <View style={styles.errorBox}>
               <Text style={styles.errorText}>{error}</Text>
+            </View>
+          ) : null}
+
+          {meError && !error ? (
+            <View style={styles.errorBox} testID="register-me-error">
+              <Text style={styles.errorText}>{meError}</Text>
+              <TouchableOpacity
+                style={styles.retryButton}
+                onPress={handleRetryMe}
+                disabled={retrying}
+                activeOpacity={0.8}
+              >
+                {retrying ? (
+                  <ActivityIndicator color="#2563EB" size="small" />
+                ) : (
+                  <Text style={styles.retryButtonText}>Retry</Text>
+                )}
+              </TouchableOpacity>
             </View>
           ) : null}
 
@@ -203,6 +252,21 @@ const styles = StyleSheet.create({
     marginBottom: 16,
   },
   errorText: { color: "#991B1B", fontSize: 14 },
+  retryButton: {
+    alignSelf: "flex-start",
+    marginTop: 10,
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+    backgroundColor: "#EFF6FF",
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: "#BFDBFE",
+  },
+  retryButtonText: {
+    color: "#2563EB",
+    fontSize: 14,
+    fontWeight: "600",
+  },
   button: {
     backgroundColor: "#2563EB",
     borderRadius: 12,

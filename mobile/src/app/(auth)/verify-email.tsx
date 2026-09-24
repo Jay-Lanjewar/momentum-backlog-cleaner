@@ -27,6 +27,9 @@ export default function VerifyEmailScreen() {
       const { error: resendError } = await supabase.auth.resend({
         type: "signup",
         email,
+        options: {
+          emailRedirectTo: "momentum://confirm",
+        },
       });
 
       if (resendError) {
