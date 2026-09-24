@@ -1,4 +1,4 @@
-import { useState, useMemo, useCallback } from "react";
+import { useState, useMemo, useCallback, useRef } from "react";
 import {
   View,
   Text,
@@ -12,8 +12,15 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
 
-import { useBacklogItems, useCourses, useCreateBacklogItem, useUpdateBacklogItem } from "@/services/hooks";
-import type { BacklogItem } from "@/services/types";
+import {
+  useBacklogItems,
+  useCourses,
+  useCreateBacklogItem,
+  useUpdateBacklogItem,
+  useDashboard,
+} from "@/services/hooks";
+import { showPlanChangedNotification } from "@/services/notifications";
+import type { BacklogItem, PlanChange, PlanSession } from "@/services/types";
 import { BacklogForm } from "@/components/BacklogForm";
 import {
   difficultyFromPriority,
@@ -91,6 +98,7 @@ function BacklogCard({
         style={styles.completionCircle}
         onPress={() => onToggleComplete(item)}
         activeOpacity={0.6}
+        testID={`completion-toggle-${item.id}`}
       >
         {isCompleted ? (
           <View style={styles.circleFilled}>
@@ -139,6 +147,23 @@ function BacklogCard({
   );
 }
 
+function planChangeForCompletedSession(
+  session: PlanSession,
+  item: BacklogItem,
+): PlanChange {
+  return {
+    session_id: session.session_id,
+    backlog_item_id: item.id,
+    title: item.title,
+    change_type: "removed",
+    previous_start: session.start_time,
+    previous_end: session.end_time,
+    new_start: null,
+    new_end: null,
+    reason: `${item.title} was completed and removed from the schedule.`,
+  };
+}
+
 export default function BacklogScreen() {
   const router = useRouter();
   const [activeTab, setActiveTab] = useState<TabValue>("all");
@@ -153,6 +178,8 @@ export default function BacklogScreen() {
   const { data: courses = [] } = useCourses();
   const createItem = useCreateBacklogItem();
   const updateItem = useUpdateBacklogItem();
+  const { data: dashboard } = useDashboard();
+  const toggleBusyRef = useRef(false);
 
   const courseMap = useMemo(() => courseMapFromList(courses), [courses]);
 
@@ -165,10 +192,32 @@ export default function BacklogScreen() {
 
   const handleToggleComplete = useCallback(
     async (item: BacklogItem) => {
-      const newStatus = item.status === "completed" ? "pending" : "completed";
-      await updateItem.mutateAsync({ id: item.id, payload: { status: newStatus } });
+      if (toggleBusyRef.current || updateItem.isPending) return;
+      toggleBusyRef.current = true;
+      try {
+        const newStatus = item.status === "completed" ? "pending" : "completed";
+        const affectedSessions =
+          newStatus === "completed"
+            ? (dashboard?.plan.plan.sessions ?? []).filter(
+                (s) => s.backlog_item_id === item.id,
+              )
+            : [];
+        await updateItem.mutateAsync({
+          id: item.id,
+          payload: { status: newStatus },
+        });
+        if (affectedSessions.length > 0) {
+          await showPlanChangedNotification(
+            affectedSessions.map((s) => planChangeForCompletedSession(s, item)),
+          );
+        }
+      } catch {
+        return;
+      } finally {
+        toggleBusyRef.current = false;
+      }
     },
-    [updateItem],
+    [updateItem, dashboard],
   );
 
   const handleCreate = useCallback(
