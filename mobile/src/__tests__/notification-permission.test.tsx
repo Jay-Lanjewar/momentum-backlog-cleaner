@@ -19,6 +19,8 @@ jest.mock("@/services/notifications", () => ({
     mockRequestPermission(...args),
   rescheduleTodayNotifications: (...args: unknown[]) =>
     mockReschedule(...args),
+  sessionScheduleKey: (sessionId: string, startTime: string) =>
+    `${sessionId}:${startTime}`,
 }));
 
 import { useNotificationScheduler } from "@/hooks/useNotificationScheduler";
@@ -98,13 +100,13 @@ describe("useNotificationScheduler permission entry", () => {
     expect(mockReschedule).toHaveBeenCalled();
   });
 
-  it("reschedules notifications only when session set changes (existing behavior)", async () => {
+  it("reschedules notifications only when session identity changes", async () => {
     mockDashboard = makeDashboard();
 
     const { rerender } = await renderHook(() => useNotificationScheduler());
     expect(mockReschedule).toHaveBeenCalledTimes(1);
 
-    // Same dashboard object / same sessions → no second reschedule
+    // Same session_id + same start_time → no second reschedule
     await rerender(undefined);
     expect(mockReschedule).toHaveBeenCalledTimes(1);
 
@@ -113,5 +115,32 @@ describe("useNotificationScheduler permission entry", () => {
     mockDashboard.plan.plan.sessions[0].session_id = "s2";
     await rerender(undefined);
     expect(mockReschedule).toHaveBeenCalledTimes(2);
+  });
+
+  it("reschedules when the same session_id has a changed start_time", async () => {
+    mockDashboard = makeDashboard();
+
+    const { rerender } = await renderHook(() => useNotificationScheduler());
+    expect(mockReschedule).toHaveBeenCalledTimes(1);
+
+    // Replan: same session_id, start moves 17:30 → 18:15
+    mockDashboard = makeDashboard();
+    mockDashboard.plan.plan.sessions[0].start_time = "18:15";
+    await rerender(undefined);
+
+    expect(mockReschedule).toHaveBeenCalledTimes(2);
+  });
+
+  it("does not reschedule when only unrelated dashboard fields change", async () => {
+    mockDashboard = makeDashboard();
+
+    const { rerender } = await renderHook(() => useNotificationScheduler());
+    expect(mockReschedule).toHaveBeenCalledTimes(1);
+
+    mockDashboard = makeDashboard();
+    mockDashboard.plan.snapshot_id = "snap-2";
+    await rerender(undefined);
+
+    expect(mockReschedule).toHaveBeenCalledTimes(1);
   });
 });

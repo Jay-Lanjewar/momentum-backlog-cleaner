@@ -4,6 +4,7 @@ import { useDashboard } from "@/services/hooks";
 import {
   requestNotificationPermission,
   rescheduleTodayNotifications,
+  sessionScheduleKey,
 } from "@/services/notifications";
 
 export function useNotificationScheduler() {
@@ -21,7 +22,11 @@ export function useNotificationScheduler() {
     if (!dashboard) return;
 
     const sessions = dashboard.plan.plan.sessions;
-    const sessionKey = sessions.map((s) => s.session_id).join(",");
+    // Identity must include start_time: a replan that only moves the clock
+    // (same session_id, new start_time) must still trigger a reschedule.
+    const sessionKey = sessions
+      .map((s) => sessionScheduleKey(s.session_id, s.start_time))
+      .join(",");
 
     if (sessionKey === prevSessionIdsRef.current) return;
     prevSessionIdsRef.current = sessionKey;

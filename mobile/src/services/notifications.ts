@@ -22,6 +22,8 @@ export interface MomentumNotificationData {
   source: string;
   type: NotificationType;
   sessionId?: string;
+  /** Session start_time at schedule time (identity includes this). */
+  startTime?: string;
   url: string;
 }
 
@@ -111,11 +113,29 @@ export function resetNotificationPermissionSession(): void {
 
 // ─── Identification ───
 
+/**
+ * Stable notification identity: type + session + start time.
+ * Same session_id with a different start_time gets a different id so a
+ * replan can cancel the old id and schedule the new one.
+ *
+ * Example: momentum-session_reminder-s1-1730
+ *          momentum-session_reminder-s1-20260925T1815
+ */
 function momentumNotificationId(
   type: NotificationType,
   sessionId: string,
+  startTime: string,
 ): string {
-  return `momentum-${type}-${sessionId}`;
+  const timeKey = startTime.replace(/[^0-9]/g, "");
+  return `momentum-${type}-${sessionId}-${timeKey}`;
+}
+
+/** Reschedule identity: session_id + start_time (not session_id alone). */
+export function sessionScheduleKey(
+  sessionId: string,
+  startTime: string,
+): string {
+  return `${sessionId}:${startTime}`;
 }
 
 function isMomentumNotification(data: any): data is MomentumNotificationData {
@@ -139,6 +159,7 @@ export async function cancelMomentumNotifications(): Promise<void> {
   }
 }
 
+/** Cancel every Momentum notification for this session (any start_time). */
 export async function cancelSessionNotifications(
   sessionId: string,
 ): Promise<void> {
@@ -154,11 +175,50 @@ export async function cancelSessionNotifications(
   }
 }
 
-// ─── Scheduling Helpers ───
+// ─── Local date / time helpers ───
+
+function pad2(n: number): string {
+  return String(n).padStart(2, "0");
+}
+
+/**
+ * Device-local calendar date YYYY-MM-DD.
+ * Never use toISOString() here — that is UTC and drifts from the local
+ * day near midnight / in non-UTC timezones.
+ */
+export function localDateString(date: Date = new Date()): string {
+  return `${date.getFullYear()}-${pad2(date.getMonth() + 1)}-${pad2(date.getDate())}`;
+}
 
 function timeToMinutes(time: string): number {
   const [h, m] = time.split(":").map(Number);
   return h * 60 + m;
+}
+
+/**
+ * Split session.start_time into a calendar date + HH:MM clock time.
+ * - Bare "HH:MM" → device-local today (backend plan sessions are day-less).
+ * - "YYYY-MM-DDTHH:MM" → use the date part as written (already a calendar date).
+ * Never parse bare "HH:MM" through Date string parsing (timezone-dependent).
+ */
+function parseSessionStart(start_time: string): {
+  date: string;
+  time: string;
+} {
+  if (start_time.length > 5) {
+    return {
+      date: start_time.slice(0, 10),
+      time: start_time.slice(11, 16),
+    };
+  }
+  return { date: localDateString(), time: start_time };
+}
+
+/** Absolute Date in the device's local timezone from Y-M-D + HH:MM. */
+function localDateAt(dateStr: string, timeStr: string): Date {
+  const [y, m, d] = dateStr.split("-").map(Number);
+  const [h, min] = timeStr.split(":").map(Number);
+  return new Date(y, m - 1, d, h, min, 0, 0);
 }
 
 function extractTopic(reason: string): string {
@@ -173,17 +233,20 @@ function isSessionEligible(
   if (completedIds.has(session.session_id)) return false;
 
   const now = new Date();
-  const today = now.toISOString().slice(0, 10);
-  const sessionDate = session.start_time.length > 5
-    ? session.start_time.slice(0, 10)
-    : today;
+  const today = localDateString(now);
+  const { date: sessionDate, time: timeStr } = parseSessionStart(
+    session.start_time,
+  );
 
+  // Past local calendar day → never schedule.
   if (sessionDate < today) return false;
+
+  // Future local calendar day → eligible on its own date.
+  // Do not evaluate tomorrow's clock time against today's local time.
   if (sessionDate > today) return true;
 
-  const sessionStartMin = timeToMinutes(
-    session.start_time.length > 5 ? session.start_time.slice(11) : session.start_time,
-  );
+  // Same local day: start must be strictly after the local clock (minutes).
+  const sessionStartMin = timeToMinutes(timeStr);
   const nowMin = now.getHours() * 60 + now.getMinutes();
   return sessionStartMin > nowMin;
 }
@@ -196,25 +259,22 @@ export async function scheduleSessionReminder(
 ): Promise<string | null> {
   if (!isSessionEligible(session, completedIds)) return null;
 
-  const timeStr = session.start_time.length > 5
-    ? session.start_time.slice(11)
-    : session.start_time;
-  const sessionStartMin = timeToMinutes(timeStr);
-  const reminderMin = sessionStartMin - 10;
-
-  if (reminderMin < 0) return null;
-
+  const { date, time } = parseSessionStart(session.start_time);
   const now = new Date();
-  const today = now.toISOString().slice(0, 10);
-  const [h, m] = timeStr.split(":").map(Number);
 
-  const triggerDate = new Date(`${today}T${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}:00`);
+  // Absolute local trigger: session start − 10 minutes.
+  const triggerDate = localDateAt(date, time);
   triggerDate.setMinutes(triggerDate.getMinutes() - 10);
 
+  // Too soon (or already past) → skip reminder; start may still schedule.
   if (triggerDate <= now) return null;
 
   const topic = extractTopic(session.reason);
-  const id = momentumNotificationId("session_reminder", session.session_id);
+  const id = momentumNotificationId(
+    "session_reminder",
+    session.session_id,
+    session.start_time,
+  );
 
   await Notifications.scheduleNotificationAsync({
     identifier: id,
@@ -225,6 +285,7 @@ export async function scheduleSessionReminder(
         source: SOURCE,
         type: "session_reminder",
         sessionId: session.session_id,
+        startTime: session.start_time,
         url: `/(today)/focus?sessionId=${session.session_id}&backlogItemId=${session.backlog_item_id}`,
       } satisfies MomentumNotificationData,
     },
@@ -246,19 +307,19 @@ export async function scheduleSessionStart(
 ): Promise<string | null> {
   if (!isSessionEligible(session, completedIds)) return null;
 
-  const timeStr = session.start_time.length > 5
-    ? session.start_time.slice(11)
-    : session.start_time;
-
+  const { date, time } = parseSessionStart(session.start_time);
   const now = new Date();
-  const today = now.toISOString().slice(0, 10);
-  const [h, m] = timeStr.split(":").map(Number);
 
-  const triggerDate = new Date(`${today}T${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}:00`);
+  // Absolute local trigger at the session's intended start time.
+  const triggerDate = localDateAt(date, time);
   if (triggerDate <= now) return null;
 
   const topic = extractTopic(session.reason);
-  const id = momentumNotificationId("session_start", session.session_id);
+  const id = momentumNotificationId(
+    "session_start",
+    session.session_id,
+    session.start_time,
+  );
 
   await Notifications.scheduleNotificationAsync({
     identifier: id,
@@ -269,6 +330,7 @@ export async function scheduleSessionStart(
         source: SOURCE,
         type: "session_start",
         sessionId: session.session_id,
+        startTime: session.start_time,
         url: `/(today)/focus?sessionId=${session.session_id}&backlogItemId=${session.backlog_item_id}`,
       } satisfies MomentumNotificationData,
     },
