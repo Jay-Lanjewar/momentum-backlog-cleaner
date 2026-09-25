@@ -241,6 +241,7 @@ async function enterOnboardingConfirm() {
     "Physics\nMotion",
   );
   await fireEvent.press(screen.getByText("Build My Plan"));
+  await fireEvent.press(screen.getByText("Continue"));
   await fireEvent.press(screen.getByText("Looks correct"));
 }
 

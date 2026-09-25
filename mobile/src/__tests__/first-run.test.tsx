@@ -124,6 +124,18 @@ jest.mock("@/services/notifications", () => ({
   createNotificationChannels: jest.fn(),
 }));
 
+jest.mock("@react-native-community/datetimepicker", () => {
+  const R = require("react");
+  const { View } = require("react-native");
+  const MockDateTimePicker = (props: any) =>
+    R.createElement(View, {
+      testID: props.testID,
+      onChange: props.onChange,
+      onValueChange: props.onValueChange,
+    });
+  return { __esModule: true, default: MockDateTimePicker };
+});
+
 const OnboardingScreen = require("@/app/(onboarding)/index").default;
 const RootLayout = require("@/app/_layout").default;
 
@@ -167,7 +179,7 @@ function makeNoProfileUser() {
   };
 }
 
-async function enterBacklogAndConfirm() {
+async function enterBacklog() {
   await fireEvent.changeText(
     screen.getByPlaceholderText(/Physics/),
     "Physics\nMotion",
@@ -175,7 +187,7 @@ async function enterBacklogAndConfirm() {
   await fireEvent.press(screen.getByText("Build My Plan"));
 }
 
-async function enterMultiGroupBacklogAndConfirm() {
+async function enterMultiGroupBacklog() {
   await fireEvent.changeText(
     screen.getByPlaceholderText(/Physics/),
     "Physics\nMotion\n\nMaths\nTriangles",
@@ -183,8 +195,14 @@ async function enterMultiGroupBacklogAndConfirm() {
   await fireEvent.press(screen.getByText("Build My Plan"));
 }
 
+async function reachAvailability() {
+  await enterBacklog();
+  expect(screen.getByText("When are you busy?")).toBeTruthy();
+}
+
 async function reachConfirmation() {
-  await enterBacklogAndConfirm();
+  await reachAvailability();
+  await fireEvent.press(screen.getByText("Continue"));
   expect(screen.getByText("Here's what I understood")).toBeTruthy();
 }
 
@@ -222,14 +240,15 @@ describe("Onboarding simplified first-run flow", () => {
     expect(screen.queryByText("Your name")).toBeNull();
   });
 
-  it("parses backlog and shows confirmation on Build My Plan", async () => {
+  it("parses backlog, asks availability, then shows confirmation", async () => {
     await render(<OnboardingScreen />);
 
-    await fireEvent.changeText(
-      screen.getByPlaceholderText(/Physics/),
-      "Physics\nMotion\n\nMaths\nTriangles",
-    );
-    await fireEvent.press(screen.getByText("Build My Plan"));
+    await enterMultiGroupBacklog();
+
+    expect(screen.getByText("When are you busy?")).toBeTruthy();
+    expect(screen.queryByText("Here's what I understood")).toBeNull();
+
+    await fireEvent.press(screen.getByText("Continue"));
 
     expect(screen.getByText("Here's what I understood")).toBeTruthy();
     expect(screen.getByText("Physics")).toBeTruthy();
@@ -296,7 +315,8 @@ describe("Onboarding simplified first-run flow", () => {
     mockGet.mockResolvedValue({ data: makeProfileUser(), error: null, errorCode: null });
 
     await render(<OnboardingScreen />);
-    await enterMultiGroupBacklogAndConfirm();
+    await enterMultiGroupBacklog();
+    await fireEvent.press(screen.getByText("Continue"));
     expect(screen.getByText("Here's what I understood")).toBeTruthy();
     await fireEvent.press(screen.getByText("Looks correct"));
 
@@ -630,6 +650,264 @@ describe("Onboarding simplified first-run flow", () => {
     await fireEvent.press(btn);
     expect(screen.queryByText("Here's what I understood")).toBeNull();
     expect(screen.getByText("What are you studying?")).toBeTruthy();
+  });
+});
+
+describe("Availability step", () => {
+  beforeEach(() => {
+    mockPost.mockResolvedValue({
+      data: { ok: true },
+      error: null,
+      errorCode: null,
+    });
+    mockGet.mockResolvedValue({
+      data: makeProfileUser(),
+      error: null,
+      errorCode: null,
+    });
+  });
+
+  async function openAvailability() {
+    await render(<OnboardingScreen />);
+    await fireEvent.changeText(
+      screen.getByPlaceholderText(/Physics/),
+      "Physics\nMotion\n\nMaths\nTriangles",
+    );
+    await fireEvent.press(screen.getByText("Build My Plan"));
+    expect(screen.getByText("When are you busy?")).toBeTruthy();
+  }
+
+  async function confirmAndSubmit() {
+    await fireEvent.press(screen.getByText("Continue"));
+    await fireEvent.press(screen.getByText("Looks correct"));
+    await waitFor(() => {
+      expect(mockPost).toHaveBeenCalledTimes(1);
+    });
+    return mockPost.mock.calls[0][1];
+  }
+
+  it("shows the default school block, daily target, and add commitment", async () => {
+    await openAvailability();
+
+    expect(
+      screen.getByText(
+        "Add only what's fixed. Momentum plans study time around it.",
+      ),
+    ).toBeTruthy();
+    expect(screen.getByText("School")).toBeTruthy();
+    expect(screen.getByText("8 AM")).toBeTruthy();
+    expect(screen.getByText("3 PM")).toBeTruthy();
+    expect(screen.getByText("120 min")).toBeTruthy();
+    expect(screen.getByTestId("onboarding-add-commitment")).toBeTruthy();
+
+    for (const day of [
+      "monday",
+      "tuesday",
+      "wednesday",
+      "thursday",
+      "friday",
+    ]) {
+      expect(
+        screen.getByTestId(`school-day-${day}`).props.accessibilityState
+          ?.selected,
+      ).toBe(true);
+    }
+    expect(
+      screen.getByTestId("school-day-saturday").props.accessibilityState
+        ?.selected,
+    ).toBe(false);
+  });
+
+  it("school start and end changes reach the payload", async () => {
+    await openAvailability();
+
+    await fireEvent.press(screen.getByTestId("onboarding-school-start"));
+    await fireEvent(
+      screen.getByTestId("onboarding-school-start-picker"),
+      "onChange",
+      {},
+      new Date(2026, 0, 5, 9, 30),
+    );
+    await fireEvent.press(screen.getByTestId("onboarding-school-end"));
+    await fireEvent(
+      screen.getByTestId("onboarding-school-end-picker"),
+      "onChange",
+      {},
+      new Date(2026, 0, 5, 14, 0),
+    );
+
+    expect(screen.getByText("9:30 AM")).toBeTruthy();
+    expect(screen.getByText("2 PM")).toBeTruthy();
+
+    const payload = await confirmAndSubmit();
+
+    expect(payload.schedule.schedule.monday).toEqual([
+      { type: "school", start: "09:30", end: "14:00" },
+    ]);
+    expect(payload.schedule.schedule.thursday).toEqual([
+      { type: "school", start: "09:30", end: "14:00" },
+    ]);
+    expect(Object.keys(payload.schedule.schedule)).toHaveLength(5);
+  });
+
+  it("extra commitment reaches the schedule payload", async () => {
+    await openAvailability();
+
+    await fireEvent.press(screen.getByTestId("onboarding-add-commitment"));
+    await fireEvent.press(screen.getByText("Sports"));
+    await fireEvent.changeText(
+      screen.getByPlaceholderText("e.g. Football practice"),
+      "Cricket",
+    );
+    await fireEvent.press(screen.getByText("Save"));
+
+    expect(screen.getByText("Cricket")).toBeTruthy();
+
+    const payload = await confirmAndSubmit();
+
+    expect(payload.schedule.schedule.monday).toEqual([
+      { type: "school", start: "08:00", end: "15:00" },
+      { type: "sports", start: "16:00", end: "18:00", title: "Cricket" },
+    ]);
+    expect(payload.schedule.schedule.saturday).toBeUndefined();
+    expect(payload.schedule.schedule.friday).toHaveLength(2);
+  });
+
+  it("daily target reaches profile.daily_target_minutes", async () => {
+    await openAvailability();
+
+    await fireEvent.press(screen.getByTestId("daily-target-increase"));
+    expect(screen.getByText("150 min")).toBeTruthy();
+
+    await fireEvent.press(screen.getByTestId("daily-target-decrease"));
+    await fireEvent.press(screen.getByTestId("daily-target-decrease"));
+    expect(screen.getByText("90 min")).toBeTruthy();
+
+    const payload = await confirmAndSubmit();
+
+    expect(payload.profile.daily_target_minutes).toBe(90);
+    expect(payload.profile.sleep_schedule).toEqual({
+      start: "22:00",
+      end: "06:00",
+    });
+  });
+
+  it("still submits a valid schedule when every default is accepted", async () => {
+    await openAvailability();
+
+    const payload = await confirmAndSubmit();
+
+    expect(Object.keys(payload.schedule.schedule)).toEqual([
+      "monday",
+      "tuesday",
+      "wednesday",
+      "thursday",
+      "friday",
+    ]);
+    for (const day of Object.keys(payload.schedule.schedule)) {
+      const blocks = payload.schedule.schedule[day];
+      expect(blocks).toHaveLength(1);
+      expect(blocks[0]).toEqual({
+        type: "school",
+        start: "08:00",
+        end: "15:00",
+      });
+      expect(blocks[0].start < blocks[0].end).toBe(true);
+    }
+    expect(payload.courses).toEqual([
+      {
+        name: "Physics",
+        color: expect.stringMatching(/^#[0-9a-fA-F]{6}$/),
+      },
+      {
+        name: "Maths",
+        color: expect.stringMatching(/^#[0-9a-fA-F]{6}$/),
+      },
+    ]);
+    expect(payload.backlog).toEqual([
+      { title: "Motion", course_index: 0 },
+      { title: "Triangles", course_index: 1 },
+    ]);
+    expect(payload.goals).toEqual([]);
+  });
+
+  it("schedule follows only the days left selected", async () => {
+    await openAvailability();
+
+    await fireEvent.press(screen.getByTestId("school-day-friday"));
+    expect(
+      screen.getByTestId("school-day-friday").props.accessibilityState
+        ?.selected,
+    ).toBe(false);
+
+    const payload = await confirmAndSubmit();
+
+    expect(payload.schedule.schedule.friday).toBeUndefined();
+    expect(payload.schedule.schedule.monday).toEqual([
+      { type: "school", start: "08:00", end: "15:00" },
+    ]);
+    expect(Object.keys(payload.schedule.schedule)).toEqual([
+      "monday",
+      "tuesday",
+      "wednesday",
+      "thursday",
+    ]);
+  });
+
+  it("blocks Continue when no fixed commitment remains", async () => {
+    await openAvailability();
+
+    for (const day of [
+      "monday",
+      "tuesday",
+      "wednesday",
+      "thursday",
+      "friday",
+    ]) {
+      await fireEvent.press(screen.getByTestId(`school-day-${day}`));
+    }
+
+    expect(
+      screen.getByText(
+        "Add at least one fixed commitment so Momentum can plan around it.",
+      ),
+    ).toBeTruthy();
+
+    const btn = screen.getByText("Continue");
+    const touchable = btn.parent ?? btn;
+    expect(
+      touchable.props?.accessibilityState?.disabled ??
+        touchable.props?.disabled,
+    ).toBe(true);
+
+    await fireEvent.press(btn);
+    expect(screen.queryByText("Here's what I understood")).toBeNull();
+    expect(mockPost).not.toHaveBeenCalled();
+  });
+
+  it("availability step has no old weekday-questionnaire UI", async () => {
+    await openAvailability();
+
+    expect(screen.queryByText("What does your weekday look like?")).toBeNull();
+    expect(screen.queryByText("School only")).toBeNull();
+    expect(screen.queryByText("Any exam deadlines?")).toBeNull();
+    expect(screen.queryByText("What's your name?")).toBeNull();
+    expect(screen.queryByPlaceholderText("Your name")).toBeNull();
+    expect(screen.queryByText("Get Started")).toBeNull();
+  });
+
+  it("Back returns to subjects without losing availability edits", async () => {
+    await openAvailability();
+
+    await fireEvent.press(screen.getByTestId("daily-target-increase"));
+    await fireEvent.press(screen.getByText("Back"));
+
+    expect(screen.getByText("What are you studying?")).toBeTruthy();
+
+    await fireEvent.press(screen.getByText("Build My Plan"));
+
+    expect(screen.getByText("When are you busy?")).toBeTruthy();
+    expect(screen.getByText("150 min")).toBeTruthy();
   });
 });
 

@@ -14,15 +14,36 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
 import { useQueryClient } from "@tanstack/react-query";
+import DateTimePicker, {
+  type DateTimePickerEvent,
+} from "@react-native-community/datetimepicker";
 
 import { api } from "@/lib/api";
 import { useAuthStore } from "@/store/useAuthStore";
-import type { AuthMeResponse } from "@/services/types";
+import type {
+  AuthMeResponse,
+  BlockType,
+  DayName,
+  WeeklyBlock,
+} from "@/services/types";
 import { dashboardQueryKey, fetchDashboard } from "@/services/hooks";
 import { parseBacklogInput, getTotalTopics, COURSE_COLORS } from "@/lib/onboarding";
+import {
+  BLOCK_TYPES,
+  BLOCK_TYPE_MAP,
+  DAYS,
+  DAY_LABELS,
+  DAY_FULL_LABELS,
+  formatTime12h,
+  isValidTimeRange,
+  hasOverlap,
+} from "@/lib/schedule";
 
 const SAVING_MSG = "Saving your work...";
 const BUILDING_MSG = "Building your plan...";
+const AVAILABILITY_TITLE = "When are you busy?";
+const AVAILABILITY_SUBTITLE =
+  "Add only what's fixed. Momentum plans study time around it.";
 
 // Default school-day schedule (Mon–Fri). Editable later from Plan → Schedule.
 const DEFAULT_SCHOOL_BLOCK = { type: "school", start: "08:00", end: "15:00" };
@@ -33,6 +54,29 @@ const DEFAULT_SCHEDULE_DAYS = [
   "thursday",
   "friday",
 ] as const;
+
+const DEFAULT_SCHOOL_DAYS: DayName[] = [...DEFAULT_SCHEDULE_DAYS];
+const DEFAULT_COMMITMENT = {
+  type: "coaching" as BlockType,
+  start: "16:00",
+  end: "18:00",
+};
+const DEFAULT_DAILY_TARGET_MINUTES = 120;
+const DAILY_TARGET_STEP = 30;
+const MIN_DAILY_TARGET_MINUTES = 30;
+const MAX_DAILY_TARGET_MINUTES = 480;
+
+type StepView = "backlog" | "availability" | "confirm";
+type PickerKey = "school-start" | "school-end" | "commitment-start" | "commitment-end";
+
+interface Commitment {
+  id: string;
+  type: BlockType;
+  title: string;
+  start: string;
+  end: string;
+  days: DayName[];
+}
 
 function buildDefaultSchedule(): Record<
   string,
@@ -48,21 +92,105 @@ function buildDefaultSchedule(): Record<
   return schedule;
 }
 
+function timeToDate(time: string): Date {
+  const [h, m] = time.split(":").map(Number);
+  const d = new Date();
+  d.setHours(h, m, 0, 0);
+  return d;
+}
+
+function dateToTime(d: Date): string {
+  return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
+}
+
+function buildSchedule(
+  schoolDays: DayName[],
+  schoolStart: string,
+  schoolEnd: string,
+  commitments: Commitment[],
+): Partial<Record<DayName, WeeklyBlock[]>> {
+  const schedule: Partial<Record<DayName, WeeklyBlock[]>> = {};
+  for (const day of schoolDays) {
+    schedule[day] = [{ type: "school", start: schoolStart, end: schoolEnd }];
+  }
+  for (const commitment of commitments) {
+    const title = commitment.title.trim();
+    for (const day of commitment.days) {
+      const blocks = schedule[day] ?? [];
+      blocks.push(
+        title
+          ? {
+              type: commitment.type,
+              start: commitment.start,
+              end: commitment.end,
+              title,
+            }
+          : {
+              type: commitment.type,
+              start: commitment.start,
+              end: commitment.end,
+            },
+      );
+      schedule[day] = blocks;
+    }
+  }
+  for (const day of Object.keys(schedule) as DayName[]) {
+    schedule[day]?.sort((a, b) => a.start.localeCompare(b.start));
+  }
+  return schedule;
+}
+
+function findScheduleIssue(
+  schedule: Partial<Record<DayName, WeeklyBlock[]>>,
+): string | null {
+  const days = Object.keys(schedule) as DayName[];
+  if (days.length === 0) {
+    return "Add at least one fixed commitment so Momentum can plan around it.";
+  }
+  for (const day of days) {
+    const blocks = (schedule[day] ?? [])
+      .slice()
+      .sort((a, b) => a.start.localeCompare(b.start));
+    for (const block of blocks) {
+      if (!isValidTimeRange(block.start, block.end)) {
+        return "End time must be after start time.";
+      }
+    }
+    for (let i = 1; i < blocks.length; i++) {
+      if (blocks[i].start < blocks[i - 1].end) {
+        return `These times overlap on ${DAY_FULL_LABELS[day]}.`;
+      }
+    }
+  }
+  return null;
+}
+
 export default function OnboardingScreen() {
   const router = useRouter();
   const setUser = useAuthStore((s) => s.setUser);
   const queryClient = useQueryClient();
 
-  // step: 0 = backlog input / parsed confirmation, 1 = loading,
+  // step: 0 = onboarding views, 1 = loading,
   // 2 = recoverable /me error after successful onboarding POST
   const [step, setStep] = useState(0);
+  const [view, setView] = useState<StepView>("backlog");
   const [backlogText, setBacklogText] = useState("");
-  const [showConfirm, setShowConfirm] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [loadingMsg, setLoadingMsg] = useState(SAVING_MSG);
   const [meError, setMeError] = useState<string | null>(null);
   const submittingRef = useRef(false);
   const onboardingPostedRef = useRef(false);
+  const nextCommitmentId = useRef(1);
+
+  const [schoolDays, setSchoolDays] = useState<DayName[]>(DEFAULT_SCHOOL_DAYS);
+  const [schoolStart, setSchoolStart] = useState(DEFAULT_SCHOOL_BLOCK.start);
+  const [schoolEnd, setSchoolEnd] = useState(DEFAULT_SCHOOL_BLOCK.end);
+  const [commitments, setCommitments] = useState<Commitment[]>([]);
+  const [form, setForm] = useState<Commitment | null>(null);
+  const [picker, setPicker] = useState<PickerKey | null>(null);
+  const [dailyTarget, setDailyTarget] = useState(
+    DEFAULT_DAILY_TARGET_MINUTES,
+  );
 
   const parsed = parseBacklogInput(backlogText);
   const totalTopics = getTotalTopics(parsed);
@@ -122,8 +250,16 @@ export default function OnboardingScreen() {
         })),
       );
 
-    // First-run defaults: no exam goals; generic school-week profile/schedule.
-    // Name is captured at register. Schedule is editable later from Plan.
+    const availability = buildSchedule(
+      schoolDays,
+      schoolStart,
+      schoolEnd,
+      commitments,
+    );
+    const schedule =
+      Object.keys(availability).length > 0 ? availability : buildDefaultSchedule();
+
+    // First-run defaults: no exam goals. Name is captured at register.
     const payload = {
       courses,
       backlog,
@@ -136,10 +272,10 @@ export default function OnboardingScreen() {
         sleep_schedule: { start: "22:00", end: "06:00" },
         energy_peak: "morning",
         preferred_study_window: { earliest_start: "16:00", latest_end: "22:00" },
-        daily_target_minutes: 120,
+        daily_target_minutes: dailyTarget,
         class_name: "Student",
       },
-      schedule: { schedule: buildDefaultSchedule() },
+      schedule: { schedule },
     };
 
     try {
@@ -155,7 +291,7 @@ export default function OnboardingScreen() {
           setSubmitting(false);
           submittingRef.current = false;
           setStep(0);
-          setShowConfirm(true);
+          setView("confirm");
           return;
         }
 
@@ -179,7 +315,7 @@ export default function OnboardingScreen() {
         setSubmitting(false);
         submittingRef.current = false;
         setStep(0);
-        setShowConfirm(true);
+        setView("confirm");
       }
     }
   }
@@ -218,6 +354,595 @@ export default function OnboardingScreen() {
       setSubmitting(false);
       submittingRef.current = false;
     }
+  }
+
+  function toggleSchoolDay(day: DayName) {
+    setSchoolDays((prev) =>
+      prev.includes(day) ? prev.filter((d) => d !== day) : [...prev, day],
+    );
+  }
+
+  function changeDailyTarget(delta: number) {
+    setDailyTarget((prev) =>
+      Math.min(
+        MAX_DAILY_TARGET_MINUTES,
+        Math.max(MIN_DAILY_TARGET_MINUTES, prev + delta),
+      ),
+    );
+  }
+
+  function openForm(value: Commitment) {
+    setPicker(null);
+    setForm(value);
+  }
+
+  function closeForm() {
+    setPicker(null);
+    setForm(null);
+  }
+
+  function openNewCommitment() {
+    openForm({
+      id: "",
+      type: DEFAULT_COMMITMENT.type,
+      title: "",
+      start: DEFAULT_COMMITMENT.start,
+      end: DEFAULT_COMMITMENT.end,
+      days: [...DEFAULT_SCHOOL_DAYS],
+    });
+  }
+
+  function saveCommitment() {
+    if (!form) return;
+    if (validateCommitment(form)) return;
+    if (form.id) {
+      setCommitments((prev) =>
+        prev.map((c) => (c.id === form.id ? { ...form } : c)),
+      );
+    } else {
+      const id = `commitment-${nextCommitmentId.current++}`;
+      setCommitments((prev) => [...prev, { ...form, id }]);
+    }
+    closeForm();
+  }
+
+  function validateCommitment(candidate: Commitment): string | null {
+    if (candidate.days.length === 0) return "Pick at least one day.";
+    if (!isValidTimeRange(candidate.start, candidate.end)) {
+      return "End time must be after start time.";
+    }
+    for (const day of candidate.days) {
+      const others: WeeklyBlock[] = [];
+      if (schoolDays.includes(day)) {
+        others.push({
+          type: "school",
+          start: schoolStart,
+          end: schoolEnd,
+        });
+      }
+      for (const commitment of commitments) {
+        if (commitment.id === candidate.id) continue;
+        if (commitment.days.includes(day)) {
+          others.push({
+            type: commitment.type,
+            start: commitment.start,
+            end: commitment.end,
+          });
+        }
+      }
+      if (hasOverlap(others, candidate.start, candidate.end)) {
+        return `This overlaps with another commitment on ${DAY_FULL_LABELS[day]}.`;
+      }
+    }
+    return null;
+  }
+
+  function handleSchoolTimeChange(
+    which: "start" | "end",
+    _event: DateTimePickerEvent,
+    selectedDate?: Date,
+  ) {
+    if (Platform.OS === "android") setPicker(null);
+    if (!selectedDate) return;
+    const value = dateToTime(selectedDate);
+    if (which === "start") setSchoolStart(value);
+    else setSchoolEnd(value);
+  }
+
+  function handleCommitmentTimeChange(
+    which: "start" | "end",
+    _event: DateTimePickerEvent,
+    selectedDate?: Date,
+  ) {
+    if (Platform.OS === "android") setPicker(null);
+    if (!selectedDate || !form) return;
+    setForm({
+      ...form,
+      ...(which === "start" ? { start: dateToTime(selectedDate) } : { end: dateToTime(selectedDate) }),
+    });
+  }
+
+  function renderDayChips(
+    selected: DayName[],
+    onToggle: (day: DayName) => void,
+    testIDPrefix: string,
+    labelPrefix: string,
+  ) {
+    return (
+      <View style={styles.chipRow}>
+        {DAYS.map((day) => {
+          const active = selected.includes(day);
+          return (
+            <TouchableOpacity
+              key={day}
+              style={[styles.dayChip, active && styles.dayChipActive]}
+              onPress={() => onToggle(day)}
+              activeOpacity={0.7}
+              accessibilityRole="button"
+              accessibilityLabel={`${labelPrefix} ${DAY_LABELS[day]}`}
+              accessibilityState={{ selected: active }}
+              testID={`${testIDPrefix}-${day}`}
+            >
+              <Text
+                style={[styles.dayChipText, active && styles.dayChipTextActive]}
+              >
+                {DAY_LABELS[day]}
+              </Text>
+            </TouchableOpacity>
+          );
+        })}
+      </View>
+    );
+  }
+
+  function renderTimeField(
+    label: string,
+    value: string,
+    buttonTestID: string,
+    pickerKey: PickerKey,
+    pickerTestID: string,
+    onChange: (
+      event: DateTimePickerEvent,
+      date?: Date,
+    ) => void,
+    accessibilityLabel: string,
+  ) {
+    return (
+      <View style={styles.timeField}>
+        <Text style={styles.fieldLabel}>{label}</Text>
+        <TouchableOpacity
+          style={styles.timeBtn}
+          onPress={() => setPicker(pickerKey)}
+          activeOpacity={0.7}
+          accessibilityRole="button"
+          accessibilityLabel={accessibilityLabel}
+          testID={buttonTestID}
+        >
+          <Text style={styles.timeBtnText}>{formatTime12h(value)}</Text>
+        </TouchableOpacity>
+        {picker === pickerKey && (
+          <DateTimePicker
+            testID={pickerTestID}
+            value={timeToDate(value)}
+            mode="time"
+            is24Hour={false}
+            display={Platform.OS === "ios" ? "spinner" : "default"}
+            onChange={onChange}
+          />
+        )}
+      </View>
+    );
+  }
+
+  function renderAvailabilityView() {
+    const schedule = buildSchedule(
+      schoolDays,
+      schoolStart,
+      schoolEnd,
+      commitments,
+    );
+    const issue = findScheduleIssue(schedule);
+
+    return (
+      <KeyboardAvoidingView
+        behavior={Platform.OS === "ios" ? "padding" : "height"}
+        style={styles.flex}
+      >
+        <ScrollView
+          contentContainerStyle={styles.stepScrollContent}
+          keyboardShouldPersistTaps="handled"
+        >
+          <Text style={styles.stepTitle}>{AVAILABILITY_TITLE}</Text>
+          <Text style={styles.stepSubtitle}>{AVAILABILITY_SUBTITLE}</Text>
+
+          <View style={styles.card}>
+            <View style={styles.cardHeader}>
+              <View
+                style={[
+                  styles.dot,
+                  {
+                    backgroundColor:
+                      BLOCK_TYPE_MAP.get("school")?.color ?? "#3b82f6",
+                  },
+                ]}
+              />
+              <Text style={styles.cardTitle}>School</Text>
+            </View>
+            {renderDayChips(
+              schoolDays,
+              toggleSchoolDay,
+              "school-day",
+              "School",
+            )}
+            <View style={styles.timeRow}>
+              {renderTimeField(
+                "Starts",
+                schoolStart,
+                "onboarding-school-start",
+                "school-start",
+                "onboarding-school-start-picker",
+                (e, d) => handleSchoolTimeChange("start", e, d),
+                "School start time",
+              )}
+              {renderTimeField(
+                "Ends",
+                schoolEnd,
+                "onboarding-school-end",
+                "school-end",
+                "onboarding-school-end-picker",
+                (e, d) => handleSchoolTimeChange("end", e, d),
+                "School end time",
+              )}
+            </View>
+          </View>
+
+          {commitments.map((commitment) => {
+            const info = BLOCK_TYPE_MAP.get(commitment.type);
+            const categoryLabel = info?.label ?? commitment.type;
+            const title = commitment.title.trim();
+            const daysLabel = commitment.days
+              .map((d) => DAY_LABELS[d])
+              .join(", ");
+            return (
+              <View
+                key={commitment.id}
+                style={[styles.card, styles.commitmentRow]}
+              >
+                <TouchableOpacity
+                  style={styles.cardBody}
+                  onPress={() => {
+                    openForm({ ...commitment });
+                  }}
+                  activeOpacity={0.7}
+                  accessibilityRole="button"
+                  accessibilityLabel={`Edit ${title || categoryLabel}`}
+                  testID={`commitment-${commitment.id}`}
+                >
+                  <View style={styles.cardHeader}>
+                    <View
+                      style={[
+                        styles.dot,
+                        { backgroundColor: info?.color ?? "#737373" },
+                      ]}
+                    />
+                    <Text style={styles.cardTitle}>
+                      {title || categoryLabel}
+                    </Text>
+                  </View>
+                  <Text style={styles.cardMeta}>
+                    {title ? `${categoryLabel} · ${daysLabel}` : daysLabel}
+                  </Text>
+                  <Text style={styles.cardMeta}>
+                    {formatTime12h(commitment.start)} –{" "}
+                    {formatTime12h(commitment.end)}
+                  </Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={styles.deleteBtn}
+                  onPress={() =>
+                    setCommitments((prev) =>
+                      prev.filter((c) => c.id !== commitment.id),
+                    )
+                  }
+                  activeOpacity={0.7}
+                  accessibilityRole="button"
+                  accessibilityLabel={`Remove ${title || categoryLabel}`}
+                  testID={`remove-${commitment.id}`}
+                >
+                  <Text style={styles.deleteText}>✕</Text>
+                </TouchableOpacity>
+              </View>
+            );
+          })}
+
+          {form === null ? (
+            <TouchableOpacity
+              style={styles.addBtn}
+              onPress={openNewCommitment}
+              activeOpacity={0.8}
+              accessibilityRole="button"
+              accessibilityLabel="Add commitment"
+              testID="onboarding-add-commitment"
+            >
+              <Text style={styles.addBtnText}>+ Add commitment</Text>
+            </TouchableOpacity>
+          ) : (
+            <View style={styles.card}>
+              <Text style={styles.cardTitle}>
+                {form.id ? "Edit commitment" : "New commitment"}
+              </Text>
+              <Text style={styles.fieldLabel}>Category</Text>
+              <View style={styles.typeGrid}>
+                {BLOCK_TYPES.map((bt) => {
+                  const active = form.type === bt.value;
+                  return (
+                    <TouchableOpacity
+                      key={bt.value}
+                      style={[
+                        styles.typeChip,
+                        active && {
+                          backgroundColor: bt.color + "30",
+                          borderColor: bt.color,
+                        },
+                      ]}
+                      onPress={() => setForm({ ...form, type: bt.value })}
+                      activeOpacity={0.7}
+                      accessibilityRole="button"
+                      accessibilityLabel={bt.label}
+                      accessibilityState={{ selected: active }}
+                    >
+                      <View
+                        style={[styles.typeDot, { backgroundColor: bt.color }]}
+                      />
+                      <Text
+                        style={[
+                          styles.typeLabel,
+                          active && { color: bt.color, fontWeight: "600" },
+                        ]}
+                        numberOfLines={1}
+                      >
+                        {bt.label}
+                      </Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+
+              <Text style={styles.fieldLabel}>Name (optional)</Text>
+              <TextInput
+                style={styles.input}
+                value={form.title}
+                onChangeText={(t) => setForm({ ...form, title: t })}
+                placeholder="e.g. Football practice"
+                placeholderTextColor="#999"
+                maxLength={100}
+              />
+
+              <View style={styles.timeRow}>
+                {renderTimeField(
+                  "Starts",
+                  form.start,
+                  "onboarding-commitment-start",
+                  "commitment-start",
+                  "onboarding-commitment-start-picker",
+                  (e, d) => handleCommitmentTimeChange("start", e, d),
+                  "Commitment start time",
+                )}
+                {renderTimeField(
+                  "Ends",
+                  form.end,
+                  "onboarding-commitment-end",
+                  "commitment-end",
+                  "onboarding-commitment-end-picker",
+                  (e, d) => handleCommitmentTimeChange("end", e, d),
+                  "Commitment end time",
+                )}
+              </View>
+
+              <Text style={styles.fieldLabel}>Days</Text>
+              {renderDayChips(
+                form.days,
+                (day) =>
+                  setForm({
+                    ...form,
+                    days: form.days.includes(day)
+                      ? form.days.filter((d) => d !== day)
+                      : [...form.days, day],
+                  }),
+                "commitment-day",
+                "Commitment",
+              )}
+
+              {validateCommitment(form) ? (
+                <Text style={styles.errorText}>{validateCommitment(form)}</Text>
+              ) : null}
+
+              <View style={styles.row}>
+                <TouchableOpacity
+                  style={styles.secondaryButton}
+                  onPress={closeForm}
+                  activeOpacity={0.8}
+                  accessibilityRole="button"
+                  accessibilityLabel="Cancel commitment"
+                >
+                  <Text style={styles.secondaryButtonText}>Cancel</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[
+                    styles.primaryButton,
+                    styles.primaryButtonFlex,
+                    validateCommitment(form) && styles.disabled,
+                  ]}
+                  onPress={saveCommitment}
+                  disabled={!!validateCommitment(form)}
+                  activeOpacity={0.8}
+                  accessibilityRole="button"
+                  accessibilityLabel="Save commitment"
+                >
+                  <Text style={styles.primaryButtonText}>Save</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          )}
+
+          <View style={styles.card}>
+            <Text style={styles.cardTitle}>Daily target</Text>
+            <Text style={styles.cardMeta}>
+              How long you want to study every day.
+            </Text>
+            <View style={styles.stepperRow}>
+              <TouchableOpacity
+                style={[
+                  styles.stepperBtn,
+                  dailyTarget <= MIN_DAILY_TARGET_MINUTES && styles.disabled,
+                ]}
+                onPress={() => changeDailyTarget(-DAILY_TARGET_STEP)}
+                disabled={dailyTarget <= MIN_DAILY_TARGET_MINUTES}
+                activeOpacity={0.7}
+                accessibilityRole="button"
+                accessibilityLabel="Decrease daily target"
+                testID="daily-target-decrease"
+              >
+                <Text style={styles.stepperBtnText}>−</Text>
+              </TouchableOpacity>
+              <Text style={styles.stepperValue} testID="daily-target-value">
+                {dailyTarget} min
+              </Text>
+              <TouchableOpacity
+                style={[
+                  styles.stepperBtn,
+                  dailyTarget >= MAX_DAILY_TARGET_MINUTES && styles.disabled,
+                ]}
+                onPress={() => changeDailyTarget(DAILY_TARGET_STEP)}
+                disabled={dailyTarget >= MAX_DAILY_TARGET_MINUTES}
+                activeOpacity={0.7}
+                accessibilityRole="button"
+                accessibilityLabel="Increase daily target"
+                testID="daily-target-increase"
+              >
+                <Text style={styles.stepperBtnText}>+</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+
+          {issue ? <Text style={styles.errorText}>{issue}</Text> : null}
+
+          <View style={styles.row}>
+            <TouchableOpacity
+              style={styles.secondaryButton}
+              onPress={() => setView("backlog")}
+              activeOpacity={0.8}
+              accessibilityRole="button"
+              accessibilityLabel="Back to subjects"
+            >
+              <Text style={styles.secondaryButtonText}>Back</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[
+                styles.primaryButton,
+                styles.primaryButtonFlex,
+                (issue || submitting) && styles.disabled,
+              ]}
+              onPress={() => {
+                if (issue || submittingRef.current) return;
+                setView("confirm");
+              }}
+              disabled={!!issue || submitting}
+              activeOpacity={0.8}
+              accessibilityRole="button"
+              accessibilityLabel="Continue"
+            >
+              <Text style={styles.primaryButtonText}>Continue</Text>
+            </TouchableOpacity>
+          </View>
+        </ScrollView>
+      </KeyboardAvoidingView>
+    );
+  }
+
+  function renderBacklogView() {
+    return (
+      <>
+        <Text style={styles.stepTitle}>What are you studying?</Text>
+        <Text style={styles.stepSubtitle}>
+          Paste or type your homework list. Separate subjects with blank lines.
+        </Text>
+        <TextInput
+          style={styles.textArea}
+          value={backlogText}
+          onChangeText={setBacklogText}
+          placeholder={"Physics\nMotion\nGravitation\n\nMaths\nTriangles\nCircles"}
+          placeholderTextColor="#999"
+          multiline
+          textAlignVertical="top"
+        />
+        <TouchableOpacity
+          style={[
+            styles.primaryButton,
+            totalTopics === 0 && styles.disabled,
+          ]}
+          onPress={() => setView("availability")}
+          disabled={totalTopics === 0}
+          activeOpacity={0.8}
+        >
+          <Text style={styles.primaryButtonText}>Build My Plan</Text>
+        </TouchableOpacity>
+      </>
+    );
+  }
+
+  function renderConfirmView() {
+    return (
+      <>
+        <Text style={styles.stepTitle}>Here&apos;s what I understood</Text>
+        {parsed
+          .filter((g) => g.items.length > 0)
+          .map((g, i) => (
+            <View key={i} style={styles.confirmCard}>
+              <View
+                style={[
+                  styles.dot,
+                  { backgroundColor: COURSE_COLORS[i % COURSE_COLORS.length] },
+                ]}
+              />
+              <View style={{ flex: 1 }}>
+                <Text style={styles.confirmSubject}>{g.subject}</Text>
+                <Text style={styles.confirmCount}>
+                  {g.items.length} topic{g.items.length !== 1 ? "s" : ""}
+                </Text>
+              </View>
+            </View>
+          ))}
+        {totalTopics === 0 ? (
+          <Text style={styles.emptyText}>
+            No topics found. Try pasting your list in a different format.
+          </Text>
+        ) : null}
+        <View style={styles.row}>
+          <TouchableOpacity
+            style={styles.secondaryButton}
+            onPress={() => setView("backlog")}
+            activeOpacity={0.8}
+          >
+            <Text style={styles.secondaryButtonText}>Edit</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[
+              styles.primaryButton,
+              (totalTopics === 0 || submitting) && styles.disabled,
+            ]}
+            onPress={() => {
+              if (totalTopics === 0 || submittingRef.current) return;
+              handleFinish();
+            }}
+            disabled={totalTopics === 0 || submitting}
+            activeOpacity={0.8}
+          >
+            <Text style={styles.primaryButtonText}>Looks correct</Text>
+          </TouchableOpacity>
+        </View>
+      </>
+    );
   }
 
   function renderStep() {
@@ -259,6 +984,8 @@ export default function OnboardingScreen() {
       );
     }
 
+    if (view === "availability") return renderAvailabilityView();
+
     return (
       <KeyboardAvoidingView
         behavior={Platform.OS === "ios" ? "padding" : "height"}
@@ -268,84 +995,7 @@ export default function OnboardingScreen() {
           contentContainerStyle={styles.stepScrollContent}
           keyboardShouldPersistTaps="handled"
         >
-          {!showConfirm ? (
-            <>
-              <Text style={styles.stepTitle}>What are you studying?</Text>
-              <Text style={styles.stepSubtitle}>
-                Paste or type your homework list. Separate subjects with blank lines.
-              </Text>
-              <TextInput
-                style={styles.textArea}
-                value={backlogText}
-                onChangeText={setBacklogText}
-                placeholder={"Physics\nMotion\nGravitation\n\nMaths\nTriangles\nCircles"}
-                placeholderTextColor="#999"
-                multiline
-                textAlignVertical="top"
-              />
-              <TouchableOpacity
-                style={[
-                  styles.primaryButton,
-                  totalTopics === 0 && styles.disabled,
-                ]}
-                onPress={() => setShowConfirm(true)}
-                disabled={totalTopics === 0}
-                activeOpacity={0.8}
-              >
-                <Text style={styles.primaryButtonText}>Build My Plan</Text>
-              </TouchableOpacity>
-            </>
-          ) : (
-            <>
-              <Text style={styles.stepTitle}>Here&apos;s what I understood</Text>
-              {parsed
-                .filter((g) => g.items.length > 0)
-                .map((g, i) => (
-                  <View key={i} style={styles.confirmCard}>
-                    <View
-                      style={[
-                        styles.dot,
-                        { backgroundColor: COURSE_COLORS[i % COURSE_COLORS.length] },
-                      ]}
-                    />
-                    <View style={{ flex: 1 }}>
-                      <Text style={styles.confirmSubject}>{g.subject}</Text>
-                      <Text style={styles.confirmCount}>
-                        {g.items.length} topic{g.items.length !== 1 ? "s" : ""}
-                      </Text>
-                    </View>
-                  </View>
-                ))}
-              {totalTopics === 0 ? (
-                <Text style={styles.emptyText}>
-                  No topics found. Try pasting your list in a different format.
-                </Text>
-              ) : null}
-              <View style={styles.row}>
-                <TouchableOpacity
-                  style={styles.secondaryButton}
-                  onPress={() => setShowConfirm(false)}
-                  activeOpacity={0.8}
-                >
-                  <Text style={styles.secondaryButtonText}>Edit</Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={[
-                    styles.primaryButton,
-                    (totalTopics === 0 || submitting) && styles.disabled,
-                  ]}
-                  onPress={() => {
-                    if (totalTopics === 0 || submittingRef.current) return;
-                    handleFinish();
-                  }}
-                  disabled={totalTopics === 0 || submitting}
-                  activeOpacity={0.8}
-                >
-                  <Text style={styles.primaryButtonText}>Looks correct</Text>
-                </TouchableOpacity>
-              </View>
-            </>
-          )}
+          {view === "backlog" ? renderBacklogView() : renderConfirmView()}
         </ScrollView>
       </KeyboardAvoidingView>
     );
@@ -405,6 +1055,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     marginTop: 8,
   },
+  primaryButtonFlex: { flex: 1, marginTop: 0 },
   primaryButtonText: { color: "#FFF", fontSize: 16, fontWeight: "600" },
   secondaryButton: {
     backgroundColor: "#F1F5F9",
@@ -436,5 +1087,131 @@ const styles = StyleSheet.create({
     fontSize: 14,
     textAlign: "center",
     marginVertical: 16,
+  },
+  card: {
+    backgroundColor: "#FFF",
+    borderWidth: 1,
+    borderColor: "#E5E7EB",
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 12,
+    width: "100%",
+  },
+  commitmentRow: {
+    flexDirection: "row",
+    alignItems: "center",
+  },
+  cardBody: { flex: 1 },
+  cardHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginBottom: 12,
+  },
+  cardTitle: { fontSize: 16, fontWeight: "600", color: "#1A1A1A" },
+  cardMeta: { fontSize: 13, color: "#666", marginBottom: 4 },
+  chipRow: { flexDirection: "row", flexWrap: "wrap", marginBottom: 12 },
+  dayChip: {
+    minHeight: 44,
+    paddingHorizontal: 10,
+    justifyContent: "center",
+    alignItems: "center",
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: "#E0E0E0",
+    backgroundColor: "#F8FAFC",
+    marginRight: 6,
+    marginBottom: 6,
+  },
+  dayChipActive: { backgroundColor: "#DBEAFE", borderColor: "#2563EB" },
+  dayChipText: { fontSize: 13, color: "#475569", fontWeight: "500" },
+  dayChipTextActive: { color: "#1D4ED8", fontWeight: "700" },
+  timeRow: { flexDirection: "row", gap: 12 },
+  timeField: { flex: 1 },
+  fieldLabel: {
+    fontSize: 13,
+    color: "#666",
+    fontWeight: "600",
+    marginBottom: 6,
+  },
+  timeBtn: {
+    minHeight: 44,
+    justifyContent: "center",
+    alignItems: "center",
+    backgroundColor: "#F1F5F9",
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: "#E0E0E0",
+  },
+  timeBtnText: { fontSize: 15, fontWeight: "600", color: "#1A1A1A" },
+  addBtn: {
+    minHeight: 48,
+    justifyContent: "center",
+    alignItems: "center",
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "#2563EB",
+    borderStyle: "dashed",
+    backgroundColor: "#EFF6FF",
+    marginBottom: 12,
+  },
+  addBtnText: { fontSize: 15, fontWeight: "600", color: "#1D4ED8" },
+  deleteBtn: {
+    width: 44,
+    height: 44,
+    justifyContent: "center",
+    alignItems: "center",
+    marginLeft: 8,
+  },
+  deleteText: { fontSize: 18, color: "#94A3B8" },
+  typeGrid: { flexDirection: "row", flexWrap: "wrap", marginBottom: 12 },
+  typeChip: {
+    flexDirection: "row",
+    alignItems: "center",
+    minHeight: 44,
+    paddingHorizontal: 10,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: "#E0E0E0",
+    backgroundColor: "#F8FAFC",
+    marginRight: 6,
+    marginBottom: 6,
+  },
+  typeDot: { width: 8, height: 8, borderRadius: 4, marginRight: 6 },
+  typeLabel: { fontSize: 13, color: "#475569" },
+  input: {
+    backgroundColor: "#F8FAFC",
+    borderWidth: 1,
+    borderColor: "#E0E0E0",
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 12,
+    fontSize: 15,
+    color: "#1A1A1A",
+    marginBottom: 12,
+  },
+  stepperRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    marginTop: 4,
+    gap: 16,
+  },
+  stepperBtn: {
+    width: 48,
+    height: 48,
+    justifyContent: "center",
+    alignItems: "center",
+    borderRadius: 24,
+    backgroundColor: "#F1F5F9",
+    borderWidth: 1,
+    borderColor: "#E0E0E0",
+  },
+  stepperBtnText: { fontSize: 22, color: "#1D4ED8", fontWeight: "600" },
+  stepperValue: { fontSize: 17, fontWeight: "700", color: "#1A1A1A" },
+  errorText: {
+    color: "#DC2626",
+    fontSize: 13,
+    textAlign: "center",
+    marginBottom: 8,
   },
 });

@@ -255,9 +255,23 @@ describe("Root layout has onboarding gate", () => {
     );
     expect(content).toContain("goals: []");
     expect(content).toContain('earliest_start: "16:00"');
-    expect(content).toContain('daily_target_minutes: 120');
+    expect(content).toContain("DEFAULT_DAILY_TARGET_MINUTES = 120");
+    expect(content).toContain("daily_target_minutes: dailyTarget");
     expect(content).toContain('type: "school"');
     expect(content).toContain("buildDefaultSchedule");
+  });
+
+  it("onboarding collects availability during first run", () => {
+    const content = fs.readFileSync(
+      path.join(ONBOARDING, "index.tsx"),
+      "utf-8",
+    );
+    expect(content).toContain("When are you busy?");
+    expect(content).toContain(
+      "Add only what's fixed. Momentum plans study time around it.",
+    );
+    expect(content).toContain("+ Add commitment");
+    expect(content).toContain("buildSchedule");
   });
 
   it("onboarding prefetches dashboard after onboarding POST", () => {
