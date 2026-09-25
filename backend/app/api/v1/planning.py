@@ -1,12 +1,11 @@
 import logging
 
-from datetime import date
-
 from fastapi import APIRouter, Depends
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.dependencies import get_current_user, get_db
+from app.core.timezone import today_in_user_tz
 from app.domain.models import BacklogItem, Course, Goal, StudentProfile, User, WeeklySchedule
 from app.domain.schemas import (
     AdaptivePlanResponse,
@@ -62,7 +61,7 @@ async def planning_preview(
         goals=goals,
     )
 
-    result = engine.compute(target_date=date.today())
+    result = engine.compute(target_date=today_in_user_tz())
 
     return PlanningPreviewResponse(
         available_windows=[
@@ -94,7 +93,7 @@ async def complete_session(
     5. Generates and persists Plan v2
     6. Returns the new plan with a diff of what changed
     """
-    plan_date = date.today()
+    plan_date = today_in_user_tz()
 
     # Build planning data from DB (same as dashboard)
     profile_result = await db.execute(

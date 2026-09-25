@@ -1,11 +1,11 @@
 import uuid
 import logging
-from datetime import date
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.dependencies import get_current_user, get_db
+from app.core.timezone import today_in_user_tz
 from app.domain.models import ActivityType, User
 from app.domain.schemas import BacklogItemCreate, BacklogItemResponse, BacklogItemUpdate
 from app.repositories.backlog_repo import BacklogItemRepository
@@ -82,7 +82,7 @@ async def update_backlog_item(
     if old and old.status != "completed" and item.status == "completed":
         act = ActivityService(db)
         await act.record(user.id, ActivityType.TASK_COMPLETED, {"item_id": str(item.id), "title": item.title})
-        snapshot = await get_active_snapshot(db, user.id, date.today())
+        snapshot = await get_active_snapshot(db, user.id, today_in_user_tz())
         if snapshot is not None:
             await supersede_snapshot(db, snapshot.id)
     return item

@@ -9,6 +9,7 @@ from dataclasses import replace
 from datetime import date
 from typing import Callable, Sequence
 
+from app.core.timezone import today_in_user_tz
 from app.estimation import estimate
 
 from .contract import PlanningContext
@@ -31,7 +32,7 @@ def build_planning_context(
 ) -> PlanningContext:
     return PlanningContext(
         backlog=tuple(planning_data.get("prioritized_backlog", [])),
-        planning_date=target_date or date.today(),
+        planning_date=target_date or today_in_user_tz(),
         scheduling_windows=tuple(planning_data.get("available_windows", [])),
         completed_sessions=tuple(completions) if completions is not None else None,
         previous_plan=previous_plan,

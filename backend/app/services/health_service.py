@@ -1,10 +1,11 @@
 from datetime import date, datetime, timedelta
 
+from app.core.timezone import today_in_user_tz
 from app.domain.models import BacklogItem
 
 
 def _get_today() -> date:
-    return date.today()
+    return today_in_user_tz()
 
 
 def compute_backlog_health(

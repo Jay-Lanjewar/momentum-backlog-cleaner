@@ -1,10 +1,11 @@
 from datetime import date, datetime
 
+from app.core.timezone import today_in_user_tz
 from app.domain.models import BacklogItem, Goal
 
 
 def _get_today() -> date:
-    return date.today()
+    return today_in_user_tz()
 
 
 def _parse_due_date(item: BacklogItem) -> date | None:

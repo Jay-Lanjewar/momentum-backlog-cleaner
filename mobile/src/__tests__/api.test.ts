@@ -1,4 +1,4 @@
-import { api } from "../lib/api";
+import { api, DEVICE_TIMEZONE_HEADER } from "../lib/api";
 
 // Mock fetch globally
 const mockFetch = jest.fn() as jest.Mock;
@@ -108,5 +108,89 @@ describe("api client", () => {
 
     const [, opts] = mockFetch.mock.calls[0];
     expect(opts.headers).not.toHaveProperty("Authorization");
+  });
+});
+
+describe("device timezone header", () => {
+  let resolvedOptionsSpy: jest.SpyInstance | null = null;
+
+  afterEach(() => {
+    resolvedOptionsSpy?.mockRestore();
+    resolvedOptionsSpy = null;
+  });
+
+  function mockResolvedTimeZone(timeZone?: string): void {
+    resolvedOptionsSpy = jest
+      .spyOn(Intl.DateTimeFormat.prototype, "resolvedOptions")
+      .mockReturnValue(
+        { timeZone } as unknown as Intl.ResolvedDateTimeFormatOptions,
+      );
+  }
+
+  it("sends X-Device-Timezone with the device zone", async () => {
+    mockResolvedTimeZone("Asia/Kolkata");
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({ data: "ok" }),
+    });
+
+    await api.get("/api/v1/dashboard");
+
+    const [, opts] = mockFetch.mock.calls[0];
+    expect(opts.headers).toEqual(
+      expect.objectContaining({
+        [DEVICE_TIMEZONE_HEADER]: "Asia/Kolkata",
+        "Content-Type": "application/json",
+      }),
+    );
+  });
+
+  it("omits the header when the runtime reports no timezone", async () => {
+    mockResolvedTimeZone(undefined);
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({ data: "ok" }),
+    });
+
+    await api.get("/api/v1/dashboard");
+
+    const [, opts] = mockFetch.mock.calls[0];
+    expect(opts.headers).not.toHaveProperty(DEVICE_TIMEZONE_HEADER);
+  });
+
+  it("omits the header when timezone lookup throws", async () => {
+    resolvedOptionsSpy = jest
+      .spyOn(Intl.DateTimeFormat.prototype, "resolvedOptions")
+      .mockImplementation(() => {
+        throw new Error("Intl unavailable");
+      });
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({ data: "ok" }),
+    });
+
+    const result = await api.get("/api/v1/dashboard");
+
+    expect(result.error).toBeNull();
+    const [, opts] = mockFetch.mock.calls[0];
+    expect(opts.headers).not.toHaveProperty(DEVICE_TIMEZONE_HEADER);
+  });
+
+  it("header value matches the runtime IANA zone when available", async () => {
+    const runtimeZone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+    if (!runtimeZone) {
+      return;
+    }
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({ data: "ok" }),
+    });
+
+    await api.get("/api/v1/dashboard");
+
+    const [, opts] = mockFetch.mock.calls[0];
+    expect(opts.headers).toEqual(
+      expect.objectContaining({ [DEVICE_TIMEZONE_HEADER]: runtimeZone }),
+    );
   });
 });

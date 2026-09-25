@@ -1,7 +1,7 @@
 import logging
 import uuid
 
-from datetime import date, datetime, timedelta, timezone
+from datetime import datetime, timedelta, timezone
 
 from fastapi import APIRouter, Depends
 from sqlalchemy import select
@@ -9,6 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import joinedload
 
 from app.core.dependencies import get_current_user_id, get_db
+from app.core.timezone import now_in_user_tz, today_in_user_tz
 from app.domain.models import (
     BacklogItem,
     Course,
@@ -91,7 +92,7 @@ async def get_dashboard(
         goals=goals,
     )
 
-    target = date.today()
+    target = today_in_user_tz()
     planning_data = engine.compute(target_date=target)
 
     planning = PlanningPreviewResponse(
@@ -165,7 +166,11 @@ async def get_dashboard(
         courses_by_id=courses_by_id,
     )
 
-    today_start = datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0)
+    today_start = (
+        now_in_user_tz()
+        .replace(hour=0, minute=0, second=0, microsecond=0)
+        .astimezone(timezone.utc)
+    )
     completions_result = await db.execute(
         select(SessionCompletion).where(
             SessionCompletion.plan_snapshot_id == PlanSnapshot.id,

@@ -24,6 +24,7 @@ from app.domain.schemas import (
     PlanChange,
     PlanSession,
 )
+from app.core.timezone import now_in_user_tz, today_in_user_tz
 from app.services.activity_service import ActivityService
 from app.services.deterministic_planner import generate_deterministic_plan
 
@@ -108,15 +109,66 @@ async def get_or_create_active_snapshot(
     """Return the active snapshot, creating one if none exists.
 
     This is used by the dashboard endpoint.
+
+    A stored snapshot is regenerated only when it is *stale*: it is for the
+    user's current local day, it still has sessions but every one of them has
+    already ended before the current local time, and pending backlog work
+    remains (see ``_is_stale_snapshot``).  Otherwise the stored snapshot is
+    reused so we never churn a new version on every request.
     """
     existing = await get_active_snapshot(db, user_id, plan_date)
     if existing is not None:
+        pending_backlog = planning_data.get("prioritized_backlog") or []
+        if pending_backlog and _is_stale_snapshot(existing, plan_date):
+            plan = generate_deterministic_plan(
+                planning_data,
+                daily_capacity_minutes=daily_capacity_minutes,
+                target_date=plan_date,
+            )
+            await supersede_snapshot(db, existing.id)
+            return await create_snapshot(
+                db,
+                user_id,
+                plan_date,
+                plan,
+                version=existing.version + 1,
+            )
         return existing
 
     plan = generate_deterministic_plan(
         planning_data, daily_capacity_minutes=daily_capacity_minutes, target_date=plan_date
     )
     return await create_snapshot(db, user_id, plan_date, plan)
+
+
+def _is_stale_snapshot(snapshot: PlanSnapshot, plan_date: date) -> bool:
+    """True when a stored snapshot can no longer drive the Today screen.
+
+    All of the following must hold:
+
+    * ``plan_date`` is the user's *current* local day — historical or
+      future-dated snapshots are never regenerated.
+    * The snapshot has at least one session.  An empty-session snapshot is
+      not considered stale: there is nothing to move forward in time, and
+      regenerating it would mint a new version on every dashboard request.
+    * Every session has already ended strictly before the current local
+      time-of-day (mixed past+future snapshots are reused as-is).
+    """
+    if plan_date != today_in_user_tz():
+        return False
+
+    sessions = snapshot.sessions or []
+    if not sessions:
+        return False
+
+    end_times = [s.get("end_time") for s in sessions]
+    if not all(end_times):
+        # Malformed session (missing end_time): be conservative and reuse.
+        return False
+
+    now = now_in_user_tz()
+    now_minutes = now.hour * 60 + now.minute
+    return all(_time_to_minutes(t) < now_minutes for t in end_times)
 
 
 # ─── Completion ───

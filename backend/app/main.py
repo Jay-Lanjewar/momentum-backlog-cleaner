@@ -9,6 +9,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.api.v1 import router as v1_router
 from app.core.config import settings
 from app.core.logging import setup_logging
+from app.core.timezone import UserTimezoneMiddleware
 
 logger = logging.getLogger(__name__)
 
@@ -58,6 +59,8 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+app.add_middleware(UserTimezoneMiddleware)
 
 app.include_router(v1_router)
 

@@ -1,4 +1,6 @@
-from datetime import date, datetime
+from datetime import date
+
+from app.core.timezone import now_in_user_tz, today_in_user_tz
 
 WEEKDAYS = ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"]
 BLOCKED_TYPES = {
@@ -27,7 +29,7 @@ def _format_time(minutes: int) -> str:
 
 def _get_day_from_date(dt: date | None = None) -> str:
     if dt is None:
-        dt = date.today()
+        dt = today_in_user_tz()
     return WEEKDAYS[dt.weekday()]
 
 
@@ -99,7 +101,7 @@ def compute_available_windows(
         window_start = _parse_time(preferred_window.get("earliest_start", "00:00"))
         window_end = _parse_time(preferred_window.get("latest_end", "23:59"))
 
-    now = datetime.now()
+    now = now_in_user_tz()
     if target_date is None or target_date == now.date():
         current_minutes = now.hour * 60 + now.minute
         if window_start < current_minutes + 15:

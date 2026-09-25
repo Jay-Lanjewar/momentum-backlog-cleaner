@@ -3,6 +3,7 @@ from datetime import date
 from collections.abc import Sequence
 
 from app.domain.models import BacklogItem, Goal, Course, StudentProfile, WeeklySchedule
+from app.core.timezone import today_in_user_tz
 from app.estimation import estimate
 from app.services.schedule_service import (
     compute_available_windows,
@@ -77,7 +78,7 @@ class PlanningEngine:
             overdue = False
             if due is not None:
                 due_date_only = due.date() if hasattr(due, "date") else due
-                overdue = due_date_only < (target_date or date.today())
+                overdue = due_date_only < (target_date or today_in_user_tz())
 
             prioritized_backlog.append(
                 {
@@ -104,7 +105,7 @@ class PlanningEngine:
 
         estimated_days_to_clear = None
         if backlog_health.get("estimated_completion_date") and total_available_minutes > 0:
-            today = target_date or date.today()
+            today = target_date or today_in_user_tz()
             estimated_days_to_clear = round(
                 total_required_minutes / max(total_available_minutes, 1), 1
             )

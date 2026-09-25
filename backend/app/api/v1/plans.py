@@ -1,13 +1,12 @@
 import logging
 import uuid
 
-from datetime import date
-
 from fastapi import APIRouter, Depends
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.dependencies import get_current_user, get_db
+from app.core.timezone import today_in_user_tz
 from app.domain.models import BacklogItem, Course, Goal, StudentProfile, User, WeeklySchedule
 from app.domain.schemas import PlanGenerateResponse, GeneratedPlan, PlanSession
 from app.services.planning_engine import PlanningEngine
@@ -58,7 +57,7 @@ async def generate_plan(
         goals=goals,
     )
 
-    target = date.today()
+    target = today_in_user_tz()
     planning_data = engine.compute(target_date=target)
 
     valid_backlog_ids = {
@@ -93,7 +92,11 @@ async def generate_plan(
     if validated is None:
         logger.info("Falling back to deterministic planner (%s)", fallback_reason)
         daily_capacity = profile.daily_target_minutes if profile and profile.daily_target_minutes else None
-        fallback = generate_deterministic_plan(planning_data, daily_capacity_minutes=daily_capacity)
+        fallback = generate_deterministic_plan(
+            planning_data,
+            daily_capacity_minutes=daily_capacity,
+            target_date=target,
+        )
         validated = fallback
 
     return PlanGenerateResponse(

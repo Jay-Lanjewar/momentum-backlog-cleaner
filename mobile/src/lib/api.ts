@@ -1,10 +1,23 @@
 import { supabase } from "./supabase";
 import { API_BASE_URL } from "./constants";
 
+export const DEVICE_TIMEZONE_HEADER = "X-Device-Timezone";
+
 interface ApiResponse<T> {
   data: T;
   error: string | null;
   errorCode: string | null;
+}
+
+function getDeviceTimezone(): string | null {
+  try {
+    const timeZone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+    return typeof timeZone === "string" && timeZone.length > 0
+      ? timeZone
+      : null;
+  } catch {
+    return null;
+  }
 }
 
 async function getSessionToken(): Promise<string | null> {
@@ -27,6 +40,11 @@ async function request<T>(
 
     if (token) {
       headers["Authorization"] = `Bearer ${token}`;
+    }
+
+    const timezone = getDeviceTimezone();
+    if (timezone) {
+      headers[DEVICE_TIMEZONE_HEADER] = timezone;
     }
 
     const response = await fetch(`${API_BASE_URL}${endpoint}`, {
