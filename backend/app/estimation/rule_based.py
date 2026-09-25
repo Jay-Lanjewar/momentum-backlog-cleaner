@@ -173,6 +173,18 @@ def _extract_workload(text: str) -> list[tuple[int, str]]:
     return workload
 
 
+def _merge_workload(*groups: list[tuple[int, str]]) -> list[tuple[int, str]]:
+    merged: list[tuple[int, str]] = []
+    seen: set[tuple[int, str]] = set()
+    for group in groups:
+        for entry in group:
+            if entry in seen:
+                continue
+            seen.add(entry)
+            merged.append(entry)
+    return merged
+
+
 class RuleBasedEstimator(EstimatorStrategy):
     def estimate(self, task: EstimationTask) -> EstimationResult:
         title = (task.title or "").strip()
@@ -221,7 +233,10 @@ class RuleBasedEstimator(EstimatorStrategy):
                 ],
             )
 
-        workload = _extract_workload(text)
+        workload = _merge_workload(
+            _extract_workload(title),
+            _extract_workload(description),
+        )
         if workload:
             reading_task = "reading" in detected
             workload_lines = []

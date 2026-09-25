@@ -155,3 +155,55 @@ class TestConfidenceBands:
 
     def test_fallback_single_category(self):
         assert _estimate("Revise notes").confidence == 0.75
+
+
+class TestWorkloadDeduplication:
+    def test_identical_quantity_in_both_fields_counted_once(self):
+        result = _estimate("20 questions", description="20 questions")
+        assert result.estimated_minutes == 60
+
+    def test_identical_quantity_with_type_keyword_in_title(self):
+        result = _estimate("Practice 20 questions", description="20 questions")
+        assert result.estimated_minutes == 60
+
+    def test_duplicate_title_and_description_case(self):
+        result = _estimate(
+            "Quadratic equations practice 20 questions",
+            description="20 questions",
+        )
+        assert result.estimated_minutes == 60
+
+    def test_partial_overlap_keeps_distinct_quantity(self):
+        result = _estimate(
+            "20 questions and 5 exercises", description="20 questions"
+        )
+        assert result.estimated_minutes == 90
+
+    def test_distinct_quantities_across_fields_both_counted(self):
+        result = _estimate("10 questions", description="5 exercises")
+        assert result.estimated_minutes == 60
+
+    def test_two_distinct_quantities_in_same_field_both_counted(self):
+        result = _estimate("20 questions and 5 exercises")
+        assert result.estimated_minutes == 90
+
+    def test_identical_quantity_repeated_in_same_field_counted_once(self):
+        result = _estimate("10 pages and 10 pages")
+        assert result.estimated_minutes == 30
+
+    def test_chapter_identifier_still_not_a_quantity_with_description(self):
+        result = _estimate("Read chapter 5", description="20 questions")
+        assert result.estimated_minutes == 60
+
+    def test_reasoning_lists_workload_once(self):
+        result = _estimate(
+            "Quadratic equations practice 20 questions",
+            description="20 questions",
+        )
+        lines = [line for line in result.reasoning if "workload" in line.lower()]
+        assert len(lines) == 1
+        assert "20 questions" in lines[0]
+
+    def test_zero_count_still_ignored_with_duplicate_fields(self):
+        result = _estimate("Practice 0 questions", description="0 questions")
+        assert result.estimated_minutes == 45
