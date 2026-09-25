@@ -114,7 +114,7 @@ class TestUserEstimateOverridesEngine:
             },
             target_date=TODAY,
         )
-        assert [_duration(s) for s in result["sessions"]] == [25, 5]
+        assert [_duration(s) for s in result["sessions"]] == [30]
 
     def test_engine_not_called_with_manual_estimate(self, monkeypatch):
         calls = []
@@ -192,7 +192,7 @@ class TestSchedulingBehaviourUnchanged:
             },
             target_date=TODAY,
         )
-        assert _scheduled_ids(result) == [str(higher_legacy["id"]), str(higher_legacy["id"])]
+        assert _scheduled_ids(result) == [str(higher_legacy["id"])]
         assert str(lower_legacy["id"]) in result["overflow"]
 
     def test_explicit_estimates_produce_identical_output(self):
@@ -220,14 +220,14 @@ class TestSchedulingBehaviourUnchanged:
                     "backlog_item_id": str(first),
                     "session_id": f"{first}:s1",
                     "start_time": "06:00",
-                    "end_time": "06:35",
+                    "end_time": "06:30",
                     "reason": "Work on Homework",
-                    "remaining_minutes": 25,
+                    "remaining_minutes": 30,
                 },
                 {
                     "backlog_item_id": str(first),
                     "session_id": f"{first}:s2",
-                    "start_time": "06:35",
+                    "start_time": "06:30",
                     "end_time": "07:00",
                     "reason": "Work on Homework",
                     "remaining_minutes": 0,
@@ -236,14 +236,6 @@ class TestSchedulingBehaviourUnchanged:
                     "backlog_item_id": str(second),
                     "session_id": f"{second}:s1",
                     "start_time": "07:00",
-                    "end_time": "07:25",
-                    "reason": "Work on Reading",
-                    "remaining_minutes": 5,
-                },
-                {
-                    "backlog_item_id": str(second),
-                    "session_id": f"{second}:s2",
-                    "start_time": "07:25",
                     "end_time": "07:30",
                     "reason": "Work on Reading",
                     "remaining_minutes": 0,
@@ -267,7 +259,7 @@ class TestSchedulingBehaviourUnchanged:
             },
             target_date=TODAY,
         )
-        assert [_duration(s) for s in result["sessions"]] == [30, 30, 30]
+        assert [_duration(s) for s in result["sessions"]] == [45, 45]
         assert len(result["overflow"]) == 0
 
     def test_response_contract_unchanged(self):
@@ -309,7 +301,7 @@ class TestNoDatabaseCalls:
             },
             target_date=TODAY,
         )
-        assert len(result["sessions"]) == 2
+        assert len(result["sessions"]) == 1
 
     def test_planner_module_has_no_db_imports(self):
         import app.services.deterministic_planner as module

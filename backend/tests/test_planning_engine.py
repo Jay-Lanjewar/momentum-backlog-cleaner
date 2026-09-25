@@ -21,12 +21,14 @@ def make_backlog(
     estimated_minutes: int = 60,
     due_date: date | None = None,
     status: str = "pending",
+    description: str | None = None,
 ) -> BacklogItem:
     return BacklogItem(
         id=uuid.uuid4(),
         user_id=USER_ID,
         course_id=course_id,
         title=title,
+        description=description,
         priority=priority,
         estimated_minutes=estimated_minutes,
         due_date=due_date,
@@ -238,3 +240,46 @@ class TestPlanningEngine:
         overdue_items = [b for b in result["prioritized_backlog"] if b["overdue"]]
         assert len(overdue_items) == 1
         assert overdue_items[0]["title"] == "Overdue"
+
+    def test_description_forwarded_into_prioritized_backlog(self):
+        course = make_course()
+        backlog = [
+            make_backlog(
+                course.id,
+                title="Quadratic Equations - Practice",
+                description="20 questions",
+            )
+        ]
+
+        engine = PlanningEngine(
+            profile=None,
+            schedule=None,
+            courses=[course],
+            backlog_items=backlog,
+            goals=[],
+        )
+
+        result = engine.compute(target_date=date(2026, 7, 20))
+
+        item = result["prioritized_backlog"][0]
+        assert item["description"] == "20 questions"
+        assert item["title"] == "Quadratic Equations - Practice"
+
+    def test_null_estimate_uses_estimator_for_required_minutes(self):
+        course = make_course()
+        backlog = [
+            make_backlog(course.id, title="Revise notes", estimated_minutes=None),
+            make_backlog(course.id, estimated_minutes=90),
+        ]
+
+        engine = PlanningEngine(
+            profile=None,
+            schedule=None,
+            courses=[course],
+            backlog_items=backlog,
+            goals=[],
+        )
+
+        result = engine.compute(target_date=date(2026, 7, 20))
+
+        assert result["total_required_minutes"] == 130

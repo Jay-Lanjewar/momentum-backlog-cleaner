@@ -36,10 +36,10 @@ class TestRequiredDurations:
         ("minutes", "expected"),
         [
             (15, [15]),
-            (30, [25, 5]),
-            (45, [25, 20]),
-            (60, [35, 25]),
-            (90, [30, 30, 30]),
+            (30, [30]),
+            (45, [45]),
+            (60, [30, 30]),
+            (90, [45, 45]),
             (120, [30, 30, 30, 30]),
             (180, [30, 30, 30, 30, 30, 30]),
         ],
@@ -52,6 +52,10 @@ class TestRequiredDurations:
         result = split("Task", minutes)
         assert sum(s.duration_minutes for s in result.sessions) == minutes
 
+    @pytest.mark.parametrize("minutes", [1, 15, 25, 26, 30, 44, 45])
+    def test_totals_up_to_45_stay_single_session(self, minutes):
+        assert _durations(split("Task", minutes)) == [minutes]
+
 
 class TestRangeBoundaries:
     @pytest.mark.parametrize(
@@ -59,13 +63,14 @@ class TestRangeBoundaries:
         [
             (1, [1]),
             (25, [25]),
-            (26, [25, 1]),
-            (45, [25, 20]),
-            (46, [35, 11]),
+            (26, [26]),
+            (45, [45]),
+            (46, [23, 23]),
+            (49, [25, 24]),
             (70, [35, 35]),
             (71, [36, 35]),
             (74, [37, 37]),
-            (75, [25, 25, 25]),
+            (75, [38, 37]),
             (100, [34, 33, 33]),
             (105, [35, 35, 35]),
             (110, [28, 28, 27, 27]),
@@ -93,6 +98,7 @@ class TestInvariants:
         assert sum(durations) == minutes
         assert all(d > 0 for d in durations)
         if len(durations) > 1:
+            assert all(d >= 15 for d in durations)
             assert all(d <= 45 for d in durations)
 
     def test_zero_minutes_yields_no_sessions(self):

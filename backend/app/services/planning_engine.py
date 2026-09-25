@@ -3,12 +3,27 @@ from datetime import date
 from collections.abc import Sequence
 
 from app.domain.models import BacklogItem, Goal, Course, StudentProfile, WeeklySchedule
+from app.estimation import estimate
 from app.services.schedule_service import (
     compute_available_windows,
     compute_total_available_minutes,
 )
 from app.services.priority_service import prioritize_backlog, get_overdue_items
 from app.services.health_service import compute_backlog_health
+
+
+def _resolve_required_minutes(item: BacklogItem) -> int:
+    stored = item.estimated_minutes
+    if stored and stored > 0:
+        return int(stored)
+    result = estimate(
+        {
+            "title": item.title,
+            "description": item.description,
+            "priority": item.priority,
+        }
+    )
+    return result.estimated_minutes
 
 
 class PlanningEngine:
@@ -52,7 +67,7 @@ class PlanningEngine:
         )
 
         total_required_minutes = sum(
-            (item.estimated_minutes or 60) for item, _ in scored
+            _resolve_required_minutes(item) for item, _ in scored
         )
 
         prioritized_backlog = []
@@ -68,6 +83,7 @@ class PlanningEngine:
                 {
                     "id": item.id,
                     "title": item.title,
+                    "description": item.description,
                     "course_id": item.course_id,
                     "course_name": course.name if course else "Unknown",
                     "course_color": course.color if course else "#6366f1",

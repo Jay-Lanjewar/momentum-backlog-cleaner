@@ -49,9 +49,9 @@ class TestSessionChunking:
             },
             target_date=TODAY,
         )
-        assert [_duration(s) for s in result["sessions"]] == [35, 25]
+        assert [_duration(s) for s in result["sessions"]] == [30, 30]
         assert {s["backlog_item_id"] for s in result["sessions"]} == {str(item["id"])}
-        assert [s["remaining_minutes"] for s in result["sessions"]] == [25, 0]
+        assert [s["remaining_minutes"] for s in result["sessions"]] == [30, 0]
         assert result["overflow"] == []
 
     def test_110_minute_task_becomes_four_sessions(self):
@@ -80,7 +80,7 @@ class TestSessionsStayTogether:
             target_date=TODAY,
         )
         scheduled = [s["backlog_item_id"] for s in result["sessions"]]
-        assert scheduled == [str(first["id"])] * 3 + [str(second["id"])]
+        assert scheduled == [str(first["id"])] * 2 + [str(second["id"])]
         assert result["overflow"] == []
 
     def test_sessions_never_interleaved_across_tasks(self):
@@ -115,7 +115,7 @@ class TestWholeSessionScheduling:
             },
             target_date=TODAY,
         )
-        assert [_duration(s) for s in result["sessions"]] == [25, 20]
+        assert [_duration(s) for s in result["sessions"]] == [45]
         assert {s["backlog_item_id"] for s in result["sessions"]} == {str(first["id"])}
         assert str(second["id"]) in result["overflow"]
         assert str(first["id"]) not in result["overflow"]
@@ -129,8 +129,8 @@ class TestWholeSessionScheduling:
             },
             target_date=TODAY,
         )
-        assert [_duration(s) for s in result["sessions"]] == [30, 30]
-        assert [s["remaining_minutes"] for s in result["sessions"]] == [60, 30]
+        assert [_duration(s) for s in result["sessions"]] == [45]
+        assert [s["remaining_minutes"] for s in result["sessions"]] == [45]
         assert str(item["id"]) in result["overflow"]
 
     def test_capacity_boundary_keeps_session_whole(self):
@@ -143,8 +143,8 @@ class TestWholeSessionScheduling:
             daily_capacity_minutes=40,
             target_date=TODAY,
         )
-        assert [_duration(s) for s in result["sessions"]] == [35]
-        assert [s["remaining_minutes"] for s in result["sessions"]] == [25]
+        assert [_duration(s) for s in result["sessions"]] == [30]
+        assert [s["remaining_minutes"] for s in result["sessions"]] == [30]
         assert str(item["id"]) in result["overflow"]
 
     def test_capacity_beyond_window_space_caps_by_windows(self):
@@ -158,7 +158,7 @@ class TestWholeSessionScheduling:
             daily_capacity_minutes=100000,
             target_date=TODAY,
         )
-        assert [_duration(s) for s in result["sessions"]] == [35, 25]
+        assert [_duration(s) for s in result["sessions"]] == [30, 30]
         assert str(first["id"]) not in result["overflow"]
         assert str(second["id"]) in result["overflow"]
 
@@ -173,8 +173,8 @@ class TestWholeSessionScheduling:
             },
             target_date=TODAY,
         )
-        assert [_duration(s) for s in result["sessions"]] == [25, 15, 10, 25]
-        assert [s["remaining_minutes"] for s in result["sessions"]] == [15, 0, 0, 20]
+        assert [_duration(s) for s in result["sessions"]] == [40, 10]
+        assert [s["remaining_minutes"] for s in result["sessions"]] == [0, 0]
         assert str(third["id"]) in result["overflow"]
         assert str(first["id"]) not in result["overflow"]
         assert str(second["id"]) not in result["overflow"]

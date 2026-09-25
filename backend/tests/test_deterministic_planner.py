@@ -27,7 +27,7 @@ class TestDeterministicPlanner:
                 }
             ],
         })
-        assert [_duration(s) for s in result["sessions"]] == [35, 25]
+        assert [_duration(s) for s in result["sessions"]] == [30, 30]
         assert result["sessions"][0]["backlog_item_id"] == str(item_id)
         assert len(result["overflow"]) == 0
 
@@ -49,7 +49,7 @@ class TestDeterministicPlanner:
                 },
             ],
         })
-        assert len(result["sessions"]) == 4
+        assert len(result["sessions"]) == 2
         assert len(result["overflow"]) == 0
 
     def test_overflow_when_not_enough_time(self):
@@ -70,7 +70,7 @@ class TestDeterministicPlanner:
                 },
             ],
         })
-        assert len(result["sessions"]) == 2
+        assert len(result["sessions"]) == 1
         scheduled_ids = {s["backlog_item_id"] for s in result["sessions"]}
         assert str(id_1) in scheduled_ids
         assert str(id_2) not in scheduled_ids
@@ -90,7 +90,7 @@ class TestDeterministicPlanner:
                 },
             ],
         })
-        assert [_duration(s) for s in result["sessions"]] == [30, 30, 30]
+        assert [_duration(s) for s in result["sessions"]] == [45, 45]
         assert len(result["overflow"]) == 0
 
     def test_higher_priority_scheduled_first(self):
@@ -160,5 +160,5 @@ class TestDeterministicPlanner:
                 },
             ],
         })
-        assert [_duration(s) for s in result["sessions"]] == [35, 15]
+        assert [_duration(s) for s in result["sessions"]] == [25, 25]
         assert len(result["overflow"]) == 0

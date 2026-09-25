@@ -1,8 +1,7 @@
 from .contract import SessionSplitResult, StudySession
 
-_SINGLE_SESSION_MAX = 25
-_FIXED_25_MAX = 45
-_FIXED_35_MAX = 70
+_SINGLE_SESSION_MAX = 45
+_TWO_SESSION_MAX = 90
 _FOCUS_RANGE_MAX = 120
 _FOCUS_MIN = 25
 _FOCUS_MAX = 35
@@ -43,10 +42,8 @@ class SessionSplitter:
             return []
         if minutes <= _SINGLE_SESSION_MAX:
             return [minutes]
-        if minutes <= _FIXED_25_MAX:
-            return [25, minutes - 25]
-        if minutes <= _FIXED_35_MAX:
-            return [35, minutes - 35]
+        if minutes <= _TWO_SESSION_MAX:
+            return _distribute(minutes, 2)
         if minutes <= _FOCUS_RANGE_MAX:
             count = (minutes + _FOCUS_MAX - 1) // _FOCUS_MAX
             if count * _FOCUS_MIN > minutes:

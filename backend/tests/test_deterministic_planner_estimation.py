@@ -41,7 +41,7 @@ class TestUserEstimateOverridesEngine:
                 _item(title="Solve exercise 4", priority=1, estimated_minutes=30)
             ],
         })
-        assert [_duration(s) for s in result["sessions"]] == [25, 5]
+        assert [_duration(s) for s in result["sessions"]] == [30]
 
     def test_engine_not_called_when_estimate_present(self, monkeypatch):
         calls = []
@@ -56,14 +56,14 @@ class TestUserEstimateOverridesEngine:
             "prioritized_backlog": [_item(estimated_minutes=60)],
         })
         assert calls == []
-        assert [_duration(s) for s in result["sessions"]] == [35, 25]
+        assert [_duration(s) for s in result["sessions"]] == [30, 30]
 
     def test_float_positive_estimate_is_used(self):
         result = generate_deterministic_plan({
             "available_windows": [_window()],
             "prioritized_backlog": [_item(estimated_minutes=45.0)],
         })
-        assert [_duration(s) for s in result["sessions"]] == [25, 20]
+        assert [_duration(s) for s in result["sessions"]] == [45]
 
 
 class TestMissingEstimateUsesEngine:
@@ -80,7 +80,7 @@ class TestMissingEstimateUsesEngine:
             "prioritized_backlog": [_item(title="Solve exercise 4", estimated_minutes=None)],
         })
         assert len(calls) == 1
-        assert [_duration(s) for s in result["sessions"]] == [25, 20]
+        assert [_duration(s) for s in result["sessions"]] == [45]
 
     def test_missing_estimate_uses_real_engine(self):
         result = generate_deterministic_plan({
@@ -89,7 +89,7 @@ class TestMissingEstimateUsesEngine:
                 _item(title="Solve exercise 4", priority=3, estimated_minutes=None)
             ],
         })
-        assert [_duration(s) for s in result["sessions"]] == [25, 20]
+        assert [_duration(s) for s in result["sessions"]] == [45]
 
     def test_zero_estimate_falls_back_to_engine(self):
         result = generate_deterministic_plan({
@@ -98,7 +98,7 @@ class TestMissingEstimateUsesEngine:
                 _item(title="Solve exercise 4", priority=3, estimated_minutes=0)
             ],
         })
-        assert [_duration(s) for s in result["sessions"]] == [25, 20]
+        assert [_duration(s) for s in result["sessions"]] == [45]
 
     def test_negative_estimate_falls_back_to_engine(self):
         result = generate_deterministic_plan({
@@ -107,7 +107,7 @@ class TestMissingEstimateUsesEngine:
                 _item(title="Solve exercise 4", priority=3, estimated_minutes=-5)
             ],
         })
-        assert [_duration(s) for s in result["sessions"]] == [25, 20]
+        assert [_duration(s) for s in result["sessions"]] == [45]
 
 
 class TestEmptyTask:
@@ -150,14 +150,14 @@ class TestSchedulesUnchanged:
                     "backlog_item_id": str(first),
                     "session_id": f"{first}:s1",
                     "start_time": "06:00",
-                    "end_time": "06:35",
+                    "end_time": "06:30",
                     "reason": "Work on Homework",
-                    "remaining_minutes": 25,
+                    "remaining_minutes": 30,
                 },
                 {
                     "backlog_item_id": str(first),
                     "session_id": f"{first}:s2",
-                    "start_time": "06:35",
+                    "start_time": "06:30",
                     "end_time": "07:00",
                     "reason": "Work on Homework",
                     "remaining_minutes": 0,
@@ -166,14 +166,6 @@ class TestSchedulesUnchanged:
                     "backlog_item_id": str(second),
                     "session_id": f"{second}:s1",
                     "start_time": "07:00",
-                    "end_time": "07:25",
-                    "reason": "Work on Reading",
-                    "remaining_minutes": 5,
-                },
-                {
-                    "backlog_item_id": str(second),
-                    "session_id": f"{second}:s2",
-                    "start_time": "07:25",
                     "end_time": "07:30",
                     "reason": "Work on Reading",
                     "remaining_minutes": 0,
@@ -196,13 +188,14 @@ class TestSchedulesUnchanged:
 
         a = with_estimate["sessions"][0]
         b = missing_estimate["sessions"][0]
-        assert _duration(a) == 35
-        assert _duration(b) == 25
+        assert _duration(a) == 30
+        assert _duration(b) == 45
         assert b["backlog_item_id"] == a["backlog_item_id"]
         assert b["reason"] == a["reason"]
         assert missing_estimate["daily_message"] == with_estimate["daily_message"]
         assert missing_estimate["overflow"] == with_estimate["overflow"]
-        assert len(missing_estimate["sessions"]) == len(with_estimate["sessions"])
+        assert len(with_estimate["sessions"]) == 2
+        assert len(missing_estimate["sessions"]) == 1
 
     def test_priority_ordering_preserved_with_engine_estimates(self):
         low = uuid.uuid4()
@@ -215,5 +208,49 @@ class TestSchedulesUnchanged:
             ],
         })
         scheduled = [s["backlog_item_id"] for s in result["sessions"]]
-        assert scheduled == [str(high), str(high), str(low), str(low)]
+        assert scheduled == [str(high), str(high), str(low)]
         assert result["overflow"] == []
+
+
+class TestWorkloadDescriptionFlow:
+    def test_description_quantity_flows_to_sessions(self):
+        result = generate_deterministic_plan({
+            "available_windows": [_window()],
+            "prioritized_backlog": [
+                _item(
+                    title="Quadratic Equations - Practice",
+                    description="20 questions",
+                    priority=3,
+                    estimated_minutes=None,
+                )
+            ],
+        })
+        assert [_duration(s) for s in result["sessions"]] == [30, 30]
+        assert result["overflow"] == []
+
+    def test_text_duration_used_when_estimate_missing(self):
+        result = generate_deterministic_plan({
+            "available_windows": [_window()],
+            "prioritized_backlog": [
+                _item(title="Revise notes", description="45 min", estimated_minutes=None)
+            ],
+        })
+        assert [_duration(s) for s in result["sessions"]] == [45]
+
+    def test_stored_estimate_beats_text_duration(self):
+        result = generate_deterministic_plan({
+            "available_windows": [_window()],
+            "prioritized_backlog": [
+                _item(title="Revise notes", description="45 min", estimated_minutes=30)
+            ],
+        })
+        assert [_duration(s) for s in result["sessions"]] == [30]
+
+    def test_stored_thirty_never_becomes_tiny_tail(self):
+        result = generate_deterministic_plan({
+            "available_windows": [_window()],
+            "prioritized_backlog": [_item(title="Task", estimated_minutes=30)],
+        })
+        durations = [_duration(s) for s in result["sessions"]]
+        assert durations == [30]
+        assert min(durations) >= 15

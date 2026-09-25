@@ -176,6 +176,7 @@ class TimeBlock(BaseModel):
 class PrioritizedBacklogItem(BaseModel):
     id: uuid.UUID
     title: str
+    description: str | None = None
     course_id: uuid.UUID
     course_name: str
     course_color: str
