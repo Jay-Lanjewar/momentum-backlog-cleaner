@@ -179,24 +179,26 @@ function makeNoProfileUser() {
   };
 }
 
+async function interpretBacklog(text: string) {
+  await fireEvent.changeText(screen.getByTestId("backlog-input"), text);
+  await fireEvent.press(screen.getByText("Interpret tasks"));
+}
+
 async function enterBacklog() {
-  await fireEvent.changeText(
-    screen.getByPlaceholderText(/Physics/),
-    "Physics\nMotion",
-  );
-  await fireEvent.press(screen.getByText("Build My Plan"));
+  await interpretBacklog("Physics\nMotion");
 }
 
 async function enterMultiGroupBacklog() {
-  await fireEvent.changeText(
-    screen.getByPlaceholderText(/Physics/),
-    "Physics\nMotion\n\nMaths\nTriangles",
-  );
-  await fireEvent.press(screen.getByText("Build My Plan"));
+  await interpretBacklog("Physics\nMotion\n\nMaths\nTriangles");
+}
+
+async function continueToAvailability() {
+  await fireEvent.press(screen.getByTestId("review-continue"));
 }
 
 async function reachAvailability() {
   await enterBacklog();
+  await continueToAvailability();
   expect(screen.getByText("When are you busy?")).toBeTruthy();
 }
 
@@ -224,7 +226,7 @@ describe("Onboarding simplified first-run flow", () => {
   it("shows backlog input on launch (no Welcome step)", async () => {
     await render(<OnboardingScreen />);
 
-    expect(screen.getByText("What are you studying?")).toBeTruthy();
+    expect(screen.getByText("What do you need to get done?")).toBeTruthy();
     expect(screen.queryByText("Welcome to Momentum")).toBeNull();
     expect(screen.queryByText("Get Started")).toBeNull();
   });
@@ -240,10 +242,15 @@ describe("Onboarding simplified first-run flow", () => {
     expect(screen.queryByText("Your name")).toBeNull();
   });
 
-  it("parses backlog, asks availability, then shows confirmation", async () => {
+  it("interprets backlog, asks availability, then shows confirmation", async () => {
     await render(<OnboardingScreen />);
 
     await enterMultiGroupBacklog();
+
+    expect(screen.getByText("Here's what Momentum understood")).toBeTruthy();
+    expect(screen.queryByText("When are you busy?")).toBeNull();
+
+    await continueToAvailability();
 
     expect(screen.getByText("When are you busy?")).toBeTruthy();
     expect(screen.queryByText("Here's what I understood")).toBeNull();
@@ -258,14 +265,18 @@ describe("Onboarding simplified first-run flow", () => {
     expect(screen.getByText("Edit")).toBeTruthy();
   });
 
-  it("Edit returns to backlog input", async () => {
+  it("Edit returns to task review", async () => {
     await render(<OnboardingScreen />);
     await reachConfirmation();
 
     await fireEvent.press(screen.getByText("Edit"));
 
-    expect(screen.getByText("What are you studying?")).toBeTruthy();
+    expect(screen.getByText("Here's what Momentum understood")).toBeTruthy();
     expect(screen.queryByText("Here's what I understood")).toBeNull();
+
+    await fireEvent.press(screen.getByTestId("review-back"));
+
+    expect(screen.getByText("What do you need to get done?")).toBeTruthy();
   });
 
   it("confirmation triggers onboarding POST exactly once", async () => {
@@ -316,6 +327,7 @@ describe("Onboarding simplified first-run flow", () => {
 
     await render(<OnboardingScreen />);
     await enterMultiGroupBacklog();
+    await continueToAvailability();
     await fireEvent.press(screen.getByText("Continue"));
     expect(screen.getByText("Here's what I understood")).toBeTruthy();
     await fireEvent.press(screen.getByText("Looks correct"));
@@ -326,14 +338,24 @@ describe("Onboarding simplified first-run flow", () => {
 
     const [, payload] = mockPost.mock.calls[0];
 
-    // courses + backlog derived from parser
+    // courses + backlog derived from the interpreted drafts
     expect(payload.courses).toEqual([
       { name: "Physics", color: expect.stringMatching(/^#[0-9a-fA-F]{6}$/) },
       { name: "Maths", color: expect.stringMatching(/^#[0-9a-fA-F]{6}$/) },
     ]);
     expect(payload.backlog).toEqual([
-      { title: "Motion", course_index: 0 },
-      { title: "Triangles", course_index: 1 },
+      {
+        title: "Motion",
+        course_index: 0,
+        priority: 3,
+        estimated_minutes: null,
+      },
+      {
+        title: "Triangles",
+        course_index: 1,
+        priority: 3,
+        estimated_minutes: null,
+      },
     ]);
 
     // first-run: no exam goals
@@ -637,10 +659,10 @@ describe("Onboarding simplified first-run flow", () => {
     expect(screen.queryByText("Here's what I understood")).toBeNull();
   });
 
-  it("Build My Plan is disabled when backlog is empty", async () => {
+  it("Interpret tasks is disabled when backlog is empty", async () => {
     await render(<OnboardingScreen />);
 
-    const btn = screen.getByText("Build My Plan");
+    const btn = screen.getByText("Interpret tasks");
     const touchable = btn.parent ?? btn;
     expect(
       touchable.props?.accessibilityState?.disabled ??
@@ -648,8 +670,8 @@ describe("Onboarding simplified first-run flow", () => {
     ).toBe(true);
 
     await fireEvent.press(btn);
-    expect(screen.queryByText("Here's what I understood")).toBeNull();
-    expect(screen.getByText("What are you studying?")).toBeTruthy();
+    expect(screen.queryByText("Here's what Momentum understood")).toBeNull();
+    expect(screen.getByText("What do you need to get done?")).toBeTruthy();
   });
 });
 
@@ -669,11 +691,8 @@ describe("Availability step", () => {
 
   async function openAvailability() {
     await render(<OnboardingScreen />);
-    await fireEvent.changeText(
-      screen.getByPlaceholderText(/Physics/),
-      "Physics\nMotion\n\nMaths\nTriangles",
-    );
-    await fireEvent.press(screen.getByText("Build My Plan"));
+    await interpretBacklog("Physics\nMotion\n\nMaths\nTriangles");
+    await continueToAvailability();
     expect(screen.getByText("When are you busy?")).toBeTruthy();
   }
 
@@ -825,8 +844,18 @@ describe("Availability step", () => {
       },
     ]);
     expect(payload.backlog).toEqual([
-      { title: "Motion", course_index: 0 },
-      { title: "Triangles", course_index: 1 },
+      {
+        title: "Motion",
+        course_index: 0,
+        priority: 3,
+        estimated_minutes: null,
+      },
+      {
+        title: "Triangles",
+        course_index: 1,
+        priority: 3,
+        estimated_minutes: null,
+      },
     ]);
     expect(payload.goals).toEqual([]);
   });
@@ -896,18 +925,245 @@ describe("Availability step", () => {
     expect(screen.queryByText("Get Started")).toBeNull();
   });
 
-  it("Back returns to subjects without losing availability edits", async () => {
+  it("Back returns to task review without losing availability edits", async () => {
     await openAvailability();
 
     await fireEvent.press(screen.getByTestId("daily-target-increase"));
     await fireEvent.press(screen.getByText("Back"));
 
-    expect(screen.getByText("What are you studying?")).toBeTruthy();
+    expect(screen.getByText("Here's what Momentum understood")).toBeTruthy();
 
-    await fireEvent.press(screen.getByText("Build My Plan"));
+    await fireEvent.press(screen.getByTestId("review-back"));
+
+    expect(screen.getByText("What do you need to get done?")).toBeTruthy();
+
+    await fireEvent.press(screen.getByText("Interpret tasks"));
+    await continueToAvailability();
 
     expect(screen.getByText("When are you busy?")).toBeTruthy();
     expect(screen.getByText("150 min")).toBeTruthy();
+  });
+});
+
+describe("Task review step", () => {
+  beforeEach(() => {
+    mockPost.mockResolvedValue({
+      data: { ok: true },
+      error: null,
+      errorCode: null,
+    });
+    mockGet.mockResolvedValue({
+      data: makeProfileUser(),
+      error: null,
+      errorCode: null,
+    });
+  });
+
+  function tomorrowKey(): string {
+    const now = new Date(Date.now() + 86_400_000);
+    const pad = (n: number) => String(n).padStart(2, "0");
+    return `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`;
+  }
+
+  async function openReview(backlog: string) {
+    await render(<OnboardingScreen />);
+    await interpretBacklog(backlog);
+    expect(screen.getByText("Here's what Momentum understood")).toBeTruthy();
+  }
+
+  type OnboardingPayload = {
+    courses: { name: string; color: string }[];
+    backlog: {
+      title: string;
+      course_index: number;
+      priority: number;
+      estimated_minutes: number | null;
+      due_date?: string;
+      description?: string;
+    }[];
+  };
+
+  async function finishFromReview(): Promise<OnboardingPayload> {
+    await continueToAvailability();
+    await fireEvent.press(screen.getByText("Continue"));
+    await fireEvent.press(screen.getByText("Looks correct"));
+    await waitFor(() => {
+      expect(mockPost).toHaveBeenCalledTimes(1);
+    });
+    return mockPost.mock.calls[0][1];
+  }
+
+  it("shows one card per task with the interpreted values", async () => {
+    await openReview("Physics\nMotion\nGravitation");
+
+    expect(screen.getByTestId("review-card-0")).toBeTruthy();
+    expect(screen.getByTestId("review-card-1")).toBeTruthy();
+    expect(screen.getByTestId("task-subject-0").props.value).toBe("Physics");
+    expect(screen.getByTestId("task-title-0").props.value).toBe("Motion");
+    expect(screen.getByTestId("task-title-1").props.value).toBe(
+      "Gravitation",
+    );
+    expect(
+      screen.getByTestId("task-est-0-auto").props.accessibilityState
+        ?.selected,
+    ).toBe(true);
+  });
+
+  it("title edits reach the payload", async () => {
+    await openReview("Physics\nMotion");
+    await fireEvent.changeText(
+      screen.getByTestId("task-title-0"),
+      "Motion essay",
+    );
+
+    const payload = await finishFromReview();
+
+    expect(payload.backlog[0].title).toBe("Motion essay");
+  });
+
+  it("due, difficulty and estimate chips reach the payload", async () => {
+    await openReview("Physics\nMotion");
+
+    await fireEvent.press(screen.getByTestId("task-due-0-tomorrow"));
+    await fireEvent.press(screen.getByTestId("task-difficulty-0-hard"));
+    await fireEvent.press(screen.getByTestId("task-est-0-45"));
+
+    expect(
+      screen.getByTestId("task-difficulty-0-hard").props.accessibilityState
+        ?.selected,
+    ).toBe(true);
+
+    const payload = await finishFromReview();
+
+    expect(payload.backlog[0].due_date).toBe(`${tomorrowKey()}T00:00:00`);
+    expect(payload.backlog[0].priority).toBe(1);
+    expect(payload.backlog[0].estimated_minutes).toBe(45);
+  });
+
+  it("keeps the estimate empty when no duration was given", async () => {
+    await openReview("Physics read chapter");
+
+    expect(
+      screen.getByTestId("task-est-0-auto").props.accessibilityState
+        ?.selected,
+    ).toBe(true);
+
+    const payload = await finishFromReview();
+
+    expect(payload.backlog[0].estimated_minutes).toBeNull();
+  });
+
+  it("notes reach the payload as description", async () => {
+    await openReview("Physics worksheet");
+    await fireEvent.changeText(
+      screen.getByTestId("task-notes-0"),
+      "20 questions",
+    );
+
+    const payload = await finishFromReview();
+
+    expect(payload.backlog[0].description).toBe("20 questions");
+  });
+
+  it("renaming a card subject renames the course", async () => {
+    await openReview("Physics\nMotion");
+    await fireEvent.changeText(
+      screen.getByTestId("task-subject-0"),
+      "Mechanics",
+    );
+
+    const payload = await finishFromReview();
+
+    expect(payload.courses[0].name).toBe("Mechanics");
+  });
+
+  it("clearing the subject falls back to General", async () => {
+    await openReview("Physics\nMotion");
+    await fireEvent.changeText(screen.getByTestId("task-subject-0"), "");
+
+    const payload = await finishFromReview();
+
+    expect(payload.courses[0].name).toBe("General");
+  });
+
+  it("moves a task into another subject", async () => {
+    await openReview("Physics\nMotion\n\nMaths\nTriangles");
+
+    await fireEvent.press(screen.getByTestId("task-move-0-Maths"));
+
+    const payload = await finishFromReview();
+
+    expect(payload.courses.map((course) => course.name)).toEqual(["Maths"]);
+    expect(payload.backlog.map((item) => item.title)).toEqual([
+      "Triangles",
+      "Motion",
+    ]);
+    expect(payload.backlog.map((item) => item.course_index)).toEqual([0, 0]);
+  });
+
+  it("blocks continue when a title is blank", async () => {
+    await openReview("Physics\nMotion");
+    await fireEvent.changeText(screen.getByTestId("task-title-0"), " ");
+
+    expect(
+      screen.getByText("Give every task a name to continue."),
+    ).toBeTruthy();
+    expect(
+      screen.getByTestId("review-continue").props.accessibilityState?.disabled,
+    ).toBe(true);
+  });
+
+  it("blocks continue when every task is deleted", async () => {
+    await openReview("Physics\nMotion");
+
+    await fireEvent.press(screen.getByTestId("task-delete-0"));
+
+    expect(
+      screen.getByText("Add at least one task to continue."),
+    ).toBeTruthy();
+    expect(
+      screen.getByTestId("review-continue").props.accessibilityState?.disabled,
+    ).toBe(true);
+  });
+
+  it("adds a new task that must be named before continuing", async () => {
+    await openReview("Physics\nMotion");
+
+    await fireEvent.press(screen.getByTestId("add-task"));
+    expect(screen.getByTestId("review-card-1")).toBeTruthy();
+    expect(
+      screen.getByTestId("review-continue").props.accessibilityState?.disabled,
+    ).toBe(true);
+
+    await fireEvent.changeText(
+      screen.getByTestId("task-title-1"),
+      "Lab report",
+    );
+    expect(
+      screen.queryByText("Give every task a name to continue."),
+    ).toBeNull();
+
+    const payload = await finishFromReview();
+
+    expect(payload.backlog.map((item) => item.title)).toEqual([
+      "Motion",
+      "Lab report",
+    ]);
+  });
+
+  it("keeps review edits when returning from backlog unchanged", async () => {
+    await openReview("Physics\nMotion");
+    await fireEvent.changeText(
+      screen.getByTestId("task-title-0"),
+      "Motion essay",
+    );
+
+    await fireEvent.press(screen.getByTestId("review-back"));
+    await fireEvent.press(screen.getByText("Interpret tasks"));
+
+    expect(screen.getByTestId("task-title-0").props.value).toBe(
+      "Motion essay",
+    );
   });
 });
 

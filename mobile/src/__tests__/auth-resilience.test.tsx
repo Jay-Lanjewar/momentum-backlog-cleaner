@@ -237,10 +237,11 @@ async function fillRegisterAndSubmit() {
 
 async function enterOnboardingConfirm() {
   await fireEvent.changeText(
-    screen.getByPlaceholderText(/Physics/),
+    screen.getByTestId("backlog-input"),
     "Physics\nMotion",
   );
-  await fireEvent.press(screen.getByText("Build My Plan"));
+  await fireEvent.press(screen.getByText("Interpret tasks"));
+  await fireEvent.press(screen.getByTestId("review-continue"));
   await fireEvent.press(screen.getByText("Continue"));
   await fireEvent.press(screen.getByText("Looks correct"));
 }

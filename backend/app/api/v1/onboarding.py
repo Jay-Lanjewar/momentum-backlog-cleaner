@@ -61,6 +61,7 @@ async def run_onboarding(
                     priority=item.priority,
                     estimated_minutes=item.estimated_minutes,
                     due_date=item.due_date,
+                    description=item.description,
                 ),
             )
             backlog_created += 1

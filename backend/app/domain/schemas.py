@@ -350,8 +350,9 @@ class OnboardingBacklogItem(BaseModel):
     title: str = Field(..., min_length=1, max_length=255)
     course_index: int = Field(0, ge=0)
     priority: int = Field(3, ge=1, le=4)
-    estimated_minutes: int = Field(30, ge=5, le=1440)
+    estimated_minutes: int | None = Field(None, ge=5, le=1440)
     due_date: datetime | None = None
+    description: str | None = None
 
 
 class OnboardingGoalItem(BaseModel):

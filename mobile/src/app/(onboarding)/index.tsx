@@ -27,7 +27,17 @@ import type {
   WeeklyBlock,
 } from "@/services/types";
 import { dashboardQueryKey, fetchDashboard } from "@/services/hooks";
-import { parseBacklogInput, getTotalTopics, COURSE_COLORS } from "@/lib/onboarding";
+import { parseBacklogInput, getTotalTopics } from "@/lib/onboarding";
+import {
+  countDraftTasks,
+  createTaskDraft,
+  draftSubjectKey,
+  draftsToPayload,
+  interpretBacklogInput,
+  type CourseDraft,
+  type TaskDraft,
+} from "@/lib/backlogInterpret";
+import { TaskReviewCard } from "@/components/onboarding/TaskReviewCard";
 import {
   BLOCK_TYPES,
   BLOCK_TYPE_MAP,
@@ -44,6 +54,18 @@ const BUILDING_MSG = "Building your plan...";
 const AVAILABILITY_TITLE = "When are you busy?";
 const AVAILABILITY_SUBTITLE =
   "Add only what's fixed. Momentum plans study time around it.";
+const BACKLOG_TITLE = "What do you need to get done?";
+const BACKLOG_SUBTITLE =
+  "One task per line. Subjects and due dates are optional.";
+const BACKLOG_PLACEHOLDER = [
+  "Maths quadratic equations practice 20 questions",
+  "Physics motion revise notes by Friday",
+  "Chemistry atoms and molecules chapter",
+  "English worksheet tomorrow",
+].join("\n");
+const INTERPRET_LABEL = "Interpret tasks";
+const REVIEW_TITLE = "Here's what Momentum understood";
+const REVIEW_SUBTITLE = "Editing is optional. Fix anything we got wrong.";
 
 // Default school-day schedule (Mon–Fri). Editable later from Plan → Schedule.
 const DEFAULT_SCHOOL_BLOCK = { type: "school", start: "08:00", end: "15:00" };
@@ -66,7 +88,7 @@ const DAILY_TARGET_STEP = 30;
 const MIN_DAILY_TARGET_MINUTES = 30;
 const MAX_DAILY_TARGET_MINUTES = 480;
 
-type StepView = "backlog" | "availability" | "confirm";
+type StepView = "backlog" | "review" | "availability" | "confirm";
 type PickerKey = "school-start" | "school-end" | "commitment-start" | "commitment-end";
 
 interface Commitment {
@@ -175,6 +197,7 @@ export default function OnboardingScreen() {
   const [step, setStep] = useState(0);
   const [view, setView] = useState<StepView>("backlog");
   const [backlogText, setBacklogText] = useState("");
+  const [drafts, setDrafts] = useState<CourseDraft[]>([]);
   const [submitting, setSubmitting] = useState(false);
   const [loadingMsg, setLoadingMsg] = useState(SAVING_MSG);
   const [meError, setMeError] = useState<string | null>(null);
@@ -234,21 +257,7 @@ export default function OnboardingScreen() {
     setMeError(null);
     setLoadingMsg(SAVING_MSG);
 
-    const courses = parsed
-      .filter((g) => g.items.length > 0)
-      .map((g, i) => ({
-        name: g.subject,
-        color: COURSE_COLORS[i % COURSE_COLORS.length],
-      }));
-
-    const backlog = parsed
-      .filter((g) => g.items.length > 0)
-      .flatMap((g, courseIdx) =>
-        g.items.map((item) => ({
-          title: item,
-          course_index: courseIdx,
-        })),
-      );
+    const { courses, backlog } = draftsToPayload(drafts);
 
     const availability = buildSchedule(
       schoolDays,
@@ -369,6 +378,105 @@ export default function OnboardingScreen() {
         Math.max(MIN_DAILY_TARGET_MINUTES, prev + delta),
       ),
     );
+  }
+
+  function handleInterpret() {
+    if (totalTopics === 0 || submittingRef.current) return;
+    setDrafts(interpretBacklogInput(backlogText, drafts));
+    setView("review");
+  }
+
+  function updateTask(
+    courseIndex: number,
+    taskId: string,
+    patch: Partial<TaskDraft>,
+  ) {
+    setDrafts((prev) =>
+      prev.map((course, index) =>
+        index !== courseIndex
+          ? course
+          : {
+              ...course,
+              tasks: course.tasks.map((task) =>
+                task.id === taskId ? { ...task, ...patch } : task,
+              ),
+            },
+      ),
+    );
+  }
+
+  function renameCourse(courseIndex: number, subject: string) {
+    setDrafts((prev) =>
+      prev.map((course, index) =>
+        index !== courseIndex
+          ? course
+          : { ...course, subject, subjectUncertain: false },
+      ),
+    );
+  }
+
+  function moveTask(
+    courseIndex: number,
+    taskId: string,
+    targetSubject: string,
+  ) {
+    setDrafts((prev) => {
+      const targetIndex = prev.findIndex(
+        (course) =>
+          draftSubjectKey(course.subject) ===
+          draftSubjectKey(targetSubject),
+      );
+      if (targetIndex === -1 || targetIndex === courseIndex) return prev;
+      const task = prev[courseIndex]?.tasks.find((item) => item.id === taskId);
+      if (!task) return prev;
+      return prev.map((course, index) => {
+        if (index === courseIndex) {
+          return {
+            ...course,
+            tasks: course.tasks.filter((item) => item.id !== taskId),
+          };
+        }
+        if (index === targetIndex) {
+          return { ...course, tasks: [...course.tasks, task] };
+        }
+        return course;
+      });
+    });
+  }
+
+  function deleteTask(courseIndex: number, taskId: string) {
+    setDrafts((prev) =>
+      prev.map((course, index) =>
+        index !== courseIndex
+          ? course
+          : {
+              ...course,
+              tasks: course.tasks.filter((task) => task.id !== taskId),
+            },
+      ),
+    );
+  }
+
+  function addTask() {
+    setDrafts((prev) => {
+      const task = createTaskDraft();
+      if (prev.length === 0) {
+        return [
+          {
+            subject: "",
+            subjectUncertain: true,
+            sourceText: backlogText,
+            tasks: [task],
+          },
+        ];
+      }
+      const lastIndex = prev.length - 1;
+      return prev.map((course, index) =>
+        index === lastIndex
+          ? { ...course, tasks: [...course.tasks, task] }
+          : course,
+      );
+    });
   }
 
   function openForm(value: Commitment) {
@@ -830,10 +938,10 @@ export default function OnboardingScreen() {
           <View style={styles.row}>
             <TouchableOpacity
               style={styles.secondaryButton}
-              onPress={() => setView("backlog")}
+              onPress={() => setView("review")}
               activeOpacity={0.8}
               accessibilityRole="button"
-              accessibilityLabel="Back to subjects"
+              accessibilityLabel="Back to tasks"
             >
               <Text style={styles.secondaryButtonText}>Back</Text>
             </TouchableOpacity>
@@ -863,59 +971,89 @@ export default function OnboardingScreen() {
   function renderBacklogView() {
     return (
       <>
-        <Text style={styles.stepTitle}>What are you studying?</Text>
-        <Text style={styles.stepSubtitle}>
-          Paste or type your homework list. Separate subjects with blank lines.
-        </Text>
+        <Text style={styles.stepTitle}>{BACKLOG_TITLE}</Text>
+        <Text style={styles.stepSubtitle}>{BACKLOG_SUBTITLE}</Text>
         <TextInput
           style={styles.textArea}
           value={backlogText}
           onChangeText={setBacklogText}
-          placeholder={"Physics\nMotion\nGravitation\n\nMaths\nTriangles\nCircles"}
+          placeholder={BACKLOG_PLACEHOLDER}
           placeholderTextColor="#999"
           multiline
           textAlignVertical="top"
+          accessibilityLabel="Your tasks, one per line"
+          testID="backlog-input"
         />
         <TouchableOpacity
           style={[
             styles.primaryButton,
             totalTopics === 0 && styles.disabled,
           ]}
-          onPress={() => setView("availability")}
+          onPress={handleInterpret}
           disabled={totalTopics === 0}
           activeOpacity={0.8}
+          accessibilityRole="button"
+          accessibilityLabel={INTERPRET_LABEL}
+          accessibilityState={{ disabled: totalTopics === 0 }}
+          testID="interpret-tasks"
         >
-          <Text style={styles.primaryButtonText}>Build My Plan</Text>
+          <Text style={styles.primaryButtonText}>{INTERPRET_LABEL}</Text>
         </TouchableOpacity>
       </>
     );
   }
 
-  function renderConfirmView() {
+  function renderReviewView() {
+    const { courses } = draftsToPayload(drafts);
+    const courseNames = courses.map((course) => course.name);
+    const total = countDraftTasks(drafts);
+    const hasBlankTitle = drafts.some((course) =>
+      course.tasks.some((task) => !task.title.trim()),
+    );
+    let taskIndex = 0;
+
     return (
       <>
-        <Text style={styles.stepTitle}>Here&apos;s what I understood</Text>
-        {parsed
-          .filter((g) => g.items.length > 0)
-          .map((g, i) => (
-            <View key={i} style={styles.confirmCard}>
-              <View
-                style={[
-                  styles.dot,
-                  { backgroundColor: COURSE_COLORS[i % COURSE_COLORS.length] },
-                ]}
+        <Text style={styles.stepTitle}>{REVIEW_TITLE}</Text>
+        <Text style={styles.stepSubtitle}>{REVIEW_SUBTITLE}</Text>
+        {total === 0 ? (
+          <Text style={styles.emptyText}>Add at least one task to continue.</Text>
+        ) : null}
+        {drafts.map((course, courseIndex) =>
+          course.tasks.map((task) => {
+            const index = taskIndex;
+            taskIndex += 1;
+            return (
+              <TaskReviewCard
+                key={task.id}
+                task={task}
+                index={index}
+                subject={course.subject}
+                subjectUncertain={course.subjectUncertain}
+                courseNames={courseNames}
+                onUpdate={(patch) => updateTask(courseIndex, task.id, patch)}
+                onSubjectChange={(subject) =>
+                  renameCourse(courseIndex, subject)
+                }
+                onMove={(target) => moveTask(courseIndex, task.id, target)}
+                onDelete={() => deleteTask(courseIndex, task.id)}
               />
-              <View style={{ flex: 1 }}>
-                <Text style={styles.confirmSubject}>{g.subject}</Text>
-                <Text style={styles.confirmCount}>
-                  {g.items.length} topic{g.items.length !== 1 ? "s" : ""}
-                </Text>
-              </View>
-            </View>
-          ))}
-        {totalTopics === 0 ? (
-          <Text style={styles.emptyText}>
-            No topics found. Try pasting your list in a different format.
+            );
+          }),
+        )}
+        <TouchableOpacity
+          style={styles.addBtn}
+          onPress={addTask}
+          activeOpacity={0.8}
+          accessibilityRole="button"
+          accessibilityLabel="Add a task"
+          testID="add-task"
+        >
+          <Text style={styles.addBtnText}>+ Add a task</Text>
+        </TouchableOpacity>
+        {hasBlankTitle ? (
+          <Text style={styles.errorText}>
+            Give every task a name to continue.
           </Text>
         ) : null}
         <View style={styles.row}>
@@ -923,20 +1061,86 @@ export default function OnboardingScreen() {
             style={styles.secondaryButton}
             onPress={() => setView("backlog")}
             activeOpacity={0.8}
+            accessibilityRole="button"
+            accessibilityLabel="Back to task entry"
+            testID="review-back"
+          >
+            <Text style={styles.secondaryButtonText}>Back</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[
+              styles.primaryButton,
+              styles.primaryButtonFlex,
+              (total === 0 || hasBlankTitle) && styles.disabled,
+            ]}
+            onPress={() => setView("availability")}
+            disabled={total === 0 || hasBlankTitle}
+            activeOpacity={0.8}
+            accessibilityRole="button"
+            accessibilityLabel="Continue to availability"
+            accessibilityState={{ disabled: total === 0 || hasBlankTitle }}
+            testID="review-continue"
+          >
+            <Text style={styles.primaryButtonText}>Continue</Text>
+          </TouchableOpacity>
+        </View>
+      </>
+    );
+  }
+
+  function renderConfirmView() {
+    const { courses, backlog } = draftsToPayload(drafts);
+    const topicCount = backlog.length;
+
+    return (
+      <>
+        <Text style={styles.stepTitle}>Here&apos;s what I understood</Text>
+        {courses.map((course, i) => {
+          const count = backlog.filter(
+            (item) => item.course_index === i,
+          ).length;
+          if (count === 0) return null;
+          return (
+            <View key={i} style={styles.confirmCard}>
+              <View style={[styles.dot, { backgroundColor: course.color }]} />
+              <View style={{ flex: 1 }}>
+                <Text style={styles.confirmSubject}>{course.name}</Text>
+                <Text style={styles.confirmCount}>
+                  {count} topic{count !== 1 ? "s" : ""}
+                </Text>
+              </View>
+            </View>
+          );
+        })}
+        {topicCount === 0 ? (
+          <Text style={styles.emptyText}>
+            No topics found. Try pasting your list in a different format.
+          </Text>
+        ) : null}
+        <View style={styles.row}>
+          <TouchableOpacity
+            style={styles.secondaryButton}
+            onPress={() => setView("review")}
+            activeOpacity={0.8}
+            accessibilityRole="button"
+            accessibilityLabel="Edit tasks"
+            testID="confirm-edit"
           >
             <Text style={styles.secondaryButtonText}>Edit</Text>
           </TouchableOpacity>
           <TouchableOpacity
             style={[
               styles.primaryButton,
-              (totalTopics === 0 || submitting) && styles.disabled,
+              (topicCount === 0 || submitting) && styles.disabled,
             ]}
             onPress={() => {
-              if (totalTopics === 0 || submittingRef.current) return;
+              if (topicCount === 0 || submittingRef.current) return;
               handleFinish();
             }}
-            disabled={totalTopics === 0 || submitting}
+            disabled={topicCount === 0 || submitting}
             activeOpacity={0.8}
+            accessibilityRole="button"
+            accessibilityLabel="Looks correct"
           >
             <Text style={styles.primaryButtonText}>Looks correct</Text>
           </TouchableOpacity>
@@ -995,7 +1199,11 @@ export default function OnboardingScreen() {
           contentContainerStyle={styles.stepScrollContent}
           keyboardShouldPersistTaps="handled"
         >
-          {view === "backlog" ? renderBacklogView() : renderConfirmView()}
+          {view === "backlog"
+            ? renderBacklogView()
+            : view === "review"
+              ? renderReviewView()
+              : renderConfirmView()}
         </ScrollView>
       </KeyboardAvoidingView>
     );
