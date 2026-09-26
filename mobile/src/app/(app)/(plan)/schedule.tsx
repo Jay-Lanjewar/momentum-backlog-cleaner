@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect } from "react";
+import { useState, useCallback, useEffect, useMemo } from "react";
 import {
   View,
   Text,
@@ -10,19 +10,33 @@ import {
   ActivityIndicator,
   Platform,
   TextInput,
+  RefreshControl,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import DateTimePicker, {
   type DateTimePickerEvent,
 } from "@react-native-community/datetimepicker";
 
-import { useWeeklySchedule, useSaveWeeklySchedule } from "@/services/hooks";
+import {
+  useWeeklySchedule,
+  useSaveWeeklySchedule,
+  useDashboard,
+} from "@/services/hooks";
 import type {
   BlockType,
   DayName,
+  PlanSession,
+  PrioritizedBacklogItem,
   WeeklyBlock,
   WeeklyScheduleUpdatePayload,
 } from "@/services/types";
+import {
+  formatTimeRange,
+  formatMinutes,
+  isSessionCompleted,
+  topicFromSession,
+  type BacklogItemMap,
+} from "@/lib/coaching";
 import {
   BLOCK_TYPES,
   BLOCK_TYPE_MAP,
@@ -51,6 +65,12 @@ function dateToTime(d: Date): string {
 export default function ScheduleScreen() {
   const { data: scheduleData, isLoading } = useWeeklySchedule();
   const saveSchedule = useSaveWeeklySchedule();
+  const {
+    data: dashboard,
+    isLoading: isPlanLoading,
+    refetch: refetchPlan,
+    isRefetching: isPlanRefetching,
+  } = useDashboard();
 
   const [localSchedule, setLocalSchedule] = useState<ScheduleMap>({});
   const [selectedDay, setSelectedDay] = useState<DayName>(getCurrentDayName());
@@ -67,6 +87,26 @@ export default function ScheduleScreen() {
   }, [scheduleData?.schedule]);
 
   const blocks: WeeklyBlock[] = localSchedule[selectedDay] ?? [];
+
+  // Generated plan (read-only) — dashboard-driven, never written to the schedule.
+  const backlogItemMap: BacklogItemMap = useMemo(() => {
+    const map = new Map<string, PrioritizedBacklogItem>();
+    for (const item of dashboard?.planning.prioritized_backlog ?? []) {
+      map.set(String(item.id), item);
+    }
+    return map;
+  }, [dashboard?.planning.prioritized_backlog]);
+
+  const today = getCurrentDayName();
+  const planSessions: PlanSession[] = useMemo(
+    () =>
+      selectedDay === today
+        ? dashboard?.plan.plan.sessions ?? []
+        : [],
+    [selectedDay, today, dashboard?.plan.plan.sessions],
+  );
+  const planDailyMessage =
+    dashboard?.plan.plan.daily_message?.trim() ?? "";
 
   const updateBlocks = useCallback(
     (day: DayName, newBlocks: WeeklyBlock[]) => {
@@ -161,8 +201,22 @@ export default function ScheduleScreen() {
       </View>
 
       {/* Timeline */}
-      <ScrollView style={styles.timeline} contentContainerStyle={styles.timelineContent}>
+      <ScrollView
+        style={styles.timeline}
+        contentContainerStyle={styles.timelineContent}
+        refreshControl={
+          <RefreshControl
+            refreshing={isPlanRefetching}
+            onRefresh={refetchPlan}
+            tintColor="#60A5FA"
+            colors={["#60A5FA"]}
+          />
+        }
+      >
         <Text style={styles.dayTitle}>{DAY_FULL_LABELS[selectedDay]}</Text>
+        <Text style={styles.fixedSectionLabel} testID="fixed-schedule-label">
+          Fixed Schedule
+        </Text>
 
         {blocks.length === 0 ? (
           <View style={styles.emptyContainer}>
@@ -178,6 +232,7 @@ export default function ScheduleScreen() {
               <TouchableOpacity
                 key={`${block.start}-${block.end}-${block.type}-${index}`}
                 style={styles.blockCard}
+                testID={`schedule-block-${index}`}
                 onPress={() => {
                   setEditingIndex(index);
                   setShowForm(true);
@@ -209,6 +264,99 @@ export default function ScheduleScreen() {
             );
           })
         )}
+
+        {/* Momentum's Plan — generated sessions (read-only) */}
+        <View style={styles.planSection} testID="momentum-plan-section">
+          <Text style={styles.planSectionTitle}>Momentum&apos;s Plan</Text>
+          <Text style={styles.planSectionSubtitle}>
+            Automatically planned around your schedule — recommendations, not
+            commitments.
+          </Text>
+          {planDailyMessage ? (
+            <Text style={styles.planDailyMessage}>{planDailyMessage}</Text>
+          ) : null}
+
+          {isPlanLoading ? (
+            <View style={styles.planLoading}>
+              <ActivityIndicator size="small" color="#60A5FA" />
+              <Text style={styles.planEmptyBody}>Loading your plan…</Text>
+            </View>
+          ) : !dashboard ? (
+            <View style={styles.planEmpty} testID="plan-empty">
+              <Text style={styles.planEmptyTitle}>Plan unavailable right now</Text>
+              <Text style={styles.planEmptyBody}>
+                Your fixed schedule still works. Momentum&apos;s plan appears
+                here once it loads.
+              </Text>
+            </View>
+          ) : planSessions.length === 0 ? (
+            <View style={styles.planEmpty} testID="plan-empty">
+              <Text style={styles.planEmptyTitle}>
+                {selectedDay === today
+                  ? "No study sessions planned today"
+                  : "Nothing planned for this day"}
+              </Text>
+              <Text style={styles.planEmptyBody}>
+                {selectedDay === today
+                  ? "Add tasks to your backlog so Momentum can plan sessions around your schedule."
+                  : "Momentum plans one day at a time — switch to " +
+                    DAY_FULL_LABELS[today] +
+                    " to see today's plan."}
+              </Text>
+            </View>
+          ) : (
+            planSessions.map((session) => {
+              const item = backlogItemMap.get(
+                String(session.backlog_item_id),
+              );
+              const done = isSessionCompleted(session, backlogItemMap);
+              return (
+                <View
+                  key={session.session_id}
+                  testID={`plan-session-${session.session_id}`}
+                  style={[
+                    styles.planSessionCard,
+                    done && styles.planSessionCardDone,
+                  ]}
+                >
+                  <View
+                    style={[
+                      styles.planSessionDot,
+                      { backgroundColor: item?.course_color ?? "#64748B" },
+                    ]}
+                  />
+                  <View style={styles.planSessionInfo}>
+                    <Text style={styles.planSessionTime}>
+                      {formatTimeRange(session.start_time, session.end_time)}
+                    </Text>
+                    <Text
+                      style={[
+                        styles.planSessionTitle,
+                        done && styles.planSessionTitleDone,
+                      ]}
+                      numberOfLines={1}
+                    >
+                      {item?.title ?? topicFromSession(session)}
+                    </Text>
+                    {item?.course_name ? (
+                      <Text style={styles.planSessionCourse}>
+                        {item.course_name}
+                      </Text>
+                    ) : null}
+                  </View>
+                  <View style={styles.planSessionMeta}>
+                    <Text style={styles.planSessionDuration}>
+                      ~{formatMinutes(session.remaining_minutes)}
+                    </Text>
+                    {done ? (
+                      <Text style={styles.planSessionDone}>Done</Text>
+                    ) : null}
+                  </View>
+                </View>
+              );
+            })
+          )}
+        </View>
       </ScrollView>
 
       {/* Add Button */}
@@ -513,6 +661,14 @@ const styles = StyleSheet.create({
     marginBottom: 12,
     marginTop: 4,
   },
+  fixedSectionLabel: {
+    fontSize: 11,
+    fontWeight: "700",
+    color: "#64748B",
+    letterSpacing: 1,
+    textTransform: "uppercase",
+    marginBottom: 8,
+  },
 
   // Empty
   emptyContainer: {
@@ -548,6 +704,92 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   blockDeleteText: { fontSize: 14, color: "#94A3B8" },
+
+  // Momentum's Plan (generated sessions, read-only)
+  planSection: {
+    marginTop: 24,
+    borderTopWidth: 1,
+    borderTopColor: "#1E293B",
+    paddingTop: 16,
+  },
+  planSectionTitle: {
+    fontSize: 18,
+    fontWeight: "700",
+    color: "#F8FAFC",
+    marginBottom: 4,
+  },
+  planSectionSubtitle: {
+    fontSize: 13,
+    color: "#94A3B8",
+    lineHeight: 18,
+    marginBottom: 12,
+  },
+  planDailyMessage: {
+    fontSize: 13,
+    color: "#60A5FA",
+    lineHeight: 18,
+    marginBottom: 12,
+  },
+  planLoading: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    paddingVertical: 20,
+  },
+  planEmpty: {
+    backgroundColor: "#1E293B",
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "#334155",
+    padding: 20,
+    alignItems: "center",
+  },
+  planEmptyTitle: {
+    fontSize: 15,
+    fontWeight: "600",
+    color: "#CBD5E1",
+    marginBottom: 6,
+    textAlign: "center",
+  },
+  planEmptyBody: {
+    fontSize: 13,
+    color: "#64748B",
+    lineHeight: 18,
+    textAlign: "center",
+  },
+  planSessionCard: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#1E293B",
+    borderRadius: 12,
+    padding: 14,
+    marginBottom: 8,
+    borderWidth: 1,
+    borderColor: "#334155",
+  },
+  planSessionCardDone: { opacity: 0.6 },
+  planSessionDot: { width: 10, height: 10, borderRadius: 5, marginRight: 12 },
+  planSessionInfo: { flex: 1 },
+  planSessionTime: {
+    fontSize: 13,
+    fontWeight: "600",
+    color: "#60A5FA",
+    marginBottom: 2,
+  },
+  planSessionTitle: { fontSize: 15, fontWeight: "600", color: "#F8FAFC" },
+  planSessionTitleDone: {
+    textDecorationLine: "line-through",
+    color: "#94A3B8",
+  },
+  planSessionCourse: { fontSize: 12, color: "#94A3B8", marginTop: 2 },
+  planSessionMeta: { alignItems: "flex-end", gap: 4 },
+  planSessionDuration: { fontSize: 13, color: "#94A3B8" },
+  planSessionDone: {
+    fontSize: 11,
+    fontWeight: "700",
+    color: "#10B981",
+  },
 
   // FAB
   fab: {
