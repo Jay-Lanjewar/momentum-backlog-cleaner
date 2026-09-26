@@ -19,7 +19,10 @@ import {
   useUpdateBacklogItem,
   useDashboard,
 } from "@/services/hooks";
-import { showPlanChangedNotification } from "@/services/notifications";
+import {
+  cancelSessionsNotifications,
+  showPlanChangedNotification,
+} from "@/services/notifications";
 import type { BacklogItem, PlanChange, PlanSession } from "@/services/types";
 import { BacklogForm } from "@/components/BacklogForm";
 import {
@@ -207,6 +210,11 @@ export default function BacklogScreen() {
           payload: { status: newStatus },
         });
         if (affectedSessions.length > 0) {
+          // Newly completed task: retire reminder/start/missed notifications
+          // for its plan sessions in one pass (un-complete keeps them armed).
+          await cancelSessionsNotifications(
+            affectedSessions.map((s) => s.session_id),
+          );
           await showPlanChangedNotification(
             affectedSessions.map((s) => planChangeForCompletedSession(s, item)),
           );

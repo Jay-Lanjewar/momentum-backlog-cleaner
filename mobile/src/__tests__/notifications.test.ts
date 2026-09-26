@@ -8,14 +8,17 @@ import {
   resetNotificationPermissionSession,
   scheduleSessionReminder,
   scheduleSessionStart,
+  scheduleSessionMissed,
   showPlanChangedNotification,
   cancelMomentumNotifications,
   cancelSessionNotifications,
+  cancelSessionsNotifications,
   rescheduleTodayNotifications,
   getScheduledMomentumNotifications,
   localDateString,
   sessionScheduleKey,
   CHANNELS,
+  MISSED_GRACE_MINUTES,
 } from "@/services/notifications";
 import type { PlanSession, PlanChange } from "@/services/types";
 
@@ -86,9 +89,9 @@ beforeEach(() => {
 });
 
 describe("createNotificationChannels", () => {
-  it("creates all three Android channels", async () => {
+  it("creates all four Android channels", async () => {
     await createNotificationChannels();
-    expect(Notifications.setNotificationChannelAsync).toHaveBeenCalledTimes(3);
+    expect(Notifications.setNotificationChannelAsync).toHaveBeenCalledTimes(4);
     expect(Notifications.setNotificationChannelAsync).toHaveBeenCalledWith(
       CHANNELS.sessionReminders,
       expect.objectContaining({ name: "Session Reminders" }),
@@ -100,6 +103,13 @@ describe("createNotificationChannels", () => {
     expect(Notifications.setNotificationChannelAsync).toHaveBeenCalledWith(
       CHANNELS.planChanges,
       expect.objectContaining({ name: "Plan Changes" }),
+    );
+    expect(Notifications.setNotificationChannelAsync).toHaveBeenCalledWith(
+      CHANNELS.missedSessions,
+      expect.objectContaining({
+        name: "Missed Sessions",
+        importance: Notifications.AndroidImportance.HIGH,
+      }),
     );
   });
 });
@@ -476,11 +486,246 @@ describe("cancelSessionNotifications", () => {
   });
 });
 
+describe("cancelSessionsNotifications", () => {
+  it("cancels reminder, start, and missed for every listed session in one pass", async () => {
+    (Notifications.getAllScheduledNotificationsAsync as jest.Mock).mockResolvedValue(
+      [
+        {
+          identifier: "momentum-session_reminder-s1",
+          content: {
+            data: {
+              source: "momentum",
+              type: "session_reminder",
+              sessionId: "s1",
+              url: "/(today)",
+            },
+          },
+        },
+        {
+          identifier: "momentum-session_start-s1",
+          content: {
+            data: {
+              source: "momentum",
+              type: "session_start",
+              sessionId: "s1",
+              url: "/(today)",
+            },
+          },
+        },
+        {
+          identifier: "momentum-session_missed-s1",
+          content: {
+            data: {
+              source: "momentum",
+              type: "session_missed",
+              sessionId: "s1",
+              url: "/(today)",
+            },
+          },
+        },
+        {
+          identifier: "momentum-session_reminder-s2",
+          content: {
+            data: {
+              source: "momentum",
+              type: "session_reminder",
+              sessionId: "s2",
+              url: "/(today)",
+            },
+          },
+        },
+        {
+          identifier: "momentum-session_reminder-s3",
+          content: {
+            data: {
+              source: "momentum",
+              type: "session_reminder",
+              sessionId: "s3",
+              url: "/(today)",
+            },
+          },
+        },
+        {
+          identifier: "other-notification",
+          content: { data: { source: "other" } },
+        },
+      ],
+    );
+
+    await cancelSessionsNotifications(["s1", "s2"]);
+
+    // One read of the scheduled list covers all sessions and all three types.
+    expect(
+      Notifications.getAllScheduledNotificationsAsync,
+    ).toHaveBeenCalledTimes(1);
+    const cancelled = (
+      Notifications.cancelScheduledNotificationAsync as jest.Mock
+    ).mock.calls.map((c) => c[0]);
+    expect(cancelled).toEqual([
+      "momentum-session_reminder-s1",
+      "momentum-session_start-s1",
+      "momentum-session_missed-s1",
+      "momentum-session_reminder-s2",
+    ]);
+  });
+
+  it("does not touch the scheduled list for an empty session list", async () => {
+    await cancelSessionsNotifications([]);
+    expect(
+      Notifications.getAllScheduledNotificationsAsync,
+    ).not.toHaveBeenCalled();
+    expect(
+      Notifications.cancelScheduledNotificationAsync,
+    ).not.toHaveBeenCalled();
+  });
+});
+
+describe("scheduleSessionMissed", () => {
+  it("fires 5 minutes after the session ends on the missed-sessions channel", async () => {
+    const now = new Date();
+    // Near midnight the clock-only end time can land before the dated start.
+    if (now.getHours() * 60 + now.getMinutes() >= 1380) return;
+
+    const start = futureDateTime(30);
+    const end = futureDateTime(45);
+    const session = makeSession({
+      session_id: "miss-1",
+      start_time: start,
+      end_time: end,
+    });
+
+    const id = await scheduleSessionMissed(session);
+
+    expect(id).toMatch(/^momentum-session_missed-miss-1-\d+$/);
+    const call = scheduledCalls()[0];
+    expect(call.identifier).toBe(id);
+    expect(call.content.title).toBe("Missed session");
+    expect(call.content.body).toBe(
+      "Physics — You didn't get to this session. Momentum will adjust your plan.",
+    );
+    expect(call.content.data).toEqual({
+      source: "momentum",
+      type: "session_missed",
+      sessionId: "miss-1",
+      startTime: start,
+      url: "/(today)",
+    });
+    expect(call.trigger.type).toBe(
+      Notifications.SchedulableTriggerInputTypes.DATE,
+    );
+    expect(call.trigger.channelId).toBe(CHANNELS.missedSessions);
+    expect(call.trigger.date.getTime()).toBe(
+      new Date(new Date(end).getTime() + MISSED_GRACE_MINUTES * 60_000).getTime(),
+    );
+  });
+
+  it("prefixes the course name when the backlog map provides one", async () => {
+    const now = new Date();
+    if (now.getHours() * 60 + now.getMinutes() >= 1380) return;
+
+    const session = makeSession({
+      session_id: "miss-course",
+      start_time: futureDateTime(30),
+      end_time: futureDateTime(45),
+    });
+
+    await scheduleSessionMissed(
+      session,
+      new Set(),
+      new Map([["item-1", "Mathematics"]]),
+    );
+
+    const call = scheduledCalls()[0];
+    expect(call.content.body).toContain("Mathematics · Physics");
+  });
+
+  it("does not schedule for completed sessions", async () => {
+    const id = await scheduleSessionMissed(
+      makeSession({
+        session_id: "miss-done",
+        start_time: futureDateTime(30),
+        end_time: futureDateTime(45),
+      }),
+      new Set(["miss-done"]),
+    );
+
+    expect(id).toBeNull();
+    expect(Notifications.scheduleNotificationAsync).not.toHaveBeenCalled();
+  });
+
+  it("does not schedule for a session on a past local day", async () => {
+    const session = makeSession({
+      session_id: "miss-yesterday",
+      start_time: shiftLocalDays(-1, "16:00"),
+      end_time: shiftLocalDays(-1, "17:00"),
+    });
+
+    expect(await scheduleSessionMissed(session)).toBeNull();
+    expect(Notifications.scheduleNotificationAsync).not.toHaveBeenCalled();
+  });
+
+  it("does not schedule once the session has ended, even inside the grace window", async () => {
+    const now = new Date();
+    // Keep both timestamps on today's calendar date (end is 2 minutes ago).
+    if (now.getHours() * 60 + now.getMinutes() < 30) return;
+
+    const session = makeSession({
+      session_id: "miss-ended",
+      start_time: pastDateTime(30),
+      end_time: pastDateTime(2),
+    });
+
+    // end + 5 min would still be in the future, but the session is already
+    // over: the scheduler must never plant a stale catch-up notification.
+    expect(await scheduleSessionMissed(session)).toBeNull();
+    expect(Notifications.scheduleNotificationAsync).not.toHaveBeenCalled();
+  });
+
+  it("schedules for a session that is already in progress", async () => {
+    const now = new Date();
+    if (now.getHours() * 60 + now.getMinutes() >= 1438) return;
+
+    const session = makeSession({
+      session_id: "miss-live",
+      start_time: `${localDateString()}T00:05`,
+      end_time: `${localDateString()}T23:59`,
+    });
+
+    const id = await scheduleSessionMissed(session);
+
+    expect(id).toBeTruthy();
+    expect(Notifications.scheduleNotificationAsync).toHaveBeenCalledTimes(1);
+  });
+
+  it("keeps one deterministic identifier across repeat scheduling", async () => {
+    const now = new Date();
+    if (now.getHours() * 60 + now.getMinutes() >= 1380) return;
+
+    const session = makeSession({
+      session_id: "miss-det",
+      start_time: futureDateTime(30),
+      end_time: futureDateTime(45),
+    });
+
+    const id1 = await scheduleSessionMissed(session);
+    const id2 = await scheduleSessionMissed(session);
+
+    expect(id1).toBeTruthy();
+    expect(id1).toBe(id2);
+    expect(id1).toMatch(/^momentum-session_missed-miss-det-\d+$/);
+  });
+});
+
 describe("rescheduleTodayNotifications", () => {
-  it("cancels old notifications and schedules new ones", async () => {
+  it("cancels old notifications and schedules reminder + start + missed", async () => {
+    const now = new Date();
+    // Near midnight the clock-only end time can land before the dated start.
+    if (now.getHours() * 60 + now.getMinutes() >= 1380) return;
+
     const session = makeSession({
       session_id: "sess-3",
       start_time: futureDateTime(30),
+      end_time: futureDateTime(45),
     });
 
     await rescheduleTodayNotifications([session]);
@@ -488,7 +733,7 @@ describe("rescheduleTodayNotifications", () => {
     expect(
       Notifications.getAllScheduledNotificationsAsync,
     ).toHaveBeenCalled();
-    expect(Notifications.scheduleNotificationAsync).toHaveBeenCalledTimes(2);
+    expect(Notifications.scheduleNotificationAsync).toHaveBeenCalledTimes(3);
   });
 
   it("does not schedule for completed sessions", async () => {
@@ -501,6 +746,29 @@ describe("rescheduleTodayNotifications", () => {
     await rescheduleTodayNotifications([session], completedIds);
 
     expect(Notifications.scheduleNotificationAsync).not.toHaveBeenCalled();
+  });
+
+  it("threads the course map into the missed-session body", async () => {
+    const now = new Date();
+    if (now.getHours() * 60 + now.getMinutes() >= 1380) return;
+
+    const session = makeSession({
+      session_id: "sess-course",
+      start_time: futureDateTime(30),
+      end_time: futureDateTime(45),
+    });
+
+    await rescheduleTodayNotifications(
+      [session],
+      new Set(),
+      new Map([["item-1", "Physics II"]]),
+    );
+
+    const missed = scheduledCalls().find(
+      (c) => c.content.data.type === "session_missed",
+    );
+    expect(missed).toBeTruthy();
+    expect(missed.content.body).toContain("Physics II · Physics");
   });
 });
 

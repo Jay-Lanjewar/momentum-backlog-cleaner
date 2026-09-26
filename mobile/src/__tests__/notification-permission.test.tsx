@@ -131,6 +131,52 @@ describe("useNotificationScheduler permission entry", () => {
     expect(mockReschedule).toHaveBeenCalledTimes(2);
   });
 
+  it("reschedules when the same session has a changed end_time", async () => {
+    mockDashboard = makeDashboard();
+
+    const { rerender } = await renderHook(() => useNotificationScheduler());
+    expect(mockReschedule).toHaveBeenCalledTimes(1);
+
+    // End moves → the missed-session trigger (end + grace) must be rebuilt.
+    mockDashboard = makeDashboard();
+    mockDashboard.plan.plan.sessions[0].end_time = "18:30";
+    await rerender(undefined);
+
+    expect(mockReschedule).toHaveBeenCalledTimes(2);
+  });
+
+  it("reschedules when the session's completion state changes", async () => {
+    mockDashboard = makeDashboard();
+
+    const { rerender } = await renderHook(() => useNotificationScheduler());
+    expect(mockReschedule).toHaveBeenCalledTimes(1);
+
+    // Same ids and times, but the backlog item is now completed.
+    mockDashboard = makeDashboard();
+    mockDashboard.planning.prioritized_backlog = [
+      { id: "b1", status: "completed", course_name: "Physics" },
+    ];
+    await rerender(undefined);
+
+    expect(mockReschedule).toHaveBeenCalledTimes(2);
+  });
+
+  it("threads sessions, completed ids, and the course map into reschedule", async () => {
+    mockDashboard = makeDashboard();
+    mockDashboard.planning.prioritized_backlog = [
+      { id: "b1", status: "completed", course_name: "Physics" },
+    ];
+
+    await renderHook(() => useNotificationScheduler());
+
+    expect(mockReschedule).toHaveBeenCalledTimes(1);
+    const [sessions, completedIds, courses] = mockReschedule.mock.calls[0];
+    expect(sessions).toHaveLength(1);
+    expect(sessions[0].session_id).toBe("s1");
+    expect(completedIds).toEqual(new Set(["s1"]));
+    expect(courses.get("b1")).toBe("Physics");
+  });
+
   it("does not reschedule when only unrelated dashboard fields change", async () => {
     mockDashboard = makeDashboard();
 

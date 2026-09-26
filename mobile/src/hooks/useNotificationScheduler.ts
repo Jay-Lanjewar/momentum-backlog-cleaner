@@ -22,14 +22,6 @@ export function useNotificationScheduler() {
     if (!dashboard) return;
 
     const sessions = dashboard.plan.plan.sessions;
-    // Identity must include start_time: a replan that only moves the clock
-    // (same session_id, new start_time) must still trigger a reschedule.
-    const sessionKey = sessions
-      .map((s) => sessionScheduleKey(s.session_id, s.start_time))
-      .join(",");
-
-    if (sessionKey === prevSessionIdsRef.current) return;
-    prevSessionIdsRef.current = sessionKey;
 
     const backlogItemMap = new Map(
       dashboard.planning.prioritized_backlog.map((item) => [
@@ -47,6 +39,29 @@ export function useNotificationScheduler() {
         .map((s) => s.session_id),
     );
 
-    rescheduleTodayNotifications(sessions, completedIds);
+    const coursesByBacklogId = new Map(
+      dashboard.planning.prioritized_backlog.map((item) => [
+        String(item.id),
+        item.course_name,
+      ]),
+    );
+
+    // Identity must cover everything that changes what should be scheduled:
+    // start_time (replan moved the clock), end_time (missed trigger is derived
+    // from the end), completion state (Work completion can leave session ids
+    // and start times untouched), and session identity itself.
+    const sessionKey = sessions
+      .map(
+        (s) =>
+          `${sessionScheduleKey(s.session_id, s.start_time)}:${s.end_time}:${
+            completedIds.has(s.session_id) ? "completed" : "open"
+          }`,
+      )
+      .join(",");
+
+    if (sessionKey === prevSessionIdsRef.current) return;
+    prevSessionIdsRef.current = sessionKey;
+
+    rescheduleTodayNotifications(sessions, completedIds, coursesByBacklogId);
   }, [dashboard]);
 }

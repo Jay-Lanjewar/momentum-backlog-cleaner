@@ -11,12 +11,20 @@ export const CHANNELS = {
   sessionReminders: "session-reminders",
   sessionStart: "session-start",
   planChanges: "plan-changes",
+  missedSessions: "missed-sessions",
 } as const;
 
 export type NotificationType =
   | "session_reminder"
   | "session_start"
-  | "plan_changed";
+  | "plan_changed"
+  | "session_missed";
+
+/**
+ * Grace period after a session's end before we may call it missed.
+ * One-shot notice only — never repeated, never an alarm.
+ */
+export const MISSED_GRACE_MINUTES = 5;
 
 export interface MomentumNotificationData {
   source: string;
@@ -66,6 +74,14 @@ export async function createNotificationChannels(): Promise<void> {
     importance: Notifications.AndroidImportance.DEFAULT,
     lightColor: "#2563EB",
     description: "Notifies when your study plan is updated",
+  });
+
+  await Notifications.setNotificationChannelAsync(CHANNELS.missedSessions, {
+    name: "Missed Sessions",
+    importance: Notifications.AndroidImportance.HIGH,
+    vibrationPattern: [0, 250],
+    lightColor: "#2563EB",
+    description: "A one-time notice when a planned session is missed",
   });
 }
 
@@ -163,12 +179,26 @@ export async function cancelMomentumNotifications(): Promise<void> {
 export async function cancelSessionNotifications(
   sessionId: string,
 ): Promise<void> {
+  await cancelSessionsNotifications([sessionId]);
+}
+
+/**
+ * Cancel every Momentum notification for any of these sessions in a single
+ * scheduled-list pass (reminder + start + missed). Used when one backlog item
+ * completes and carries several plan sessions.
+ */
+export async function cancelSessionsNotifications(
+  sessionIds: readonly string[],
+): Promise<void> {
+  if (sessionIds.length === 0) return;
+  const wanted = new Set(sessionIds);
   const scheduled = await Notifications.getAllScheduledNotificationsAsync();
   for (const n of scheduled) {
     const data = n.content.data as Record<string, unknown>;
     if (
       isMomentumNotification(data) &&
-      data.sessionId === sessionId
+      data.sessionId !== undefined &&
+      wanted.has(String(data.sessionId))
     ) {
       await Notifications.cancelScheduledNotificationAsync(n.identifier);
     }
@@ -344,6 +374,96 @@ export async function scheduleSessionStart(
   return id;
 }
 
+// ─── Schedule Missed Session ───
+
+/**
+ * Absolute end instant of a session on the session's local calendar date.
+ * Mirrors parseSessionStart: bare "HH:MM" lives on the session's date (or
+ * device-local today), a dated value carries its own date part.
+ */
+function sessionEndAt(session: PlanSession): Date {
+  const { date } = parseSessionStart(session.start_time);
+  const endTime =
+    session.end_time.length > 5 ? session.end_time.slice(11, 16) : session.end_time;
+  return localDateAt(date, endTime);
+}
+
+/**
+ * Missed-session eligibility — deliberately NOT the reminder/start rule:
+ *
+ * - completed sessions are never missed;
+ * - a past local calendar day is never missed;
+ * - the session must not already have ended when the scheduler sees it
+ *   (no stale catch-up notifications);
+ * - end + grace must still be ahead, so the trigger never lands in the past;
+ * - the session may already have started (or be in progress) and still be
+ *   eligible — that is the normal case for "you didn't get to this session".
+ *
+ * Sessions reach this function from rescheduleTodayNotifications(), i.e. they
+ * are by construction still present in the current plan.
+ */
+function isSessionMissedEligible(
+  session: PlanSession,
+  completedIds: Set<string>,
+): boolean {
+  if (completedIds.has(session.session_id)) return false;
+
+  const now = new Date();
+  const today = localDateString(now);
+  const { date: sessionDate } = parseSessionStart(session.start_time);
+  if (sessionDate < today) return false;
+
+  if (sessionEndAt(session) <= now) return false;
+
+  const trigger = new Date(
+    sessionEndAt(session).getTime() + MISSED_GRACE_MINUTES * 60_000,
+  );
+  return trigger > now;
+}
+
+export async function scheduleSessionMissed(
+  session: PlanSession,
+  completedIds: Set<string> = new Set(),
+  coursesByBacklogId?: Map<string, string>,
+): Promise<string | null> {
+  if (!isSessionMissedEligible(session, completedIds)) return null;
+
+  const endAt = sessionEndAt(session);
+  const triggerDate = new Date(endAt.getTime() + MISSED_GRACE_MINUTES * 60_000);
+
+  const topic = extractTopic(session.reason);
+  const course = coursesByBacklogId?.get(String(session.backlog_item_id));
+  const subject = course ? `${course} · ${topic}` : topic;
+
+  const id = momentumNotificationId(
+    "session_missed",
+    session.session_id,
+    session.start_time,
+  );
+
+  await Notifications.scheduleNotificationAsync({
+    identifier: id,
+    content: {
+      title: "Missed session",
+      body: `${subject} — You didn't get to this session. Momentum will adjust your plan.`,
+      data: {
+        source: SOURCE,
+        type: "session_missed",
+        sessionId: session.session_id,
+        startTime: session.start_time,
+        url: "/(today)",
+      } satisfies MomentumNotificationData,
+    },
+    trigger: {
+      type: Notifications.SchedulableTriggerInputTypes.DATE,
+      date: triggerDate,
+      channelId: CHANNELS.missedSessions,
+    },
+  });
+
+  return id;
+}
+
 // ─── Show Plan Changed ───
 
 export async function showPlanChangedNotification(
@@ -380,12 +500,14 @@ export async function showPlanChangedNotification(
 export async function rescheduleTodayNotifications(
   sessions: PlanSession[],
   completedIds: Set<string> = new Set(),
+  coursesByBacklogId?: Map<string, string>,
 ): Promise<void> {
   await cancelMomentumNotifications();
 
   for (const session of sessions) {
     await scheduleSessionReminder(session, completedIds);
     await scheduleSessionStart(session, completedIds);
+    await scheduleSessionMissed(session, completedIds, coursesByBacklogId);
   }
 }
 

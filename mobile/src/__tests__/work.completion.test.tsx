@@ -10,6 +10,8 @@
  * 5. Un-completing does not claim a plan change (backend does not
  *    supersede the snapshot on completed → pending).
  * 6. A failed completion does not claim a plan change.
+ * 7. Completion retires reminder/start/missed notifications for the affected
+ *    sessions in one bulk cancel; un-completing leaves them armed.
  */
 
 import React from "react";
@@ -38,6 +40,7 @@ const mockUpdate = jest.fn();
 const mockCreate = jest.fn();
 const mockCompleteSession = jest.fn();
 const mockPlanChanged = jest.fn();
+const mockCancelNotifications = jest.fn();
 
 jest.mock("@/services/hooks", () => ({
   useBacklogItems: () => ({
@@ -63,6 +66,8 @@ jest.mock("@/services/hooks", () => ({
 jest.mock("@/services/notifications", () => ({
   showPlanChangedNotification: (...args: unknown[]) =>
     mockPlanChanged(...args),
+  cancelSessionsNotifications: (...args: unknown[]) =>
+    mockCancelNotifications(...args),
 }));
 
 const BacklogScreen = require("@/app/(app)/(work)/index").default;
@@ -139,6 +144,7 @@ beforeEach(() => {
   mockCompleteSession.mockReset();
   mockPlanChanged.mockReset();
   mockPlanChanged.mockResolvedValue(undefined);
+  mockCancelNotifications.mockReset();
   mockPush.mockClear();
   mockReplace.mockClear();
   mockBack.mockClear();
@@ -226,6 +232,64 @@ describe("Plan/adaptive feedback (C11)", () => {
       payload: { status: "completed" },
     });
     expect(mockPlanChanged).not.toHaveBeenCalled();
+  });
+});
+
+describe("Session notification retirement on completion (C11)", () => {
+  it("cancels session notifications for the affected sessions", async () => {
+    await renderWork();
+    await pressToggle("bl-1");
+
+    expect(mockCancelNotifications).toHaveBeenCalledTimes(1);
+    expect(mockCancelNotifications).toHaveBeenCalledWith(["sess-1"]);
+  });
+
+  it("retires every affected session of the item in one bulk cancel", async () => {
+    mockDashboard = makeDashboard([
+      makeSession(),
+      makeSession({
+        session_id: "sess-1b",
+        start_time: "17:00",
+        end_time: "17:30",
+      }),
+    ]);
+    await renderWork();
+    await pressToggle("bl-1");
+
+    expect(mockCancelNotifications).toHaveBeenCalledTimes(1);
+    expect(mockCancelNotifications).toHaveBeenCalledWith([
+      "sess-1",
+      "sess-1b",
+    ]);
+  });
+
+  it("retires notifications before claiming the plan change", async () => {
+    await renderWork();
+    await pressToggle("bl-1");
+
+    expect(mockCancelNotifications.mock.invocationCallOrder[0]).toBeLessThan(
+      mockPlanChanged.mock.invocationCallOrder[0],
+    );
+  });
+
+  it("un-completing leaves the notifications armed", async () => {
+    mockItems = [makeItem({ status: "completed" })];
+    await renderWork();
+    await pressToggle("bl-1");
+
+    expect(mockCancelNotifications).not.toHaveBeenCalled();
+    expect(mockPlanChanged).not.toHaveBeenCalled();
+  });
+
+  it("completion with no active plan session cancels nothing", async () => {
+    mockDashboard = makeDashboard([
+      makeSession({ session_id: "sess-other", backlog_item_id: "bl-other" }),
+    ]);
+    await renderWork();
+    await pressToggle("bl-1");
+
+    expect(mockUpdate).toHaveBeenCalledTimes(1);
+    expect(mockCancelNotifications).not.toHaveBeenCalled();
   });
 });
 
