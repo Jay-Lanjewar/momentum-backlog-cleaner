@@ -28,6 +28,7 @@ import {
 import type { PlanSession, DashboardData } from "@/services/types";
 
 import { RecommendedNextCard } from "@/components/dashboard/RecommendedNextCard";
+import { NotificationPrimingCard } from "@/components/NotificationPrimingCard";
 import { BacklogHealthCard } from "@/components/dashboard/BacklogHealthCard";
 import { ProgressOverview } from "@/components/dashboard/ProgressOverview";
 import { StreakCard } from "@/components/dashboard/StreakCard";
@@ -179,6 +180,10 @@ export default function TodayMissionPage() {
             <Text style={styles.logoutText}>Sign Out</Text>
           </TouchableOpacity>
         </View>
+
+        {/* One-time notification priming — the system prompt is only ever
+            triggered from this card's CTA, never by the scheduler. */}
+        <NotificationPrimingCard />
 
         {/* Daily plan message — subordinate to recommendation */}
         {dailyMessage ? (

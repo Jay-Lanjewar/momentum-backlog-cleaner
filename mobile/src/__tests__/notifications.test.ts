@@ -144,9 +144,10 @@ describe("requestNotificationPermission", () => {
     expect(Notifications.requestPermissionsAsync).toHaveBeenCalled();
   });
 
-  it("returns false and does not re-prompt when already denied", async () => {
+  it("returns false and does not re-prompt when permanently denied", async () => {
     (Notifications.getPermissionsAsync as jest.Mock).mockResolvedValue({
       status: "denied",
+      canAskAgain: false,
     });
     (Notifications.requestPermissionsAsync as jest.Mock).mockResolvedValue({
       status: "denied",
@@ -154,6 +155,55 @@ describe("requestNotificationPermission", () => {
     const result = await requestNotificationPermission();
     expect(result).toBe(false);
     expect(Notifications.requestPermissionsAsync).not.toHaveBeenCalled();
+  });
+
+  it("Android 13+ fresh install (denied + canAskAgain) still calls the system request", async () => {
+    // Canonical fresh-install fixture: Expo maps "notifications not enabled
+    // yet" to status "denied" while canAskAgain remains true.
+    (Notifications.getPermissionsAsync as jest.Mock).mockResolvedValue({
+      status: "denied",
+      canAskAgain: true,
+    });
+    (Notifications.requestPermissionsAsync as jest.Mock).mockResolvedValue({
+      status: "granted",
+    });
+
+    const result = await requestNotificationPermission();
+
+    expect(Notifications.requestPermissionsAsync).toHaveBeenCalledTimes(1);
+    expect(result).toBe(true);
+  });
+
+  it("returns false when the fresh-install request resolves denied", async () => {
+    (Notifications.getPermissionsAsync as jest.Mock).mockResolvedValue({
+      status: "denied",
+      canAskAgain: true,
+    });
+    (Notifications.requestPermissionsAsync as jest.Mock).mockResolvedValue({
+      status: "denied",
+    });
+
+    const result = await requestNotificationPermission();
+
+    expect(Notifications.requestPermissionsAsync).toHaveBeenCalledTimes(1);
+    expect(result).toBe(false);
+  });
+
+  it("does not issue a second native request after a denied fresh-install attempt in the same session", async () => {
+    (Notifications.getPermissionsAsync as jest.Mock).mockResolvedValue({
+      status: "denied",
+      canAskAgain: true,
+    });
+    (Notifications.requestPermissionsAsync as jest.Mock).mockResolvedValue({
+      status: "denied",
+    });
+
+    const first = await requestNotificationPermission();
+    const second = await requestNotificationPermission();
+
+    expect(first).toBe(false);
+    expect(second).toBe(false);
+    expect(Notifications.requestPermissionsAsync).toHaveBeenCalledTimes(1);
   });
 
   it("does not request again on subsequent dashboard entries in the same session", async () => {

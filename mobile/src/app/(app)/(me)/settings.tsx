@@ -1,31 +1,49 @@
 import { useEffect, useState } from "react";
-import { View, Text, TouchableOpacity, StyleSheet, Alert, ScrollView } from "react-native";
+import { View, Text, TouchableOpacity, StyleSheet, Alert, ScrollView, Linking } from "react-native";
 import { useRouter } from "expo-router";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { supabase } from "@/lib/supabase";
 import { useAuthStore } from "@/store/useAuthStore";
-import { getPermissionState } from "@/services/notifications";
+import {
+  getPermissionState,
+  requestNotificationPermission,
+} from "@/services/notifications";
 
-type NotificationHint = "loading" | "on" | "off";
+/**
+ * loading → "…"; granted → "On"; anything else → "Off".
+ * askable = not granted but the system may still show the prompt.
+ * blocked = permanently denied → tapping deep-links to system Settings.
+ */
+type NotificationRowState = "loading" | "granted" | "askable" | "blocked";
+
+function classifyNotificationState(state: {
+  status: string;
+  canAskAgain?: boolean;
+}): NotificationRowState {
+  if (state.status === "granted") return "granted";
+  if (state.canAskAgain === false) return "blocked";
+  return "askable";
+}
 
 export default function SettingsScreen() {
   const router = useRouter();
   const { user, clearAuth } = useAuthStore();
-  const [notificationHint, setNotificationHint] =
-    useState<NotificationHint>("loading");
+  const [notificationState, setNotificationState] =
+    useState<NotificationRowState>("loading");
 
   useEffect(() => {
     let cancelled = false;
 
     getPermissionState()
-      .then((status) => {
+      .then((state) => {
         if (cancelled) return;
-        setNotificationHint(status.status === "granted" ? "on" : "off");
+        setNotificationState(classifyNotificationState(state));
       })
       .catch(() => {
         if (cancelled) return;
-        setNotificationHint("off");
+        // Permission state unavailable: honest "Off", tap retries via helper.
+        setNotificationState("askable");
       });
 
     return () => {
@@ -34,11 +52,38 @@ export default function SettingsScreen() {
   }, []);
 
   const notificationHintText =
-    notificationHint === "loading"
+    notificationState === "loading"
       ? "…"
-      : notificationHint === "on"
+      : notificationState === "granted"
         ? "On"
         : "Off";
+
+  async function handleNotificationsPress() {
+    if (notificationState === "loading" || notificationState === "granted") {
+      return;
+    }
+    if (notificationState === "blocked") {
+      // Permanently denied: the native prompt is no longer available.
+      try {
+        void Linking.openSettings().catch(() => {});
+      } catch {
+        // Settings intent unavailable; nothing to do.
+      }
+      return;
+    }
+
+    // askable: one native attempt. The helper's once-per-session latch and
+    // the platform's own limits prevent repeated nagging.
+    const granted = await requestNotificationPermission();
+    if (granted) {
+      setNotificationState("granted");
+      return;
+    }
+    // Status may have just flipped to permanently blocked (second denial).
+    getPermissionState()
+      .then((state) => setNotificationState(classifyNotificationState(state)))
+      .catch(() => setNotificationState("askable"));
+  }
 
   async function handleSignOut() {
     const confirmed = await new Promise<boolean>((resolve) => {
@@ -88,12 +133,28 @@ export default function SettingsScreen() {
 
         <View style={styles.section}>
           <Text style={styles.sectionHeader}>Preferences</Text>
-          <View style={styles.row}>
-            <Text style={styles.rowText}>Notifications</Text>
-            <Text style={styles.hint} testID="notifications-status">
-              {notificationHintText}
-            </Text>
-          </View>
+          {notificationState === "granted" || notificationState === "loading" ? (
+            <View style={styles.row}>
+              <Text style={styles.rowText}>Notifications</Text>
+              <Text style={styles.hint} testID="notifications-status">
+                {notificationHintText}
+              </Text>
+            </View>
+          ) : (
+            <TouchableOpacity
+              style={styles.row}
+              activeOpacity={0.6}
+              onPress={handleNotificationsPress}
+              accessibilityRole="button"
+              accessibilityLabel={`Notifications, ${notificationHintText}`}
+              testID="notifications-row"
+            >
+              <Text style={styles.rowText}>Notifications</Text>
+              <Text style={styles.hint} testID="notifications-status">
+                {notificationHintText}
+              </Text>
+            </TouchableOpacity>
+          )}
           <TouchableOpacity style={styles.row} activeOpacity={0.6}>
             <Text style={styles.rowText}>Theme</Text>
             <Text style={styles.hint}>Dark</Text>

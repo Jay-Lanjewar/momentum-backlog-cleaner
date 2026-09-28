@@ -10,6 +10,7 @@
  * 6. useSaveProfile invalidates correct caches
  */
 
+import { Linking } from "react-native";
 import { render, screen, act, fireEvent, waitFor } from "@testing-library/react-native";
 
 jest.mock("react-native-safe-area-context", () => ({
@@ -120,11 +121,17 @@ jest.mock("@/services/hooks", () => ({
 }));
 
 let mockNotificationPermissionStatus = "granted";
+let mockNotificationCanAskAgain = true;
+let mockRequestPermissionResult = true;
 
 jest.mock("@/services/notifications", () => ({
   getPermissionState: jest.fn(async () => ({
     status: mockNotificationPermissionStatus,
+    canAskAgain: mockNotificationCanAskAgain,
   })),
+  requestNotificationPermission: jest.fn(
+    async () => mockRequestPermissionResult,
+  ),
 }));
 
 // ─── Profile Screen ───
@@ -216,6 +223,12 @@ import SettingsScreen from "@/app/(app)/(me)/settings";
 describe("SettingsScreen", () => {
   beforeEach(() => {
     mockNotificationPermissionStatus = "granted";
+    mockNotificationCanAskAgain = true;
+    mockRequestPermissionResult = true;
+    const { requestNotificationPermission } = jest.requireMock(
+      "@/services/notifications",
+    );
+    requestNotificationPermission.mockClear();
   });
 
   it("renders user name and email", async () => {
@@ -268,6 +281,98 @@ describe("SettingsScreen", () => {
       expect(screen.getByText("Off")).toBeTruthy();
     });
     expect(screen.queryByText("Coming soon")).toBeNull();
+  });
+
+  it("notifications row is informational (not pressable) when granted", async () => {
+    mockNotificationPermissionStatus = "granted";
+    await act(async () => {
+      render(<SettingsScreen />);
+    });
+    await waitFor(() => {
+      expect(screen.getByText("On")).toBeTruthy();
+    });
+    expect(screen.queryByTestId("notifications-row")).toBeNull();
+  });
+
+  it("tapping Off with an askable denial invokes the permission helper", async () => {
+    mockNotificationPermissionStatus = "denied";
+    mockNotificationCanAskAgain = true;
+    mockRequestPermissionResult = true;
+
+    await act(async () => {
+      render(<SettingsScreen />);
+    });
+    await waitFor(() => {
+      expect(screen.getByText("Off")).toBeTruthy();
+    });
+
+    await act(async () => {
+      fireEvent.press(screen.getByTestId("notifications-row"));
+    });
+
+    const { requestNotificationPermission } = jest.requireMock(
+      "@/services/notifications",
+    );
+    await waitFor(() => {
+      expect(requestNotificationPermission).toHaveBeenCalledTimes(1);
+    });
+    // Helper reported granted → the row reflects the honest On state.
+    await waitFor(() => {
+      expect(screen.getByText("On")).toBeTruthy();
+    });
+  });
+
+  it("tapping Off with a denied helper result keeps the Off state without re-prompting", async () => {
+    mockNotificationPermissionStatus = "denied";
+    mockNotificationCanAskAgain = true;
+    mockRequestPermissionResult = false;
+
+    await act(async () => {
+      render(<SettingsScreen />);
+    });
+    await waitFor(() => {
+      expect(screen.getByText("Off")).toBeTruthy();
+    });
+
+    await act(async () => {
+      fireEvent.press(screen.getByTestId("notifications-row"));
+    });
+
+    const { requestNotificationPermission } = jest.requireMock(
+      "@/services/notifications",
+    );
+    await waitFor(() => {
+      expect(requestNotificationPermission).toHaveBeenCalledTimes(1);
+    });
+    expect(screen.getByText("Off")).toBeTruthy();
+    expect(screen.queryByText("Coming soon")).toBeNull();
+  });
+
+  it("tapping Off with a permanent denial opens system Settings instead", async () => {
+    mockNotificationPermissionStatus = "denied";
+    mockNotificationCanAskAgain = false;
+    const openSettings = jest
+      .spyOn(Linking, "openSettings")
+      .mockResolvedValue(undefined);
+
+    await act(async () => {
+      render(<SettingsScreen />);
+    });
+    await waitFor(() => {
+      expect(screen.getByText("Off")).toBeTruthy();
+    });
+
+    await act(async () => {
+      fireEvent.press(screen.getByTestId("notifications-row"));
+    });
+
+    expect(openSettings).toHaveBeenCalledTimes(1);
+    const { requestNotificationPermission } = jest.requireMock(
+      "@/services/notifications",
+    );
+    expect(requestNotificationPermission).not.toHaveBeenCalled();
+
+    openSettings.mockRestore();
   });
 });
 

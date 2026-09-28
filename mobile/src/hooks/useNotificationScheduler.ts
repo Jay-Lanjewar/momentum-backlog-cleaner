@@ -2,7 +2,6 @@ import { useEffect, useRef } from "react";
 
 import { useDashboard } from "@/services/hooks";
 import {
-  requestNotificationPermission,
   rescheduleTodayNotifications,
   sessionScheduleKey,
 } from "@/services/notifications";
@@ -11,13 +10,10 @@ export function useNotificationScheduler() {
   const { data: dashboard } = useDashboard();
   const prevSessionIdsRef = useRef<string>("");
 
-  // First authenticated Today/dashboard entry only (this hook is not used
-  // on auth screens). Fire-and-forget so permission never blocks the UI.
-  // The service centralizes granted/denied/once-per-session checks.
-  useEffect(() => {
-    requestNotificationPermission().catch(() => {});
-  }, []);
-
+  // Permission is intentionally NOT requested here. A one-time priming card
+  // on Today explains why Momentum needs notifications and triggers
+  // requestNotificationPermission() from its CTA; Settings offers the
+  // permanent-denial fallback. This hook only schedules/reschedules.
   useEffect(() => {
     if (!dashboard) return;
 

@@ -101,17 +101,22 @@ export async function getPermissionState(): Promise<Notifications.NotificationPe
  * Request notification permission at most once per app session.
  *
  * - Already granted → returns true without calling the system prompt.
- * - Already denied → returns false without re-prompting (no nagging).
- * - Undetermined → prompts once, then never again this session.
+ * - Denied and canAskAgain is false (permanently blocked) → returns false
+ *   without re-prompting (callers may deep-link to system Settings instead).
+ * - Otherwise (undetermined, or Android 13+ fresh install where Expo reports
+ *   `status: "denied", canAskAgain: true` because notifications are simply
+ *   not enabled yet) → prompts once per app session.
  * - Any failure → returns false (never throws; callers stay non-blocking).
  *
- * Android API differences are handled by Expo's Notifications API.
+ * The session latch applies to the fresh-install shape too, so a denied
+ * first prompt is never re-attempted automatically in the same session.
  */
 export async function requestNotificationPermission(): Promise<boolean> {
   try {
-    const { status: existing } = await Notifications.getPermissionsAsync();
+    const { status: existing, canAskAgain } =
+      await Notifications.getPermissionsAsync();
     if (existing === "granted") return true;
-    if (existing === "denied") return false;
+    if (existing === "denied" && canAskAgain === false) return false;
     if (permissionRequestedThisSession) return false;
 
     permissionRequestedThisSession = true;

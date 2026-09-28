@@ -1,9 +1,10 @@
 /**
- * Notification permission is requested on first authenticated Today entry
- * (via useNotificationScheduler), not on auth screens, and not repeatedly.
+ * The scheduler never requests notification permission by itself.
+ * Permission is requested only from the Today priming CTA / Settings row;
+ * this hook's sole job is scheduling and rescheduling notifications.
  */
 
-import { renderHook, act } from "@testing-library/react-native";
+import { renderHook } from "@testing-library/react-native";
 
 const mockRequestPermission = jest.fn().mockResolvedValue(true);
 const mockReschedule = jest.fn();
@@ -57,47 +58,46 @@ beforeEach(() => {
 });
 
 describe("useNotificationScheduler permission entry", () => {
-  it("requests notification permission on first authenticated dashboard entry", async () => {
+  it("does not request notification permission automatically on mount", async () => {
     mockDashboard = makeDashboard();
 
     await renderHook(() => useNotificationScheduler());
 
-    expect(mockRequestPermission).toHaveBeenCalledTimes(1);
+    expect(mockRequestPermission).not.toHaveBeenCalled();
   });
 
-  it("still requests permission when dashboard data has not loaded yet", async () => {
+  it("does not request permission while dashboard data has not loaded", async () => {
     mockDashboard = null;
 
     await renderHook(() => useNotificationScheduler());
 
-    expect(mockRequestPermission).toHaveBeenCalledTimes(1);
+    expect(mockRequestPermission).not.toHaveBeenCalled();
+    expect(mockReschedule).not.toHaveBeenCalled();
   });
 
-  it("does not re-request on dashboard refetch/query updates", async () => {
+  it("does not invoke the permission request on dashboard refetch", async () => {
     mockDashboard = makeDashboard();
 
     const { rerender } = await renderHook(() => useNotificationScheduler());
 
-    expect(mockRequestPermission).toHaveBeenCalledTimes(1);
+    expect(mockRequestPermission).not.toHaveBeenCalled();
 
     // Simulate a query refresh producing a new dashboard object
     mockDashboard = makeDashboard();
     await rerender(undefined);
 
-    expect(mockRequestPermission).toHaveBeenCalledTimes(1);
+    expect(mockRequestPermission).not.toHaveBeenCalled();
+    // Identity unchanged → scheduling is not repeated either
+    expect(mockReschedule).toHaveBeenCalledTimes(1);
   });
 
-  it("does not block the dashboard when permission fails", async () => {
+  it("still schedules notifications on first dashboard entry without requesting permission", async () => {
     mockDashboard = makeDashboard();
-    mockRequestPermission.mockRejectedValue(new Error("permission failed"));
 
-    await act(async () => {
-      expect(() => renderHook(() => useNotificationScheduler())).not.toThrow();
-    });
+    await renderHook(() => useNotificationScheduler());
 
-    expect(mockRequestPermission).toHaveBeenCalledTimes(1);
-    // Scheduling still attempted after permission failure
-    expect(mockReschedule).toHaveBeenCalled();
+    expect(mockReschedule).toHaveBeenCalledTimes(1);
+    expect(mockRequestPermission).not.toHaveBeenCalled();
   });
 
   it("reschedules notifications only when session identity changes", async () => {
