@@ -3,10 +3,17 @@ import {
   formatHourMinute,
   formatTimeRange,
   getGreeting,
+  firstName,
   focusCoachMessage,
   sessionLengthCategory,
   healthTone,
   buildRecommendationReason,
+  buildPlanStatusText,
+  isGeneratedPlanStatus,
+  sessionDurationMinutes,
+  sessionRemainingMinutes,
+  formatPlannedDuration,
+  formatRemainingLabel,
   topicFromSession,
   nextSessionAfter,
   parseTimeToMinutes,
@@ -75,16 +82,173 @@ describe("formatHourMinute", () => {
   });
 });
 
+describe("firstName", () => {
+  it("returns the first token of a full name", () => {
+    expect(firstName("Ravindra Kumar Sharma")).toBe("Ravindra");
+  });
+
+  it("keeps a single-word name", () => {
+    expect(firstName("Ada")).toBe("Ada");
+  });
+
+  it("trims surrounding whitespace", () => {
+    expect(firstName("  Ada  ")).toBe("Ada");
+  });
+
+  it("returns null for empty or missing names", () => {
+    expect(firstName("")).toBeNull();
+    expect(firstName("   ")).toBeNull();
+    expect(firstName(null)).toBeNull();
+    expect(firstName(undefined)).toBeNull();
+  });
+});
+
 describe("getGreeting", () => {
   it("includes name when provided", () => {
     const result = getGreeting("Alice");
     expect(result).toContain("Alice");
   });
 
+  it("uses the first name only for a full name", () => {
+    const result = getGreeting("Ravindra Kumar");
+    expect(result).toContain("Ravindra");
+    expect(result).not.toContain("Kumar");
+    expect(result).toMatch(/^Good (morning|afternoon|evening), Ravindra$/);
+  });
+
+  it("never leaves a dangling comma without a name", () => {
+    expect(getGreeting(null)).not.toContain(",");
+    expect(getGreeting("   ")).not.toContain(",");
+  });
+
   it("returns generic greeting when no name", () => {
     const result = getGreeting(null);
     expect(typeof result).toBe("string");
     expect(result.length).toBeGreaterThan(0);
+  });
+});
+
+describe("session duration (end_time - start_time)", () => {
+  it("derives a 40-minute session as 40 minutes", () => {
+    const session = makeSession({
+      start_time: "16:00",
+      end_time: "16:40",
+      // Backend truth: last session of a task carries a backlog remainder of 0
+      remaining_minutes: 0,
+    });
+    expect(sessionDurationMinutes(session)).toBe(40);
+    expect(formatPlannedDuration(session)).toBe("~40m");
+  });
+
+  it("derives a 30-minute session as 30 minutes", () => {
+    const session = makeSession({
+      start_time: "18:00",
+      end_time: "18:30",
+      remaining_minutes: 0,
+    });
+    expect(sessionDurationMinutes(session)).toBe(30);
+    expect(formatPlannedDuration(session)).toBe("~30m");
+  });
+
+  it("ignores a larger backlog remainder (never shows ~52m for 30m)", () => {
+    const session = makeSession({
+      start_time: "16:00",
+      end_time: "16:30",
+      remaining_minutes: 52,
+    });
+    expect(formatPlannedDuration(session)).toBe("~30m");
+  });
+
+  it("formats an hour-long session", () => {
+    expect(
+      formatPlannedDuration(makeSession({ start_time: "09:00", end_time: "10:00" })),
+    ).toBe("~1h");
+  });
+
+  it("returns 0 and an empty label for malformed times", () => {
+    const session = makeSession({ start_time: "bad", end_time: "worse" });
+    expect(sessionDurationMinutes(session)).toBe(0);
+    expect(formatPlannedDuration(session)).toBe("");
+  });
+
+  it("never renders a negative duration for a reversed range", () => {
+    const session = makeSession({ start_time: "16:40", end_time: "16:00" });
+    expect(sessionDurationMinutes(session)).toBe(0);
+  });
+});
+
+describe("session remaining time in an active session", () => {
+  const running = makeSession({ start_time: "16:00", end_time: "16:40" });
+
+  it("reports minutes left until the session ends", () => {
+    expect(sessionRemainingMinutes(running, 16 * 60 + 15)).toBe(25);
+    expect(formatRemainingLabel(running, 16 * 60 + 15)).toBe("25m left");
+  });
+
+  it("reports the full duration at session start", () => {
+    expect(sessionRemainingMinutes(running, 16 * 60)).toBe(40);
+    expect(formatRemainingLabel(running, 16 * 60)).toBe("40m left");
+  });
+
+  it("clamps to 0 once the session has ended", () => {
+    expect(sessionRemainingMinutes(running, 17 * 60)).toBe(0);
+    expect(formatRemainingLabel(running, 17 * 60)).toBe("");
+  });
+
+  it("stays separate from the planned duration", () => {
+    expect(sessionRemainingMinutes(running, 16 * 60 + 30)).toBe(10);
+    expect(sessionDurationMinutes(running)).toBe(40);
+  });
+});
+
+describe("buildPlanStatusText", () => {
+  it("says a single task is planned for today", () => {
+    expect(buildPlanStatusText({ scheduledTasks: 1, pendingTasks: 1 })).toBe(
+      "1 task planned for today.",
+    );
+  });
+
+  it("says every task is scheduled when nothing overflows", () => {
+    expect(buildPlanStatusText({ scheduledTasks: 4, pendingTasks: 4 })).toBe(
+      "All 4 tasks are scheduled.",
+    );
+  });
+
+  it("is honest about tasks that continue later", () => {
+    expect(buildPlanStatusText({ scheduledTasks: 2, pendingTasks: 4 })).toBe(
+      "2 of 4 tasks planned today. The rest will continue later.",
+    );
+  });
+
+  it("returns null when nothing is scheduled today", () => {
+    expect(buildPlanStatusText({ scheduledTasks: 0, pendingTasks: 3 })).toBeNull();
+  });
+
+  it("returns null when there is no pending work", () => {
+    expect(buildPlanStatusText({ scheduledTasks: 0, pendingTasks: 0 })).toBeNull();
+  });
+
+  it("never claims everything is scheduled when tasks are unscheduled", () => {
+    const text = buildPlanStatusText({ scheduledTasks: 1, pendingTasks: 3 });
+    expect(text).toContain("1 of 3");
+    expect(text).not.toMatch(/^All /);
+  });
+
+  it("never uses planner-internal wording", () => {
+    const text = buildPlanStatusText({ scheduledTasks: 2, pendingTasks: 4 });
+    expect(text).not.toMatch(/\bitems\b|overflow|snapshot|prioritized/i);
+  });
+});
+
+describe("isGeneratedPlanStatus", () => {
+  it("recognises the planner tally", () => {
+    expect(isGeneratedPlanStatus("Planned 2 of 4 items. Keep up the great work!")).toBe(true);
+    expect(isGeneratedPlanStatus("Planned 1 of 1 items. All tasks scheduled!")).toBe(true);
+  });
+
+  it("keeps human daily messages", () => {
+    expect(isGeneratedPlanStatus("Nice steady pace today.")).toBe(false);
+    expect(isGeneratedPlanStatus("")).toBe(false);
   });
 });
 
@@ -198,12 +362,13 @@ describe("healthTone", () => {
 });
 
 describe("buildRecommendationReason", () => {
-  it("returns overdue message for overdue items", () => {
+  it("returns a supportive message for overdue items", () => {
     const result = buildRecommendationReason(
       { overdue: true, due_date: "2026-09-01", priority: 2 },
       "good",
     );
-    expect(result).toContain("overdue");
+    expect(result).toContain("behind");
+    expect(result).toContain("most important next step");
   });
 
   it("returns critical message when health is critical", () => {
@@ -219,7 +384,7 @@ describe("buildRecommendationReason", () => {
       { overdue: false, due_date: null, priority: 1 },
       "good",
     );
-    expect(result).toContain("High-priority");
+    expect(result).toContain("High priority");
   });
 
   it("returns top-of-backlog message when isTopPriority", () => {
@@ -228,7 +393,7 @@ describe("buildRecommendationReason", () => {
       "good",
       { isTopPriority: true },
     );
-    expect(result).toContain("Top of your prioritized backlog");
+    expect(result).toContain("Highest priority from your current work");
   });
 
   it("prefers overdue over isTopPriority", () => {
@@ -237,7 +402,8 @@ describe("buildRecommendationReason", () => {
       "good",
       { isTopPriority: true },
     );
-    expect(result).toContain("overdue");
+    expect(result).toContain("behind");
+    expect(result).not.toContain("Highest priority");
   });
 
   it("returns due-date message when has due_date and not top priority", () => {
@@ -246,7 +412,40 @@ describe("buildRecommendationReason", () => {
       "good",
       { isTopPriority: false },
     );
-    expect(result).toContain("due date");
+    expect(result).toMatch(/^Due /);
+  });
+
+  it("falls back to a fit-based message with no signals", () => {
+    const result = buildRecommendationReason(
+      { overdue: false, due_date: null, priority: 3 },
+      "good",
+      { isTopPriority: false },
+    );
+    expect(result).toBe("Best next fit for the time you have.");
+  });
+
+  it("never uses planner-internal wording", () => {
+    const results = [
+      buildRecommendationReason(
+        { overdue: true, due_date: null, priority: 1 },
+        "good",
+        { isTopPriority: true },
+      ),
+      buildRecommendationReason(
+        { overdue: false, due_date: null, priority: 3 },
+        "good",
+        { isTopPriority: true },
+      ),
+      buildRecommendationReason(
+        { overdue: false, due_date: "2026-09-30", priority: 3 },
+        "good",
+      ),
+    ];
+    for (const result of results) {
+      expect(result).not.toMatch(
+        /prioritized backlog|backlog items|best next match|remaining_minutes/i,
+      );
+    }
   });
 });
 

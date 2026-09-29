@@ -16,13 +16,17 @@ import { useAuth } from "@/hooks/useAuth";
 import { useNotificationScheduler } from "@/hooks/useNotificationScheduler";
 import {
   getGreeting,
-  formatMinutes,
+  formatPlannedDuration,
   formatHourMinute,
   isSessionCompleted,
+  isGeneratedPlanStatus,
+  buildPlanStatusText,
   getActiveSessions,
   getCurrentSession,
   getNextSession,
   getUpcomingSessions,
+  nowMinutes,
+  topicFromSession,
   type BacklogItemMap,
 } from "@/lib/coaching";
 import type { PlanSession, DashboardData } from "@/services/types";
@@ -84,10 +88,7 @@ export default function TodayMissionPage() {
     [allSessions, backlogItemMap],
   );
 
-  const nowMin = useMemo(() => {
-    const now = new Date();
-    return now.getHours() * 60 + now.getMinutes();
-  }, []);
+  const nowMin = useMemo(() => nowMinutes(), []);
 
   const currentSession = useMemo(
     () => getCurrentSession(activeSessions, nowMin),
@@ -132,7 +133,13 @@ export default function TodayMissionPage() {
       <SafeAreaView style={styles.container}>
         <View style={styles.center}>
           <Text style={styles.errorText}>Could not load dashboard.</Text>
-          <TouchableOpacity onPress={() => refetch()} style={styles.retryButton}>
+          <TouchableOpacity
+            onPress={() => refetch()}
+            style={styles.retryButton}
+            accessibilityRole="button"
+            accessibilityLabel="Retry loading dashboard"
+            activeOpacity={0.7}
+          >
             <Text style={styles.retryText}>Retry</Text>
           </TouchableOpacity>
         </View>
@@ -145,8 +152,27 @@ export default function TodayMissionPage() {
 
   const healthScore = data.planning.backlog_health.health_score;
   const totalBacklogItems = data.planning.backlog_health.total_items;
+  const pendingTaskCount = data.planning.backlog_health.pending_items;
   const hasEmptyBacklog = totalBacklogItems === 0;
-  const dailyMessage = data.plan.plan.daily_message?.trim() ?? "";
+
+  // Planner tally is implementation language; keep only non-generated
+  // daily messages (adaptive/AI notes) and rebuild the tally below.
+  const rawDailyMessage = data.plan.plan.daily_message?.trim() ?? "";
+  const dailyMessage = isGeneratedPlanStatus(rawDailyMessage)
+    ? ""
+    : rawDailyMessage;
+
+  // Tasks that still need work and already have a session today.
+  const scheduledTaskIds = new Set<string>();
+  for (const s of allSessions) {
+    const id = String(s.backlog_item_id);
+    if (backlogItemMap.has(id)) scheduledTaskIds.add(id);
+  }
+  const planStatus = buildPlanStatusText({
+    scheduledTasks: scheduledTaskIds.size,
+    pendingTasks: pendingTaskCount,
+  });
+
   const topBacklogId = prioritizedBacklog[0]?.id;
 
   // Study time: actual completed minutes from SessionCompletion (authoritative source)
@@ -161,6 +187,9 @@ export default function TodayMissionPage() {
     ? upcomingSessions.slice(0, 2)
     : upcomingSessions;
 
+  const taskLabel = (count: number) =>
+    `${count} task${count === 1 ? "" : "s"}`;
+
   return (
     <SafeAreaView style={styles.container}>
       <ScrollView
@@ -171,12 +200,22 @@ export default function TodayMissionPage() {
       >
         {/* Header */}
         <View style={styles.header}>
-          <View>
-            <Text style={styles.greeting}>
-              {getGreeting(user?.name ?? null)}
-            </Text>
-          </View>
-          <TouchableOpacity onPress={logout} style={styles.logoutButton}>
+          <Text
+            style={styles.greeting}
+            accessibilityRole="header"
+            numberOfLines={2}
+            ellipsizeMode="tail"
+          >
+            {getGreeting(user?.name ?? null)}
+          </Text>
+          <TouchableOpacity
+            onPress={logout}
+            style={styles.logoutButton}
+            accessibilityRole="button"
+            accessibilityLabel="Sign Out"
+            activeOpacity={0.7}
+            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+          >
             <Text style={styles.logoutText}>Sign Out</Text>
           </TouchableOpacity>
         </View>
@@ -184,13 +223,6 @@ export default function TodayMissionPage() {
         {/* One-time notification priming — the system prompt is only ever
             triggered from this card's CTA, never by the scheduler. */}
         <NotificationPrimingCard />
-
-        {/* Daily plan message — subordinate to recommendation */}
-        {dailyMessage ? (
-          <Text style={isFirstRun ? styles.dailyMessageFirstRun : styles.dailyMessage}>
-            {dailyMessage}
-          </Text>
-        ) : null}
 
         {/* 1. Recommended Next Session (dominant first-run content) */}
         {missionSession ? (
@@ -203,18 +235,21 @@ export default function TodayMissionPage() {
               topBacklogId !== undefined &&
               String(missionSession.backlog_item_id) === String(topBacklogId)
             }
+            nowMin={nowMin}
             onStart={() => handleStartStudy(missionSession, data)}
           />
         ) : hasEmptyBacklog ? (
           <View style={styles.emptyCard}>
-            <Text style={styles.emptyTitle}>Add your first task</Text>
+            <Text style={styles.emptyTitle}>No work yet.</Text>
             <Text style={styles.emptySubtitle}>
-              Your backlog is empty. Add work so Momentum can build today&apos;s plan.
+              Add your first task and Momentum will build your study plan.
             </Text>
             <TouchableOpacity
               onPress={() => router.push("/(app)/(work)")}
               style={styles.emptyCta}
-              activeOpacity={0.8}
+              accessibilityRole="button"
+              accessibilityLabel="Add Work"
+              activeOpacity={0.7}
             >
               <Text style={styles.emptyCtaText}>Add Work</Text>
             </TouchableOpacity>
@@ -223,19 +258,25 @@ export default function TodayMissionPage() {
           <View style={styles.emptyCard}>
             <Text style={styles.emptyTitle}>All caught up!</Text>
             <Text style={styles.emptySubtitle}>
-              You&apos;ve completed all of today&apos;s planned work.
+              {pendingTaskCount > 0
+                ? "You've finished everything planned for today. Anything still waiting will continue in your next study period."
+                : "You've finished everything planned for today. Nothing else needs you right now."}
             </Text>
           </View>
         ) : allSessions.length === 0 ? (
           <View style={styles.emptyCard}>
             <Text style={styles.emptyTitle}>No study time left today</Text>
             <Text style={styles.emptySubtitle}>
-              You have {totalBacklogItems} task{totalBacklogItems === 1 ? "" : "s"} waiting, but no free window remains today. Tomorrow&apos;s plan will pick these up.
+              {`${taskLabel(pendingTaskCount)} waiting, but no free window remains today. ${
+                pendingTaskCount === 1 ? "It" : "They"
+              }'ll continue in your next available study period.`}
             </Text>
             <TouchableOpacity
               onPress={() => router.push("/(app)/(plan)")}
               style={styles.emptyCta}
-              activeOpacity={0.8}
+              accessibilityRole="button"
+              accessibilityLabel="View schedule"
+              activeOpacity={0.7}
             >
               <Text style={styles.emptyCtaText}>View schedule</Text>
             </TouchableOpacity>
@@ -244,10 +285,39 @@ export default function TodayMissionPage() {
           <View style={styles.emptyCard}>
             <Text style={styles.emptyTitle}>No more sessions today</Text>
             <Text style={styles.emptySubtitle}>
-              Remaining work will carry over to your next study day.
+              {pendingTaskCount > 0
+                ? `${taskLabel(pendingTaskCount)} still waiting. Unfinished work continues in your next available study period.`
+                : "Nothing else is scheduled for today. Your next session lines up in your next study period."}
             </Text>
+            <TouchableOpacity
+              onPress={() => router.push("/(app)/(plan)")}
+              style={styles.emptyCta}
+              accessibilityRole="button"
+              accessibilityLabel="View schedule"
+              activeOpacity={0.7}
+            >
+              <Text style={styles.emptyCtaText}>View schedule</Text>
+            </TouchableOpacity>
           </View>
         )}
+
+        {/* Plan status + adaptive note — quiet context under the main action */}
+        {planStatus || dailyMessage ? (
+          <View style={styles.planStatusBlock}>
+            {planStatus ? (
+              <Text style={styles.planStatus}>{planStatus}</Text>
+            ) : null}
+            {dailyMessage ? (
+              <Text
+                style={
+                  isFirstRun ? styles.dailyMessageFirstRun : styles.dailyMessage
+                }
+              >
+                {dailyMessage}
+              </Text>
+            ) : null}
+          </View>
+        ) : null}
 
         {/* 2. Insight — deferred on first-run (zero-state noise) */}
         {!isFirstRun && data.insight && (
@@ -286,25 +356,40 @@ export default function TodayMissionPage() {
             </Text>
             {firstRunUpcoming.map((s) => {
               const item = backlogItemMap.get(String(s.backlog_item_id));
+              const title = item?.title ?? topicFromSession(s);
+              const subject = item?.course_name ?? "Study session";
+              const duration = formatPlannedDuration(s);
               return (
                 <TouchableOpacity
                   key={s.session_id}
+                  testID={`today-upcoming-${s.session_id}`}
                   style={
                     isFirstRun ? styles.sessionRowFirstRun : styles.sessionRow
                   }
                   onPress={() => handleStartStudy(s, data)}
+                  activeOpacity={0.7}
+                  accessibilityRole="button"
+                  accessibilityLabel={`${subject}: ${title}, ${formatHourMinute(
+                    s.start_time,
+                  )}, ${duration ? duration.replace("~", "about ") : ""}`}
                 >
-                  <View style={[styles.sessionDot, { backgroundColor: item?.course_color ?? "#6B7280" }]} />
+                  <View
+                    style={[
+                      styles.sessionDot,
+                      { backgroundColor: item?.course_color ?? "#6B7280" },
+                    ]}
+                    accessible={false}
+                  />
                   <View style={styles.sessionInfo}>
                     <Text style={styles.sessionTime}>
                       {formatHourMinute(s.start_time)}
                     </Text>
                     <Text style={styles.sessionTitle} numberOfLines={1}>
-                      {s.reason}
+                      {title}
                     </Text>
                   </View>
                   <Text style={styles.sessionDuration}>
-                    ~{formatMinutes(s.remaining_minutes)}
+                    {duration}
                   </Text>
                 </TouchableOpacity>
               );
@@ -327,6 +412,8 @@ export default function TodayMissionPage() {
             style={styles.devPreviewButton}
             onPress={() => router.push("/(app)/(today)/focus-preview")}
             activeOpacity={0.7}
+            accessibilityRole="button"
+            accessibilityLabel="Preview focus screen"
           >
             <Text style={styles.devPreviewText}>DEV: Preview Focus Screen</Text>
           </TouchableOpacity>
@@ -346,6 +433,7 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     alignItems: "center",
     gap: 16,
+    paddingHorizontal: 20,
   },
   scrollContent: {
     paddingHorizontal: 20,
@@ -353,51 +441,75 @@ const styles = StyleSheet.create({
   },
   header: {
     flexDirection: "row",
+    alignItems: "center",
     justifyContent: "space-between",
-    alignItems: "flex-start",
+    gap: 12,
     paddingTop: 16,
-    paddingBottom: 20,
+    paddingBottom: 16,
   },
   greeting: {
-    fontSize: 26,
+    flex: 1,
+    flexShrink: 1,
+    fontSize: 24,
+    lineHeight: 30,
     fontWeight: "700",
     color: "#1A1A1A",
+    paddingRight: 8,
   },
   logoutButton: {
+    flexShrink: 0,
+    minHeight: 44,
+    justifyContent: "center",
     paddingHorizontal: 12,
-    paddingVertical: 8,
+    borderRadius: 8,
   },
   logoutText: {
     fontSize: 14,
-    color: "#999",
+    color: "#6B7280",
+    fontWeight: "500",
+  },
+  planStatusBlock: {
+    marginTop: -4,
+    marginBottom: 16,
+    gap: 4,
+  },
+  planStatus: {
+    fontSize: 14,
+    color: "#6B7280",
+    lineHeight: 20,
   },
   emptyCard: {
     backgroundColor: "#FFF",
     borderRadius: 16,
-    padding: 32,
+    padding: 24,
     marginBottom: 16,
     alignItems: "center",
     borderWidth: 1,
     borderColor: "#E8E8E8",
   },
   emptyTitle: {
-    fontSize: 20,
+    fontSize: 18,
     fontWeight: "600",
     color: "#1A1A1A",
     marginBottom: 8,
+    textAlign: "center",
   },
   emptySubtitle: {
     fontSize: 15,
     color: "#666",
+    lineHeight: 22,
     textAlign: "center",
   },
   emptyCta: {
     marginTop: 16,
     backgroundColor: "#2563EB",
     borderRadius: 12,
+    minHeight: 48,
     paddingVertical: 14,
     paddingHorizontal: 24,
     alignItems: "center",
+    justifyContent: "center",
+    alignSelf: "stretch",
   },
   emptyCtaText: {
     color: "#FFF",
@@ -406,21 +518,21 @@ const styles = StyleSheet.create({
   },
   dailyMessage: {
     fontSize: 14,
-    color: "#555",
-    marginBottom: 12,
+    color: "#6B7280",
     lineHeight: 20,
   },
   dailyMessageFirstRun: {
     fontSize: 13,
     color: "#6B7280",
-    marginBottom: 8,
     lineHeight: 18,
   },
   insightCard: {
-    backgroundColor: "#F0F4FF",
+    backgroundColor: "#F8FAFC",
     borderRadius: 12,
     padding: 16,
     marginBottom: 16,
+    borderWidth: 1,
+    borderColor: "#E8E8E8",
   },
   insightTitle: {
     fontSize: 14,
@@ -430,7 +542,7 @@ const styles = StyleSheet.create({
   },
   insightMessage: {
     fontSize: 14,
-    color: "#555",
+    color: "#666",
     lineHeight: 20,
   },
   upcomingSection: {
@@ -448,7 +560,7 @@ const styles = StyleSheet.create({
   },
   sectionTitleFirstRun: {
     fontSize: 13,
-    fontWeight: "500",
+    fontWeight: "600",
     color: "#6B7280",
     marginBottom: 8,
   },
@@ -456,7 +568,8 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     backgroundColor: "#FFF",
-    borderRadius: 10,
+    borderRadius: 12,
+    minHeight: 56,
     padding: 14,
     marginBottom: 8,
     borderWidth: 1,
@@ -467,7 +580,8 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     backgroundColor: "transparent",
-    borderRadius: 10,
+    borderRadius: 12,
+    minHeight: 44,
     paddingVertical: 8,
     paddingHorizontal: 0,
     marginBottom: 4,
@@ -475,17 +589,20 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   sessionDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+    flexShrink: 0,
   },
   sessionInfo: {
     flex: 1,
+    flexShrink: 1,
   },
   sessionTime: {
     fontSize: 13,
     fontWeight: "600",
     color: "#2563EB",
+    marginBottom: 2,
   },
   sessionTitle: {
     fontSize: 14,
@@ -493,15 +610,22 @@ const styles = StyleSheet.create({
   },
   sessionDuration: {
     fontSize: 13,
-    color: "#999",
+    fontWeight: "600",
+    color: "#6B7280",
+    flexShrink: 0,
+    minWidth: 48,
+    textAlign: "right",
   },
   errorText: {
     fontSize: 16,
     color: "#666",
+    textAlign: "center",
   },
   retryButton: {
+    minHeight: 44,
     paddingHorizontal: 20,
     paddingVertical: 10,
+    justifyContent: "center",
     backgroundColor: "#2563EB",
     borderRadius: 8,
   },
@@ -512,9 +636,11 @@ const styles = StyleSheet.create({
   devPreviewButton: {
     backgroundColor: "#F59E0B",
     borderRadius: 8,
+    minHeight: 44,
     paddingVertical: 12,
     paddingHorizontal: 20,
     alignItems: "center",
+    justifyContent: "center",
     marginTop: 24,
     marginBottom: 16,
   },

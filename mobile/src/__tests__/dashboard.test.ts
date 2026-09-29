@@ -91,9 +91,11 @@ describe("RecommendedNextCard", () => {
     expect(content).toContain("formatTimeRange");
   });
 
-  it("displays duration estimate", () => {
-    expect(content).toContain("remaining_minutes");
+  it("displays duration derived from session start/end", () => {
+    expect(content).toContain("sessionDurationMinutes");
     expect(content).toContain("formatMinutes");
+    // remaining_minutes is a backlog remainder, never a duration.
+    expect(content).not.toContain("session.remaining_minutes");
   });
 
   it("uses buildRecommendationReason", () => {

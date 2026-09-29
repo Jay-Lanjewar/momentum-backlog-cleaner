@@ -93,6 +93,6 @@ const styles = StyleSheet.create({
   },
   statLabel: {
     fontSize: 12,
-    color: "#999",
+    color: "#6B7280",
   },
 });

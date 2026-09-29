@@ -182,14 +182,13 @@ describe("Today first-load with prefetched dashboard", () => {
     expect(screen.getByText(/Start (Focus|Next) Session/)).toBeTruthy();
   });
 
-  it("shows daily_message near the recommendation", async () => {
+  it("shows student-facing plan status near the recommendation", async () => {
     setDashboard({ data: makeDashboard(), isLoading: false });
 
     await render(<Today />);
 
-    expect(
-      screen.getByText("Planned 1 of 1 items. All tasks scheduled!"),
-    ).toBeTruthy();
+    expect(screen.getByText("1 task planned for today.")).toBeTruthy();
+    expect(screen.queryByText(/Planned \d+ of \d+ items/)).toBeNull();
   });
 
   it("hides daily_message when empty", async () => {
@@ -244,7 +243,7 @@ describe("Today first-load with prefetched dashboard", () => {
 
     expect(screen.getByText("Motion 1")).toBeTruthy();
     expect(
-      screen.getByText("Top of your prioritized backlog — best next match."),
+      screen.getByText("Highest priority from your current work."),
     ).toBeTruthy();
   });
 });
@@ -273,14 +272,13 @@ describe("Today first-run focus mode", () => {
     expect(screen.getByText(/^(NOW|NEXT UP)$/)).toBeTruthy();
   });
 
-  it("first-run shows daily_message", async () => {
+  it("first-run shows student-facing plan status", async () => {
     setDashboard({ data: makeDashboard(), isLoading: false });
 
     await render(<Today />);
 
-    expect(
-      screen.getByText("Planned 1 of 1 items. All tasks scheduled!"),
-    ).toBeTruthy();
+    expect(screen.getByText("1 task planned for today.")).toBeTruthy();
+    expect(screen.queryByText(/Planned \d+ of \d+ items/)).toBeNull();
   });
 
   it("established user still sees secondary analytics", async () => {
@@ -386,7 +384,7 @@ describe("Today empty states", () => {
 
     await render(<Today />);
 
-    expect(screen.getByText("Add your first task")).toBeTruthy();
+    expect(screen.getByText(/Add your first task/)).toBeTruthy();
     expect(screen.getByText("Add Work")).toBeTruthy();
     expect(screen.queryByText("No more sessions today")).toBeNull();
     expect(screen.queryByText("No study time left today")).toBeNull();

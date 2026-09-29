@@ -32,7 +32,7 @@ import type {
 } from "@/services/types";
 import {
   formatTimeRange,
-  formatMinutes,
+  formatPlannedDuration,
   isSessionCompleted,
   topicFromSession,
   type BacklogItemMap,
@@ -346,7 +346,7 @@ export default function ScheduleScreen() {
                   </View>
                   <View style={styles.planSessionMeta}>
                     <Text style={styles.planSessionDuration}>
-                      ~{formatMinutes(session.remaining_minutes)}
+                      {formatPlannedDuration(session)}
                     </Text>
                     {done ? (
                       <Text style={styles.planSessionDone}>Done</Text>
@@ -784,7 +784,7 @@ const styles = StyleSheet.create({
   },
   planSessionCourse: { fontSize: 12, color: "#94A3B8", marginTop: 2 },
   planSessionMeta: { alignItems: "flex-end", gap: 4 },
-  planSessionDuration: { fontSize: 13, color: "#94A3B8" },
+  planSessionDuration: { fontSize: 13, fontWeight: "600", color: "#64748B" },
   planSessionDone: {
     fontSize: 11,
     fontWeight: "700",

@@ -7,6 +7,11 @@ export function formatMinutes(minutes: number): string {
   return m > 0 ? `${h}h ${m}m` : `${h}h`;
 }
 
+/** Minutes since midnight for a Date. */
+export function nowMinutes(now: Date = new Date()): number {
+  return now.getHours() * 60 + now.getMinutes();
+}
+
 export function formatTimeRange(start: string, end: string): string {
   return `${formatHourMinute(start)} – ${formatHourMinute(end)}`;
 }
@@ -43,6 +48,53 @@ export function nextSessionAfter(
 export function parseTimeToMinutes(time: string): number {
   const [h, m] = time.split(":").map(Number);
   return h * 60 + m;
+}
+
+/**
+ * Planned duration of a session, derived from the session's own start/end.
+ *
+ * `PlanSession.remaining_minutes` is the backlog-estimate remainder after
+ * this session, NOT a duration: the last session of a task always carries
+ * `remaining_minutes: 0`, which used to render as "~0m". Never use it for
+ * duration display.
+ */
+export function sessionDurationMinutes(
+  session: Pick<PlanSession, "start_time" | "end_time">,
+): number {
+  const start = parseTimeToMinutes(session.start_time);
+  const end = parseTimeToMinutes(session.end_time);
+  if (isNaN(start) || isNaN(end)) return 0;
+  return Math.max(0, end - start);
+}
+
+/**
+ * Minutes left in a session that is running right now. Separate concept from
+ * the planned duration and from the wait until a session starts.
+ */
+export function sessionRemainingMinutes(
+  session: Pick<PlanSession, "end_time">,
+  nowMin: number,
+): number {
+  const end = parseTimeToMinutes(session.end_time);
+  if (isNaN(end)) return 0;
+  return Math.max(0, end - nowMin);
+}
+
+/** "~40m" for a planned session; "" when the session has no usable times. */
+export function formatPlannedDuration(
+  session: Pick<PlanSession, "start_time" | "end_time">,
+): string {
+  const minutes = sessionDurationMinutes(session);
+  return minutes > 0 ? `~${formatMinutes(minutes)}` : "";
+}
+
+/** "25m left" for a running session; "" when nothing is left. */
+export function formatRemainingLabel(
+  session: Pick<PlanSession, "end_time">,
+  nowMin: number,
+): string {
+  const minutes = sessionRemainingMinutes(session, nowMin);
+  return minutes > 0 ? `${formatMinutes(minutes)} left` : "";
 }
 
 export type BacklogItemMap = Map<string, PrioritizedBacklogItem>;
@@ -104,11 +156,24 @@ export function computeDailyProgress(
   return Math.round((completedCount / sessions.length) * 100);
 }
 
+/**
+ * First token of a display name. Greetings only — the full legal/display
+ * name shown in Me/Profile must never be derived from this.
+ */
+export function firstName(name: string | null | undefined): string | null {
+  if (!name) return null;
+  const trimmed = name.trim();
+  if (!trimmed) return null;
+  const first = trimmed.split(/\s+/)[0];
+  return first ? first : null;
+}
+
 export function getGreeting(name: string | null): string {
   const hour = new Date().getHours();
   const timeGreeting =
     hour < 12 ? "Good morning" : hour < 17 ? "Good afternoon" : "Good evening";
-  return name ? `${timeGreeting}, ${name}` : timeGreeting;
+  const display = firstName(name);
+  return display ? `${timeGreeting}, ${display}` : timeGreeting;
 }
 
 export type SessionLength = "short" | "medium" | "long";
@@ -180,19 +245,56 @@ export function healthTone(
   }
 }
 
+/**
+ * Matches the planner-generated tally ("Planned 2 of 4 items. ...").
+ * That string is implementation language; Today replaces it with student
+ * wording built from real dashboard counts instead.
+ */
+const GENERATED_PLAN_STATUS = /^\s*Planned\s+\d+\s+of\s+\d+\s+items/i;
+
+export function isGeneratedPlanStatus(message: string): boolean {
+  return GENERATED_PLAN_STATUS.test(message);
+}
+
+/**
+ * Student-facing plan status derived from dashboard data, never from the
+ * planner's own wording.
+ *
+ * - all pending tasks have a session today → "All 4 tasks are scheduled."
+ * - one pending task → "1 task planned for today."
+ * - overflow / tasks without a session → "2 of 4 tasks planned today. ..."
+ * - nothing scheduled → null (the empty states carry the message)
+ */
+export function buildPlanStatusText(input: {
+  scheduledTasks: number;
+  pendingTasks: number;
+}): string | null {
+  const pending = Math.max(0, input.pendingTasks);
+  const scheduled = Math.min(Math.max(0, input.scheduledTasks), pending);
+  if (pending === 0 || scheduled === 0) return null;
+  if (scheduled < pending) {
+    return `${scheduled} of ${pending} tasks planned today. The rest will continue later.`;
+  }
+  if (pending === 1) return "1 task planned for today.";
+  return `All ${pending} tasks are scheduled.`;
+}
+
 export function buildRecommendationReason(
   item: { overdue: boolean; due_date: string | null; priority: number },
   healthScore: string,
   options?: { isTopPriority?: boolean },
 ): string {
-  if (item.overdue) return "This task is overdue — highest priority.";
+  if (item.overdue)
+    return "You're behind on this one. It's now the most important next step.";
   if (healthScore === "critical")
-    return "Your backlog needs attention. Let's clear some items.";
-  if (item.priority === 1) return "High-priority task — important to tackle first.";
+    return "Your backlog needs attention — this is a good place to start.";
+  if (item.priority === 1)
+    return "High priority — best to tackle this one first.";
   if (options?.isTopPriority)
-    return "Top of your prioritized backlog — best next match.";
-  if (item.due_date) return "Has a due date — good to tackle before it slips.";
-  return "This is the best next task for your study session.";
+    return "Highest priority from your current work.";
+  if (item.due_date)
+    return `Due ${formatDueDate(item.due_date)} — worth finishing before then.`;
+  return "Best next fit for the time you have.";
 }
 
 // ─── Difficulty (backlog priority abstraction) ───
