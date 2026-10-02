@@ -33,26 +33,32 @@ def _cache_ttl(has_factor: bool) -> float:
 
 
 def _extract_factors(body: object) -> list:
-    """Normalize the admin factors response body.
+    """Extract the factors list from a GoTrue ``GET /user`` response body.
 
-    GoTrue may return either a bare JSON list of factors or an object of the
-    form {"factors": [...]}.  Anything else is treated as unavailable so an
-    unexpected shape can never escape as an unhandled exception (or be
-    silently treated as "no factors").
+    A user object without a ``factors`` key simply has no factors.  A
+    ``factors`` value that is present but not a list (or a non-object body)
+    fails closed as unavailable so an unexpected response can never escape as
+    an unhandled exception or be silently read as "no factors" when it might
+    contain one.
     """
-    if isinstance(body, list):
-        return body
-    if isinstance(body, dict) and isinstance(body.get("factors"), list):
-        return body["factors"]
+    if not isinstance(body, dict):
+        raise MfaStateUnavailable("MFA factor lookup returned unexpected JSON shape")
+    if "factors" not in body:
+        return []
+    factors = body["factors"]
+    if isinstance(factors, list):
+        return factors
     raise MfaStateUnavailable("MFA factor lookup returned unexpected JSON shape")
 
 
-async def has_verified_factor(user_id: uuid.UUID) -> bool:
+async def has_verified_factor(user_id: uuid.UUID, access_token: str) -> bool:
     """Return True when the Supabase Auth user has at least one verified MFA factor.
 
     Unverified factors (enrollment started but not confirmed) do not count.
-    Uses the GoTrue admin factors endpoint with the service key; the result is
-    cached per user with an asymmetric TTL and failures are never cached.
+    Uses the caller-scoped ``GET /auth/v1/user`` endpoint authenticated with
+    the request's own access token (the same call auth-js makes to list
+    factors); the service key is never used.  The result is cached per user
+    with an asymmetric TTL and failures are never cached.
     """
     cached = _cache.get(user_id)
     if cached is not None:
@@ -61,14 +67,16 @@ async def has_verified_factor(user_id: uuid.UUID) -> bool:
             return has_factor
         _cache.pop(user_id, None)
 
-    if not settings.SUPABASE_URL or not settings.SUPABASE_SERVICE_KEY:
-        raise MfaStateUnavailable("Supabase Auth admin is not configured")
+    if not settings.SUPABASE_URL or not access_token:
+        raise MfaStateUnavailable("Supabase Auth is not configured")
 
-    url = f"{settings.SUPABASE_URL}/auth/v1/admin/users/{user_id}/factors"
+    url = f"{settings.SUPABASE_URL}/auth/v1/user"
     headers = {
-        "apikey": settings.SUPABASE_SERVICE_KEY,
+        "Authorization": f"Bearer {access_token}",
         "Content-Type": "application/json",
     }
+    if settings.SUPABASE_ANON_KEY:
+        headers["apikey"] = settings.SUPABASE_ANON_KEY
 
     try:
         async with httpx.AsyncClient() as client:
@@ -78,8 +86,13 @@ async def has_verified_factor(user_id: uuid.UUID) -> bool:
         raise MfaStateUnavailable("MFA factor lookup request failed") from exc
 
     if resp.status_code >= 400:
+        # Short excerpt only, for diagnosing the failure; never any headers.
+        excerpt = resp.text[:200]
         logger.warning(
-            "MFA factor lookup returned HTTP %s for user %s", resp.status_code, user_id
+            "MFA factor lookup returned HTTP %s for user %s: %s",
+            resp.status_code,
+            user_id,
+            excerpt,
         )
         raise MfaStateUnavailable(f"MFA factor lookup returned HTTP {resp.status_code}")
 

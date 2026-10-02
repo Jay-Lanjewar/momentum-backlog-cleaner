@@ -23,7 +23,9 @@ async def get_db() -> AsyncGenerator[AsyncSession, None]:
         yield session
 
 
-async def _ensure_assurance(payload: dict, user_id: uuid.UUID) -> None:
+async def _ensure_assurance(
+    payload: dict, user_id: uuid.UUID, access_token: str
+) -> None:
     """Require an aal2 session unless the account has no verified MFA factor.
 
     Non-MFA accounts keep working on aal1 tokens exactly as before; accounts
@@ -35,7 +37,7 @@ async def _ensure_assurance(payload: dict, user_id: uuid.UUID) -> None:
         return
 
     try:
-        factor_present = await has_verified_factor(user_id)
+        factor_present = await has_verified_factor(user_id, access_token)
     except MfaStateUnavailable as e:
         logger.error("MFA state check unavailable for user %s: %s", user_id, e)
         raise HTTPException(
@@ -85,7 +87,7 @@ async def get_current_user(
             detail="Invalid or expired authentication token",
         )
 
-    await _ensure_assurance(payload, user_id)
+    await _ensure_assurance(payload, user_id, credentials.credentials)
 
     t_db = time.perf_counter()
     logger.info("[AUTH] before database lookup")
@@ -140,5 +142,5 @@ async def get_current_user_id(
             detail="Invalid or expired authentication token",
         )
 
-    await _ensure_assurance(payload, user_id)
+    await _ensure_assurance(payload, user_id, credentials.credentials)
     return user_id
