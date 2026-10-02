@@ -160,6 +160,14 @@ describe("Register flow includes email redirect", () => {
     expect(content).toContain("emailRedirectTo");
     expect(content).toContain("momentum://confirm");
   });
+
+  it("register.tsx signs up through the backend endpoint, not supabase-js", () => {
+    const content = fs.readFileSync(path.join(AUTH, "register.tsx"), "utf-8");
+    expect(content).toContain('"/api/v1/auth/signup"');
+    expect(content).toContain("account_exists");
+    expect(content).toContain("email_not_confirmed");
+    expect(content).not.toContain("supabase.auth.signUp");
+  });
 });
 
 describe("Root layout has onboarding gate", () => {

@@ -33,7 +33,12 @@ async def signup(
     service: AuthService = Depends(get_auth_service),
 ):
     try:
-        result = await service.signup(data.email, data.password, data.name)
+        result = await service.signup(
+            data.email,
+            data.password,
+            data.name,
+            email_redirect_to=data.email_redirect_to,
+        )
         user = result["user"]
         return AuthResponse(
             access_token=result["access_token"],

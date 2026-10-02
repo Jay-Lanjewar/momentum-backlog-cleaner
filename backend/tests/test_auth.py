@@ -128,6 +128,45 @@ class TestSignup:
         assert resp.status_code == 400
         assert resp.json()["detail"] == "Something went wrong. Please try again."
 
+    def test_signup_forwards_email_redirect_to(self, app, auth_service):
+        auth_service.signup = AsyncMock(
+            return_value={"user": make_user(), "access_token": "abc", "refresh_token": "def"}
+        )
+        app.dependency_overrides[get_auth_service] = lambda: auth_service
+        client = TestClient(app)
+        resp = client.post(
+            "/api/v1/auth/signup",
+            json={
+                "email": EMAIL,
+                "password": "password123",
+                "name": "Student",
+                "email_redirect_to": "momentum://confirm",
+            },
+        )
+        app.dependency_overrides.clear()
+
+        assert resp.status_code == 200
+        auth_service.signup.assert_awaited_once_with(
+            EMAIL,
+            "password123",
+            "Student",
+            email_redirect_to="momentum://confirm",
+        )
+
+    def test_signup_works_without_email_redirect_to(self, app, auth_service):
+        auth_service.signup = AsyncMock(
+            return_value={"user": make_user(), "access_token": "abc", "refresh_token": "def"}
+        )
+        app.dependency_overrides[get_auth_service] = lambda: auth_service
+        client = TestClient(app)
+        resp = _post_signup(client)
+        app.dependency_overrides.clear()
+
+        assert resp.status_code == 200
+        auth_service.signup.assert_awaited_once_with(
+            EMAIL, "password123", "Student", email_redirect_to=None
+        )
+
 
 # ─── Login ───
 
@@ -243,6 +282,46 @@ class TestAuthService:
             result = await service.signup(EMAIL, "password123", "Student")
 
         assert result["access_token"] == "abc"
+
+    async def test_signup_forwards_email_redirect_to_supabase(self):
+        service = AuthService(db=AsyncMock())
+        with (
+            patch.object(AuthService, "_supabase_request", new=AsyncMock()) as mock_request,
+            patch.object(AuthService, "_get_or_create_user", new=AsyncMock()) as mock_user,
+        ):
+            mock_user.return_value = make_user()
+            mock_request.side_effect = [
+                {"user": {"id": str(USER_ID), "email": EMAIL}},
+                {"access_token": "abc", "refresh_token": "def"},
+            ]
+
+            await service.signup(
+                EMAIL,
+                "password123",
+                "Student",
+                email_redirect_to="momentum://confirm",
+            )
+
+        signup_body = mock_request.call_args_list[0].args[1]
+        assert signup_body["email_redirect_to"] == "momentum://confirm"
+        assert signup_body["data"] == {"name": "Student"}
+
+    async def test_signup_omits_email_redirect_to_when_not_provided(self):
+        service = AuthService(db=AsyncMock())
+        with (
+            patch.object(AuthService, "_supabase_request", new=AsyncMock()) as mock_request,
+            patch.object(AuthService, "_get_or_create_user", new=AsyncMock()) as mock_user,
+        ):
+            mock_user.return_value = make_user()
+            mock_request.side_effect = [
+                {"user": {"id": str(USER_ID), "email": EMAIL}},
+                {"access_token": "abc", "refresh_token": "def"},
+            ]
+
+            await service.signup(EMAIL, "password123", "Student")
+
+        signup_body = mock_request.call_args_list[0].args[1]
+        assert "email_redirect_to" not in signup_body
 
     async def test_resend_verification_posts_to_supabase_resend(self):
         service = AuthService(db=AsyncMock())

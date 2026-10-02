@@ -321,13 +321,52 @@ describe("C4 verify-email resend", () => {
   });
 });
 
-// ─── C5: Register session-present ───
+// ─── C5: Register via backend signup ───
 
-describe("C5 register with session returned", () => {
-  it("routes to /(app) when session + profile present", async () => {
-    mockSignUp.mockResolvedValue({
-      data: { user: { id: "u1" }, session: { access_token: "tok" } },
+describe("C5 register via backend signup", () => {
+  it("posts name, email, password and momentum://confirm redirect to /api/v1/auth/signup", async () => {
+    mockPost.mockResolvedValue({
+      data: {
+        access_token: "",
+        refresh_token: "",
+        token_type: "bearer",
+        user: { id: "u1" },
+      },
       error: null,
+      errorCode: null,
+    });
+
+    await render(<RegisterScreen />);
+    await fillRegisterAndSubmit();
+
+    await waitFor(() => {
+      expect(mockPost).toHaveBeenCalledTimes(1);
+    });
+    const [endpoint, body] = mockPost.mock.calls[0];
+    expect(endpoint).toBe("/api/v1/auth/signup");
+    expect(body).toEqual({
+      email: "alex@example.com",
+      password: "password123",
+      name: "Alex",
+      email_redirect_to: "momentum://confirm",
+    });
+    // Deep-link verification flow is still reachable.
+    expect(mockReplace).toHaveBeenCalledWith({
+      pathname: "/(auth)/verify-email",
+      params: { email: "alex@example.com" },
+    });
+  });
+
+  it("routes to /(app) when signup returns tokens + profile present", async () => {
+    mockPost.mockResolvedValue({
+      data: {
+        access_token: "tok",
+        refresh_token: "ref",
+        token_type: "bearer",
+        user: { id: "u1" },
+      },
+      error: null,
+      errorCode: null,
     });
     mockLoadAuthMe.mockResolvedValue(makeProfileUser());
 
@@ -335,6 +374,10 @@ describe("C5 register with session returned", () => {
     await fillRegisterAndSubmit();
 
     await waitFor(() => {
+      expect(mockSetSession).toHaveBeenCalledWith({
+        access_token: "tok",
+        refresh_token: "ref",
+      });
       expect(mockLoadAuthMe).toHaveBeenCalledTimes(1);
     });
     expect(mockReplace).toHaveBeenCalledWith("/(app)");
@@ -342,10 +385,16 @@ describe("C5 register with session returned", () => {
     expect(mockReplace).not.toHaveBeenCalledWith("/(auth)/verify-email");
   });
 
-  it("routes to /(onboarding) when session + no profile", async () => {
-    mockSignUp.mockResolvedValue({
-      data: { user: { id: "u1" }, session: { access_token: "tok" } },
+  it("routes to /(onboarding) when signup returns tokens + no profile", async () => {
+    mockPost.mockResolvedValue({
+      data: {
+        access_token: "tok",
+        refresh_token: "ref",
+        token_type: "bearer",
+        user: { id: "u1" },
+      },
       error: null,
+      errorCode: null,
     });
     mockLoadAuthMe.mockResolvedValue(makeNoProfileUser());
 
@@ -358,10 +407,16 @@ describe("C5 register with session returned", () => {
     expect(mockReplace).not.toHaveBeenCalledWith("/(app)");
   });
 
-  it("still routes to verify-email when no session (email confirmation)", async () => {
-    mockSignUp.mockResolvedValue({
-      data: { user: { id: "u1" }, session: null },
+  it("still routes to verify-email when signup returns no tokens (email confirmation)", async () => {
+    mockPost.mockResolvedValue({
+      data: {
+        access_token: "",
+        refresh_token: "",
+        token_type: "bearer",
+        user: { id: "u1" },
+      },
       error: null,
+      errorCode: null,
     });
 
     await render(<RegisterScreen />);
@@ -373,13 +428,110 @@ describe("C5 register with session returned", () => {
         params: { email: "alex@example.com" },
       });
     });
+    expect(mockSetSession).not.toHaveBeenCalled();
     expect(mockLoadAuthMe).not.toHaveBeenCalled();
   });
 
+  it("existing verified account shows a friendly panel with Sign in + reset paths", async () => {
+    mockPost.mockResolvedValue({
+      data: null,
+      error: "An account with this email already exists",
+      errorCode: "account_exists",
+    });
+
+    await render(<RegisterScreen />);
+    await fillRegisterAndSubmit();
+
+    await waitFor(() => {
+      expect(screen.getByTestId("register-account-exists")).toBeTruthy();
+    });
+    expect(
+      screen.getByText(/An account with alex@example\.com already exists/),
+    ).toBeTruthy();
+    expect(screen.queryByText(/User already registered/)).toBeNull();
+    expect(mockReplace).not.toHaveBeenCalled();
+    expect(mockSetSession).not.toHaveBeenCalled();
+
+    await fireEvent.press(screen.getByTestId("register-account-exists-signin"));
+    expect(mockReplace).toHaveBeenCalledWith("/(auth)/login");
+
+    await fireEvent.press(screen.getByTestId("register-account-exists-reset"));
+    expect(mockReplace).toHaveBeenCalledWith("/(auth)/forgot-password");
+  });
+
+  it("existing unverified account routes to verify-email (link re-sent by backend)", async () => {
+    mockPost.mockResolvedValue({
+      data: null,
+      error: "Please verify your email first",
+      errorCode: "email_not_confirmed",
+    });
+
+    await render(<RegisterScreen />);
+    await fillRegisterAndSubmit();
+
+    await waitFor(() => {
+      expect(mockReplace).toHaveBeenCalledWith({
+        pathname: "/(auth)/verify-email",
+        params: { email: "alex@example.com" },
+      });
+    });
+    expect(mockSetSession).not.toHaveBeenCalled();
+    expect(screen.queryByTestId("register-account-exists")).toBeNull();
+  });
+
+  it("shows friendly copy for backend failures without leaking GoTrue text", async () => {
+    mockPost.mockResolvedValue({
+      data: null,
+      error: "Something went wrong. Please try again.",
+      errorCode: null,
+    });
+
+    await render(<RegisterScreen />);
+    await fillRegisterAndSubmit();
+
+    await waitFor(() => {
+      expect(screen.getByTestId("register-error")).toBeTruthy();
+    });
+    expect(
+      screen.getByText("Something went wrong. Please try again."),
+    ).toBeTruthy();
+    expect(
+      screen.queryByText(/already registered|invalid grant|User already/i),
+    ).toBeNull();
+    expect(mockReplace).not.toHaveBeenCalled();
+  });
+
+  it("surfaces the mapped weak-password message instead of raw engine text", async () => {
+    mockPost.mockResolvedValue({
+      data: null,
+      error: "Password is too weak. Use at least 6 characters.",
+      errorCode: "weak_password",
+    });
+
+    await render(<RegisterScreen />);
+    await fillRegisterAndSubmit();
+
+    await waitFor(() => {
+      expect(
+        screen.getByText("Password is too weak. Use at least 6 characters."),
+      ).toBeTruthy();
+    });
+    // Raw GoTrue wording must never reach the student.
+    expect(
+      screen.queryByText("Password should be at least 6 characters"),
+    ).toBeNull();
+  });
+
   it("shows recoverable /me error with Retry when session load fails", async () => {
-    mockSignUp.mockResolvedValue({
-      data: { user: { id: "u1" }, session: { access_token: "tok" } },
+    mockPost.mockResolvedValue({
+      data: {
+        access_token: "tok",
+        refresh_token: "ref",
+        token_type: "bearer",
+        user: { id: "u1" },
+      },
       error: null,
+      errorCode: null,
     });
     mockLoadAuthMe.mockResolvedValue(null);
     mockMeError = "Couldn't load your account.";

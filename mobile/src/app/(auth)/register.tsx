@@ -14,9 +14,14 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
 
 import { supabase } from "@/lib/supabase";
+import { api } from "@/lib/api";
 import { loadAuthMe } from "@/hooks/useAuth";
 import { useAuthStore } from "@/store/useAuthStore";
 import { isValidEmail, passwordStrength } from "@/lib/onboarding";
+import type { AuthResponse } from "@/services/types";
+
+/** Deep link the verification email returns to. */
+const emailRedirectTo = "momentum://confirm";
 
 export default function RegisterScreen() {
   const router = useRouter();
@@ -28,6 +33,7 @@ export default function RegisterScreen() {
   const [loading, setLoading] = useState(false);
   const [retrying, setRetrying] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [accountExists, setAccountExists] = useState(false);
 
   const trimmedName = name.trim();
   const trimmedEmail = email.trim();
@@ -44,26 +50,46 @@ export default function RegisterScreen() {
   async function handleRegister() {
     if (!canSubmit) return;
     setError(null);
+    setAccountExists(false);
     setLoading(true);
 
     try {
-      const { data, error: signupError } = await supabase.auth.signUp({
+      // Signup goes through the API so the backend's duplicate-account
+      // handling (account_exists / email_not_confirmed) is actually used.
+      const result = await api.post<AuthResponse>("/api/v1/auth/signup", {
         email: trimmedEmail,
         password,
-        options: {
-          data: { name: trimmedName },
-          emailRedirectTo: "momentum://confirm",
-        },
+        name: trimmedName,
+        email_redirect_to: emailRedirectTo,
       });
 
-      if (signupError) {
-        setError(signupError.message);
+      if (result.errorCode === "account_exists") {
+        // Verified account already exists — friendly panel with next steps.
+        setAccountExists(true);
         return;
       }
 
-      if (data.session) {
-        // Auto-confirmed signup: Supabase session already exists.
-        // Load profile via the same /me path as login, then route.
+      if (result.errorCode === "email_not_confirmed") {
+        // Unverified account: the backend already re-sent the verification
+        // email. Send the student to the screen that explains what to do.
+        router.replace({
+          pathname: "/(auth)/verify-email",
+          params: { email: trimmedEmail },
+        });
+        return;
+      }
+
+      if (result.error || !result.data) {
+        // Backend copy is already student-facing; never surface GoTrue text.
+        setError(result.error || "Something went wrong. Please try again.");
+        return;
+      }
+
+      const { access_token, refresh_token } = result.data;
+
+      if (access_token && refresh_token) {
+        // Email confirmation disabled: session exists right away.
+        await supabase.auth.setSession({ access_token, refresh_token });
         const user = await loadAuthMe();
         if (user) {
           router.replace(user.profile ? "/(app)" : "/(onboarding)");
@@ -72,15 +98,11 @@ export default function RegisterScreen() {
         return;
       }
 
-      if (data.user) {
-        router.replace({
-          pathname: "/(auth)/verify-email",
-          params: { email: trimmedEmail },
-        });
-        return;
-      }
-
-      setError("Something went wrong. Please try again.");
+      // Account created, email still needs verifying.
+      router.replace({
+        pathname: "/(auth)/verify-email",
+        params: { email: trimmedEmail },
+      });
     } catch {
       setError("Something went wrong. Please try again.");
     } finally {
@@ -116,13 +138,43 @@ export default function RegisterScreen() {
             <Text style={styles.subtitle}>Start building your momentum.</Text>
           </View>
 
+          {accountExists && !error ? (
+            <View style={styles.errorBox} testID="register-account-exists">
+              <Text style={styles.noticeTitle}>You already have an account</Text>
+              <Text style={styles.errorText}>
+                An account with {trimmedEmail} already exists. Sign in to
+                continue, or reset your password if you&apos;ve forgotten it.
+              </Text>
+              <TouchableOpacity
+                style={styles.retryButton}
+                onPress={() => router.replace("/(auth)/login")}
+                accessibilityRole="button"
+                accessibilityLabel="Sign in to your existing account"
+                testID="register-account-exists-signin"
+                activeOpacity={0.8}
+              >
+                <Text style={styles.retryButtonText}>Sign in</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.noticeLink}
+                onPress={() => router.replace("/(auth)/forgot-password")}
+                accessibilityRole="button"
+                accessibilityLabel="Reset your password"
+                testID="register-account-exists-reset"
+                activeOpacity={0.8}
+              >
+                <Text style={styles.noticeLinkText}>Forgot password?</Text>
+              </TouchableOpacity>
+            </View>
+          ) : null}
+
           {error ? (
-            <View style={styles.errorBox}>
+            <View style={styles.errorBox} testID="register-error">
               <Text style={styles.errorText}>{error}</Text>
             </View>
           ) : null}
 
-          {meError && !error ? (
+          {meError && !error && !accountExists ? (
             <View style={styles.errorBox} testID="register-me-error">
               <Text style={styles.errorText}>{meError}</Text>
               <TouchableOpacity
@@ -252,9 +304,26 @@ const styles = StyleSheet.create({
     marginBottom: 16,
   },
   errorText: { color: "#991B1B", fontSize: 14 },
+  noticeTitle: {
+    color: "#991B1B",
+    fontSize: 15,
+    fontWeight: "700",
+    marginBottom: 4,
+  },
+  noticeLink: {
+    alignSelf: "flex-start",
+    marginTop: 8,
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+    minHeight: 44,
+    justifyContent: "center",
+  },
+  noticeLinkText: { color: "#2563EB", fontSize: 14, fontWeight: "600" },
   retryButton: {
     alignSelf: "flex-start",
     marginTop: 10,
+    minHeight: 44,
+    justifyContent: "center",
     paddingVertical: 6,
     paddingHorizontal: 12,
     backgroundColor: "#EFF6FF",

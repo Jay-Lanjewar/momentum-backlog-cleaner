@@ -310,6 +310,8 @@ class AuthSignupRequest(BaseModel):
     email: str
     password: str
     name: str | None = None
+    # Deep link the verification email should return to (e.g. momentum://confirm).
+    email_redirect_to: str | None = None
 
 
 class AuthResponse(BaseModel):

@@ -74,10 +74,19 @@ class AuthService:
 
         return user
 
-    async def signup(self, email: str, password: str, name: str | None = None) -> dict:
-        body = {"email": email, "password": password}
+    async def signup(
+        self,
+        email: str,
+        password: str,
+        name: str | None = None,
+        email_redirect_to: str | None = None,
+    ) -> dict:
+        body: dict = {"email": email, "password": password}
         if name:
             body["data"] = {"name": name}
+        if email_redirect_to:
+            # Preserves the app deep link in the verification email.
+            body["email_redirect_to"] = email_redirect_to
         result = await self._supabase_request(
             "signup",
             body,
