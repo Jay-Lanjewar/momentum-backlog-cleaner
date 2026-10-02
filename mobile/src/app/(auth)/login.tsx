@@ -31,7 +31,12 @@ export default function LoginScreen() {
     }
     setLoading(true);
     try {
-      await login(email.trim(), password);
+      const outcome = await login(email.trim(), password);
+      if (outcome === "mfa-required") {
+        // No success UX here: the AuthGate swaps this screen for
+        // (auth)/two-factor once the challenge flag lands in the store.
+        return;
+      }
     } catch (e: unknown) {
       const message = e instanceof Error ? e.message : "Login failed";
       Alert.alert("Login failed", message);

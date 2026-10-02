@@ -33,6 +33,10 @@ describe("Auth screen files", () => {
     expect(fileExists(path.join(AUTH, "reset-password.tsx"))).toBe(true);
   });
 
+  it("has two-factor.tsx", () => {
+    expect(fileExists(path.join(AUTH, "two-factor.tsx"))).toBe(true);
+  });
+
   it("has auth _layout.tsx", () => {
     expect(fileExists(path.join(AUTH, "_layout.tsx"))).toBe(true);
   });
@@ -85,13 +89,65 @@ describe("Settings screen", () => {
 });
 
 describe("Auth layout includes all screens", () => {
-  it("layout references login, register, forgot-password, reset-password, verify-email", () => {
+  it("layout references login, register, forgot-password, reset-password, verify-email, two-factor", () => {
     const content = fs.readFileSync(path.join(AUTH, "_layout.tsx"), "utf-8");
     expect(content).toContain("login");
     expect(content).toContain("register");
     expect(content).toContain("forgot-password");
     expect(content).toContain("reset-password");
     expect(content).toContain("verify-email");
+    expect(content).toContain('name="two-factor"');
+  });
+});
+
+describe("Login-time 2-step challenge", () => {
+  it("_layout.tsx gates routing on mfaRequired and targets two-factor", () => {
+    const content = fs.readFileSync(
+      path.join(SRC, "app/_layout.tsx"),
+      "utf-8",
+    );
+    expect(content).toContain("mfaRequired");
+    expect(content).toContain('router.replace("/(auth)/two-factor")');
+    // The gate must return while the challenge is pending — no fallthrough
+    // to the ordinary login/app routing branches.
+    expect(content).toMatch(/if \(mfaRequired\) \{[\s\S]*?return;/);
+  });
+
+  it("login.tsx branches on the mfa-required outcome without navigating", () => {
+    const content = fs.readFileSync(path.join(AUTH, "login.tsx"), "utf-8");
+    expect(content).toContain('outcome === "mfa-required"');
+    // Routing belongs to the AuthGate, never the login screen.
+    expect(content).not.toContain("router.replace");
+  });
+
+  it("useAuth.ts checks the assurance level before loading the profile", () => {
+    const content = fs.readFileSync(
+      path.join(SRC, "hooks/useAuth.ts"),
+      "utf-8",
+    );
+    expect(content).toContain("getAuthenticatorAssuranceLevel");
+    expect(content).toContain("beginMfaChallenge");
+    // Profile must not load while a challenge is pending.
+    expect(content).toMatch(
+      /if \(mfa\.status === "required"\) \{[\s\S]*?return "mfa-required";/,
+    );
+  });
+
+  it("two-factor.tsx verifies through a fresh challenge and releases the gate", () => {
+    const content = fs.readFileSync(path.join(AUTH, "two-factor.tsx"), "utf-8");
+    expect(content).toContain("mfa.challenge");
+    expect(content).toContain("mfa.verify");
+    expect(content).toContain("completeMfaChallenge");
+    expect(content).toContain("Back to sign in");
+    expect(content).toContain('router.replace("/(auth)/login")');
+  });
+
+  it("mfa.ts challenge copy matches the spec wording", () => {
+    const content = fs.readFileSync(path.join(SRC, "lib/mfa.ts"), "utf-8");
+    expect(content).toContain("That code didn't match. Try again.");
+    expect(content).toContain(
+      "That verification request expired. Try again.",
+    );
   });
 });
 

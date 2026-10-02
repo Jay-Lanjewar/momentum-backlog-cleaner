@@ -24,6 +24,7 @@ const queryClient = new QueryClient({
 function AuthGate() {
   const { user, isAuthenticated, isLoading } = useAuth();
   const confirming = useAuthStore((s) => s.confirming);
+  const mfaRequired = useAuthStore((s) => s.mfaRequired);
   const segments = useSegments();
   const router = useRouter();
 
@@ -38,6 +39,17 @@ function AuthGate() {
 
     if (inConfirmRoute) return;
     if (inResetRoute) return;
+
+    // Pending 2-step challenge: nothing else may route until the code is
+    // proven (login and restore both stop short of loading a profile).
+    if (mfaRequired) {
+      const inTwoFactorRoute =
+        segments[0] === "(auth)" && (segments[1] as string) === "two-factor";
+      if (!inTwoFactorRoute) {
+        router.replace("/(auth)/two-factor");
+      }
+      return;
+    }
 
     if (!isAuthenticated && !inAuthGroup) {
       router.replace("/(auth)/login");
@@ -58,7 +70,7 @@ function AuthGate() {
       // (e.g. after email confirmation). Send to onboarding.
       router.replace("/(onboarding)");
     }
-  }, [isAuthenticated, isLoading, confirming, user, segments, router]);
+  }, [isAuthenticated, isLoading, confirming, mfaRequired, user, segments, router]);
 
   useEffect(() => {
     if (!isLoading) {

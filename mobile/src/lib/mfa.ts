@@ -64,6 +64,22 @@ export function friendlyMfaError(error: unknown): string {
   return GENERIC_MFA_ERROR;
 }
 
+/**
+ * Copy for a failed login-time code check — shorter than the Security
+ * screen's wording because the user just came from the sign-in form.
+ * Anything else falls through to friendlyMfaError (never Supabase text).
+ */
+export function challengeErrorCopy(error: unknown): string {
+  const code = errorCodeOf(error);
+  if (code === "mfa_verification_failed") {
+    return "That code didn't match. Try again.";
+  }
+  if (code === "mfa_challenge_expired") {
+    return "That verification request expired. Try again.";
+  }
+  return friendlyMfaError(error);
+}
+
 function findTotpFactor(
   factors: FactorList | null | undefined,
   status: string,

@@ -45,6 +45,7 @@ let mockIsAuthenticated = false;
 let mockIsLoading = false;
 let mockMeError: string | null = null;
 let mockUser: any = null;
+let mockMfaRequired = false;
 const mockConfirmingRef = { value: false };
 
 const mockSetUser = jest.fn();
@@ -66,6 +67,7 @@ jest.mock("@/store/useAuthStore", () => {
       user: mockUser,
       isAuthenticated: mockIsAuthenticated,
       isLoading: mockIsLoading,
+      mfaRequired: mockMfaRequired,
     });
   useAuthStore.getState = () => ({
     setUser: mockSetUser,
@@ -78,6 +80,7 @@ jest.mock("@/store/useAuthStore", () => {
     user: mockUser,
     isAuthenticated: mockIsAuthenticated,
     isLoading: mockIsLoading,
+    mfaRequired: mockMfaRequired,
   });
   useAuthStore.setState = jest.fn();
   return { useAuthStore };
@@ -255,6 +258,7 @@ beforeEach(() => {
   mockIsLoading = false;
   mockMeError = null;
   mockUser = null;
+  mockMfaRequired = false;
   mockConfirmingRef.value = false;
   mockLoginImpl = null;
   mockRetryMeImpl = null;
@@ -762,6 +766,55 @@ describe("AuthGate no redirect loop", () => {
     await view.rerender(<RootLayout />);
     await waitFor(() => {
       expect(mockReplace).not.toHaveBeenCalled();
+    });
+  });
+});
+
+// ─── AuthGate: login-time MFA challenge ───
+
+describe("AuthGate MFA challenge routing", () => {
+  it("pending challenge from app route → two-factor, not login", async () => {
+    mockSegments = ["(app)", "(today)"];
+    mockIsAuthenticated = false;
+    mockIsLoading = false;
+    mockMfaRequired = true;
+    mockConfirmingRef.value = false;
+
+    await render(<RootLayout />);
+
+    await waitFor(() => {
+      expect(mockReplace).toHaveBeenCalledWith("/(auth)/two-factor");
+    });
+    // The ordinary unauthenticated branch must not also fire.
+    expect(mockReplace).not.toHaveBeenCalledWith("/(auth)/login");
+  });
+
+  it("already on two-factor → stays put (no redirect loop)", async () => {
+    mockSegments = ["(auth)", "two-factor"];
+    mockIsAuthenticated = false;
+    mockIsLoading = false;
+    mockMfaRequired = true;
+    mockConfirmingRef.value = false;
+
+    await render(<RootLayout />);
+
+    await waitFor(() => {
+      expect(mockReplace).not.toHaveBeenCalled();
+    });
+  });
+
+  it("after the challenge clears and profile loads → routes into app", async () => {
+    mockSegments = ["(auth)", "two-factor"];
+    mockIsAuthenticated = true;
+    mockIsLoading = false;
+    mockUser = makeProfileUser();
+    mockMfaRequired = false;
+    mockConfirmingRef.value = false;
+
+    await render(<RootLayout />);
+
+    await waitFor(() => {
+      expect(mockReplace).toHaveBeenCalledWith("/(app)");
     });
   });
 });

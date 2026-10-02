@@ -21,6 +21,9 @@ describe("useAuthStore", () => {
       confirming: false,
       meError: null,
       user: null,
+      mfaRequired: false,
+      mfaFactorId: null,
+      mfaAal: null,
     });
   });
 
@@ -92,5 +95,51 @@ describe("useAuthStore", () => {
     useAuthStore.getState().setMeError("Network error");
     useAuthStore.getState().clearAuth();
     expect(useAuthStore.getState().meError).toBeNull();
+  });
+
+  it("starts with the MFA challenge off", () => {
+    const state = useAuthStore.getState();
+    expect(state.mfaRequired).toBe(false);
+    expect(state.mfaFactorId).toBeNull();
+    expect(state.mfaAal).toBeNull();
+  });
+
+  it("beginMfaChallenge marks a pending aal1 challenge", () => {
+    useAuthStore.getState().beginMfaChallenge("factor-1");
+    const state = useAuthStore.getState();
+    expect(state.mfaRequired).toBe(true);
+    expect(state.mfaFactorId).toBe("factor-1");
+    expect(state.mfaAal).toBe("aal1");
+    // The challenge must never authenticate anything by itself.
+    expect(state.isAuthenticated).toBe(false);
+    expect(state.user).toBeNull();
+  });
+
+  it("completeMfaChallenge clears the challenge and records aal2", () => {
+    useAuthStore.getState().beginMfaChallenge("factor-1");
+    useAuthStore.getState().completeMfaChallenge();
+    const state = useAuthStore.getState();
+    expect(state.mfaRequired).toBe(false);
+    expect(state.mfaFactorId).toBeNull();
+    expect(state.mfaAal).toBe("aal2");
+  });
+
+  it("clearAuth resets a pending MFA challenge", () => {
+    useAuthStore.getState().beginMfaChallenge("factor-1");
+    useAuthStore.getState().clearAuth();
+    const state = useAuthStore.getState();
+    expect(state.mfaRequired).toBe(false);
+    expect(state.mfaFactorId).toBeNull();
+    expect(state.mfaAal).toBeNull();
+  });
+
+  it("setUser during a pending challenge does not clear the challenge", () => {
+    // Guard: profile load is blocked while mfaRequired, but if it ever ran
+    // anyway the challenge flag must survive so AuthGate keeps gating.
+    useAuthStore.getState().beginMfaChallenge("factor-1");
+    useAuthStore.getState().setUser(mockUser);
+    const state = useAuthStore.getState();
+    expect(state.mfaRequired).toBe(true);
+    expect(state.mfaFactorId).toBe("factor-1");
   });
 });
