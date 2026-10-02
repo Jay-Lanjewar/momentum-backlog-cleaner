@@ -21,7 +21,12 @@ class AuthService:
         self.db = db
 
     async def _supabase_request(
-        self, path: str, body: dict | None = None, method: str = "POST", use_service_key: bool = False
+        self,
+        path: str,
+        body: dict | None = None,
+        method: str = "POST",
+        use_service_key: bool = False,
+        params: dict | None = None,
     ) -> dict:
         if not settings.SUPABASE_URL or not settings.SUPABASE_ANON_KEY:
             raise ValueError("Supabase not configured")
@@ -42,7 +47,10 @@ class AuthService:
         async with httpx.AsyncClient(timeout=timeout) as client:
             try:
                 if method == "POST":
-                    resp = await client.post(url, json=body, headers=headers)
+                    # params become the URL query string. GoTrue reads the
+                    # email confirmation redirect from `redirect_to` there,
+                    # never from the JSON body.
+                    resp = await client.post(url, json=body, headers=headers, params=params)
                 else:
                     resp = await client.get(url, headers=headers, params=body)
             except httpx.TimeoutException as exc:
@@ -106,6 +114,11 @@ class AuthService:
                 "signup",
                 body,
                 use_service_key=True,
+                params=(
+                    {"redirect_to": email_redirect_to}
+                    if email_redirect_to
+                    else None
+                ),
             )
         except SupabaseTimeoutError:
             # The POST may have succeeded upstream even though we never saw the
@@ -218,12 +231,17 @@ class AuthService:
             "data": {"redirect_to": redirect_to},
         })
 
-    async def resend_verification(self, email: str) -> None:
+    async def resend_verification(
+        self, email: str, email_redirect_to: str | None = None
+    ) -> None:
         """Ask Supabase to send a fresh signup verification email."""
         await self._supabase_request(
             "resend",
             {"type": "signup", "email": email},
             use_service_key=True,
+            params=(
+                {"redirect_to": email_redirect_to} if email_redirect_to else None
+            ),
         )
 
     async def get_user_by_email(self, email: str) -> dict | None:

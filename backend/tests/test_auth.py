@@ -1,4 +1,5 @@
 import uuid
+from contextlib import ExitStack
 from datetime import datetime, timezone
 from unittest.mock import AsyncMock, patch
 
@@ -93,7 +94,34 @@ class TestSignup:
 
         assert resp.status_code == 409
         assert resp.json()["detail"]["code"] == "email_not_confirmed"
-        auth_service.resend_verification.assert_awaited_once_with(EMAIL)
+        auth_service.resend_verification.assert_awaited_once_with(
+            EMAIL, email_redirect_to=None
+        )
+
+    def test_existing_unverified_account_resend_passes_email_redirect_to(
+        self, app, auth_service
+    ):
+        auth_service.signup = AsyncMock(side_effect=ValueError("User already registered"))
+        auth_service.is_email_verified = AsyncMock(return_value=False)
+        auth_service.resend_verification = AsyncMock()
+        app.dependency_overrides[get_auth_service] = lambda: auth_service
+        client = TestClient(app)
+        resp = client.post(
+            "/api/v1/auth/signup",
+            json={
+                "email": EMAIL,
+                "password": "password123",
+                "name": "Student",
+                "email_redirect_to": "momentum://confirm",
+            },
+        )
+        app.dependency_overrides.clear()
+
+        assert resp.status_code == 409
+        assert resp.json()["detail"]["code"] == "email_not_confirmed"
+        auth_service.resend_verification.assert_awaited_once_with(
+            EMAIL, email_redirect_to="momentum://confirm"
+        )
 
     def test_existing_verified_account_returns_friendly_exists_error(self, app, auth_service):
         auth_service.signup = AsyncMock(side_effect=ValueError("User already registered"))
@@ -307,6 +335,10 @@ class TestAuthService:
         signup_body = mock_request.call_args_list[0].args[1]
         assert signup_body["email_redirect_to"] == "momentum://confirm"
         assert signup_body["data"] == {"name": "Student"}
+        # GoTrue reads the redirect from the query string, not the body.
+        assert mock_request.call_args_list[0].kwargs["params"] == {
+            "redirect_to": "momentum://confirm"
+        }
 
     async def test_signup_omits_email_redirect_to_when_not_provided(self):
         service = AuthService(db=AsyncMock())
@@ -324,6 +356,7 @@ class TestAuthService:
 
         signup_body = mock_request.call_args_list[0].args[1]
         assert "email_redirect_to" not in signup_body
+        assert mock_request.call_args_list[0].kwargs["params"] is None
 
     async def test_resend_verification_posts_to_supabase_resend(self):
         service = AuthService(db=AsyncMock())
@@ -336,6 +369,23 @@ class TestAuthService:
             "resend",
             {"type": "signup", "email": EMAIL},
             use_service_key=True,
+            params=None,
+        )
+
+    async def test_resend_verification_forwards_redirect_to_query_param(self):
+        service = AuthService(db=AsyncMock())
+        with patch.object(
+            AuthService, "_supabase_request", new=AsyncMock(return_value={})
+        ) as mock_request:
+            await service.resend_verification(
+                EMAIL, email_redirect_to="momentum://confirm"
+            )
+
+        mock_request.assert_awaited_once_with(
+            "resend",
+            {"type": "signup", "email": EMAIL},
+            use_service_key=True,
+            params={"redirect_to": "momentum://confirm"},
         )
 
     async def test_is_email_verified_checks_confirmed_at(self):
@@ -396,7 +446,7 @@ class TestSupabaseTimeoutConfig:
             async def __aexit__(self, *exc):
                 return False
 
-            async def post(self, url, json=None, headers=None):
+            async def post(self, url, json=None, headers=None, params=None):
                 return _StubOkResponse()
 
             async def get(self, url, headers=None, params=None):
@@ -433,7 +483,7 @@ class TestSupabaseTimeoutConfig:
             async def __aexit__(self, *exc):
                 return False
 
-            async def post(self, url, json=None, headers=None):
+            async def post(self, url, json=None, headers=None, params=None):
                 return _StubOkResponse()
 
             async def get(self, url, headers=None, params=None):
@@ -604,3 +654,117 @@ class TestSignupTimeoutRoute:
 
         assert resp.status_code == 503
         assert resp.json()["detail"]["code"] == "signup_unavailable"
+
+
+# ─── GoTrue redirect wire contract ───
+
+
+class TestGoTrueRedirectQueryWire:
+    """GoTrue reads the confirmation redirect from the URL query string only.
+
+    These tests exercise the real `_supabase_request` against a mocked HTTP
+    transport, so they fail if the redirect ever moves off the wire (e.g. back
+    into the JSON body, which GoTrue's signup endpoint ignores).
+    """
+
+    @staticmethod
+    def _patches(captured: list):
+        real_async_client = httpx.AsyncClient
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            captured.append(request)
+            path = request.url.path
+            if path.endswith("/signup"):
+                return httpx.Response(
+                    200, json={"user": {"id": str(USER_ID), "email": EMAIL}}
+                )
+            if path.endswith("/token"):
+                return httpx.Response(
+                    200, json={"access_token": "abc", "refresh_token": "def"}
+                )
+            return httpx.Response(200, json={})
+
+        def factory(*args, **kwargs):
+            return real_async_client(transport=httpx.MockTransport(handler))
+
+        return [
+            patch.object(settings, "SUPABASE_URL", "https://project.supabase.co"),
+            patch.object(settings, "SUPABASE_ANON_KEY", "anon-key"),
+            patch.object(settings, "SUPABASE_SERVICE_KEY", "service-key"),
+            patch("httpx.AsyncClient", factory),
+        ]
+
+    async def test_signup_request_url_carries_redirect_to_query(self):
+        captured: list = []
+        service = AuthService(db=AsyncMock())
+        with ExitStack() as stack:
+            for p in self._patches(captured):
+                stack.enter_context(p)
+            stack.enter_context(
+                patch.object(
+                    AuthService,
+                    "_get_or_create_user",
+                    new=AsyncMock(return_value=make_user()),
+                )
+            )
+            result = await service.signup(
+                EMAIL,
+                "password123",
+                "Student",
+                email_redirect_to="momentum://confirm",
+            )
+
+        assert result["access_token"] == "abc"
+        signup_reqs = [r for r in captured if r.url.path.endswith("/signup")]
+        assert len(signup_reqs) == 1
+        assert signup_reqs[0].url.params.get("redirect_to") == "momentum://confirm"
+        assert "redirect_to=momentum%3A%2F%2Fconfirm" in str(signup_reqs[0].url)
+        token_reqs = [r for r in captured if r.url.path.endswith("/token")]
+        assert token_reqs
+        assert "redirect_to" not in token_reqs[0].url.params
+
+    async def test_signup_request_url_omits_redirect_query_when_absent(self):
+        captured: list = []
+        service = AuthService(db=AsyncMock())
+        with ExitStack() as stack:
+            for p in self._patches(captured):
+                stack.enter_context(p)
+            stack.enter_context(
+                patch.object(
+                    AuthService,
+                    "_get_or_create_user",
+                    new=AsyncMock(return_value=make_user()),
+                )
+            )
+            await service.signup(EMAIL, "password123", "Student")
+
+        signup_reqs = [r for r in captured if r.url.path.endswith("/signup")]
+        assert len(signup_reqs) == 1
+        assert "redirect_to" not in signup_reqs[0].url.params
+
+    async def test_resend_request_url_carries_redirect_to_query(self):
+        captured: list = []
+        service = AuthService(db=AsyncMock())
+        with ExitStack() as stack:
+            for p in self._patches(captured):
+                stack.enter_context(p)
+            await service.resend_verification(
+                EMAIL, email_redirect_to="momentum://confirm"
+            )
+
+        resend_reqs = [r for r in captured if r.url.path.endswith("/resend")]
+        assert len(resend_reqs) == 1
+        assert resend_reqs[0].url.params.get("redirect_to") == "momentum://confirm"
+        assert "redirect_to=momentum%3A%2F%2Fconfirm" in str(resend_reqs[0].url)
+
+    async def test_resend_request_url_omits_redirect_query_when_absent(self):
+        captured: list = []
+        service = AuthService(db=AsyncMock())
+        with ExitStack() as stack:
+            for p in self._patches(captured):
+                stack.enter_context(p)
+            await service.resend_verification(EMAIL)
+
+        resend_reqs = [r for r in captured if r.url.path.endswith("/resend")]
+        assert len(resend_reqs) == 1
+        assert "redirect_to" not in resend_reqs[0].url.params

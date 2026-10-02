@@ -87,7 +87,9 @@ async def signup(
                     },
                 )
             try:
-                await service.resend_verification(data.email)
+                await service.resend_verification(
+                    data.email, email_redirect_to=data.email_redirect_to
+                )
             except ValueError:
                 pass
             raise HTTPException(
