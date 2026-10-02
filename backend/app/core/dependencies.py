@@ -9,6 +9,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db as _get_db
+from app.core.mfa import MfaStateUnavailable, has_verified_factor
 from app.core.security import verify_token
 from app.domain.models import User
 
@@ -20,6 +21,45 @@ security_scheme = HTTPBearer(auto_error=True)
 async def get_db() -> AsyncGenerator[AsyncSession, None]:
     async for session in _get_db():
         yield session
+
+
+async def _ensure_assurance(payload: dict, user_id: uuid.UUID) -> None:
+    """Require an aal2 session unless the account has no verified MFA factor.
+
+    Non-MFA accounts keep working on aal1 tokens exactly as before; accounts
+    with a verified factor must present an aal2 token issued by GoTrue after a
+    successful challenge.  Must be called outside the generic token-decode
+    ``try`` block so its 401/503 responses are not swallowed.
+    """
+    if payload.get("aal") == "aal2":
+        return
+
+    try:
+        factor_present = await has_verified_factor(user_id)
+    except MfaStateUnavailable as e:
+        logger.error("MFA state check unavailable for user %s: %s", user_id, e)
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail={
+                "code": "mfa_check_unavailable",
+                "message": (
+                    "Additional authentication check is temporarily unavailable. "
+                    "Please try again."
+                ),
+            },
+        ) from e
+
+    if factor_present:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail={
+                "code": "insufficient_aal",
+                "message": (
+                    "Additional authentication is required to continue. "
+                    "Please sign in again."
+                ),
+            },
+        )
 
 
 async def get_current_user(
@@ -44,6 +84,8 @@ async def get_current_user(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid or expired authentication token",
         )
+
+    await _ensure_assurance(payload, user_id)
 
     t_db = time.perf_counter()
     logger.info("[AUTH] before database lookup")
@@ -83,13 +125,20 @@ async def get_current_user_id(
     ``sub`` claim as a ``uuid.UUID``.  Use this when the endpoint only
     needs the user ID (e.g. filtering related rows) and does not require
     the full ``User`` ORM object.
+
+    The same AAL assurance gate as ``get_current_user`` applies: aal2 tokens
+    pass directly, aal1 tokens are rejected when the account has a verified
+    MFA factor.
     """
     try:
         payload = verify_token(credentials.credentials)
-        return uuid.UUID(payload.get("sub", ""))
+        user_id = uuid.UUID(payload.get("sub", ""))
     except Exception as e:
         logger.warning("Token verification failed: %s", e)
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid or expired authentication token",
         )
+
+    await _ensure_assurance(payload, user_id)
+    return user_id

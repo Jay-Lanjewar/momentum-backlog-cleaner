@@ -20,6 +20,9 @@ class Settings(BaseSettings):
     SUPABASE_ANON_KEY: str | None = None
     SUPABASE_SERVICE_KEY: str | None = None
 
+    MFA_STATE_CACHE_TTL_SECONDS: int = 30
+    MFA_NEGATIVE_STATE_CACHE_TTL_SECONDS: int = 5
+
     GEMINI_API_KEY: str | None = None
     GEMINI_MODEL: str = "gemini-3.7-flash"
     AI_PROVIDER: str = "gemini"
