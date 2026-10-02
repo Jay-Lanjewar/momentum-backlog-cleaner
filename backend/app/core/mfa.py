@@ -32,6 +32,21 @@ def _cache_ttl(has_factor: bool) -> float:
     return float(settings.MFA_NEGATIVE_STATE_CACHE_TTL_SECONDS)
 
 
+def _extract_factors(body: object) -> list:
+    """Normalize the admin factors response body.
+
+    GoTrue may return either a bare JSON list of factors or an object of the
+    form {"factors": [...]}.  Anything else is treated as unavailable so an
+    unexpected shape can never escape as an unhandled exception (or be
+    silently treated as "no factors").
+    """
+    if isinstance(body, list):
+        return body
+    if isinstance(body, dict) and isinstance(body.get("factors"), list):
+        return body["factors"]
+    raise MfaStateUnavailable("MFA factor lookup returned unexpected JSON shape")
+
+
 async def has_verified_factor(user_id: uuid.UUID) -> bool:
     """Return True when the Supabase Auth user has at least one verified MFA factor.
 
@@ -69,10 +84,14 @@ async def has_verified_factor(user_id: uuid.UUID) -> bool:
         raise MfaStateUnavailable(f"MFA factor lookup returned HTTP {resp.status_code}")
 
     try:
-        factors = resp.json().get("factors") or []
+        body = resp.json()
     except ValueError as exc:
         raise MfaStateUnavailable("MFA factor lookup returned invalid JSON") from exc
 
-    has_factor = any(f.get("status") == "verified" for f in factors)
+    factors = _extract_factors(body)
+    has_factor = any(
+        isinstance(factor, dict) and factor.get("status") == "verified"
+        for factor in factors
+    )
     _cache[user_id] = (has_factor, time.monotonic())
     return has_factor

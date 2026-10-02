@@ -22,11 +22,11 @@ SERVICE_KEY = "service-secret"
 
 
 class _FakeResponse:
-    def __init__(self, status_code: int, payload: dict | None = None):
+    def __init__(self, status_code: int, payload: dict | list | None = None):
         self.status_code = status_code
         self._payload = payload if payload is not None else {}
 
-    def json(self) -> dict:
+    def json(self) -> dict | list:
         return self._payload
 
 
@@ -245,6 +245,56 @@ class TestAuthMeEnforcement:
         assert "internal detail" not in resp.text
         db.execute.assert_not_awaited()
 
+    def test_aal1_with_list_shaped_factor_response_returns_401_not_500(self, app):
+        """Production GoTrue returns a bare JSON list; it must map to 401, not crash."""
+        db = _blocked_db()
+        app.dependency_overrides[get_db] = lambda: db
+        url_patch, key_patch = _supabase_admin()
+        with (
+            patch(
+                "app.core.dependencies.verify_token", return_value=_payload("aal1")
+            ),
+            url_patch,
+            key_patch,
+            patch(
+                "httpx.AsyncClient.get",
+                new=AsyncMock(
+                    return_value=_FakeResponse(
+                        200, [{"status": "verified", "factor_type": "totp"}]
+                    )
+                ),
+            ),
+        ):
+            client = TestClient(app, raise_server_exceptions=False)
+            resp = client.get("/api/v1/auth/me", headers=_headers())
+        app.dependency_overrides.clear()
+
+        assert resp.status_code == 401
+        assert resp.json()["detail"]["code"] == "insufficient_aal"
+        db.execute.assert_not_awaited()
+
+    def test_aal1_with_list_shaped_empty_response_succeeds(self, app):
+        db = _me_db()
+        app.dependency_overrides[get_db] = lambda: db
+        url_patch, key_patch = _supabase_admin()
+        with (
+            patch(
+                "app.core.dependencies.verify_token", return_value=_payload("aal1")
+            ),
+            url_patch,
+            key_patch,
+            patch(
+                "httpx.AsyncClient.get",
+                new=AsyncMock(return_value=_FakeResponse(200, [])),
+            ),
+        ):
+            client = TestClient(app, raise_server_exceptions=False)
+            resp = client.get("/api/v1/auth/me", headers=_headers())
+        app.dependency_overrides.clear()
+
+        assert resp.status_code == 200
+        assert resp.json()["email"] == EMAIL
+
 
 # ─── get_current_user_id path ───
 
@@ -422,6 +472,109 @@ class TestHasVerifiedFactorLookup:
             ),
         ):
             assert await mfa.has_verified_factor(USER_ID) is False
+
+    async def test_list_response_with_verified_factor_is_true(self):
+        url_patch, key_patch = _supabase_admin()
+        with (
+            url_patch,
+            key_patch,
+            patch(
+                "httpx.AsyncClient.get",
+                new=AsyncMock(
+                    return_value=_FakeResponse(
+                        200, [{"status": "verified", "factor_type": "totp"}]
+                    )
+                ),
+            ),
+        ):
+            assert await mfa.has_verified_factor(USER_ID) is True
+
+    async def test_list_response_with_only_unverified_is_false(self):
+        url_patch, key_patch = _supabase_admin()
+        with (
+            url_patch,
+            key_patch,
+            patch(
+                "httpx.AsyncClient.get",
+                new=AsyncMock(
+                    return_value=_FakeResponse(
+                        200, [{"status": "unverified", "factor_type": "totp"}]
+                    )
+                ),
+            ),
+        ):
+            assert await mfa.has_verified_factor(USER_ID) is False
+
+    async def test_object_factors_response_still_supported(self):
+        url_patch, key_patch = _supabase_admin()
+        with (
+            url_patch,
+            key_patch,
+            patch(
+                "httpx.AsyncClient.get",
+                new=AsyncMock(
+                    return_value=_FakeResponse(
+                        200, {"factors": [{"status": "verified"}]}
+                    )
+                ),
+            ),
+        ):
+            assert await mfa.has_verified_factor(USER_ID) is True
+
+    async def test_list_with_malformed_entries_does_not_crash(self):
+        url_patch, key_patch = _supabase_admin()
+        with (
+            url_patch,
+            key_patch,
+            patch(
+                "httpx.AsyncClient.get",
+                new=AsyncMock(
+                    return_value=_FakeResponse(
+                        200,
+                        [{"status": "verified"}, "garbage", 7, None],
+                    )
+                ),
+            ),
+        ):
+            assert await mfa.has_verified_factor(USER_ID) is True
+
+    async def test_list_of_non_dict_entries_is_false(self):
+        url_patch, key_patch = _supabase_admin()
+        with (
+            url_patch,
+            key_patch,
+            patch(
+                "httpx.AsyncClient.get",
+                new=AsyncMock(return_value=_FakeResponse(200, ["garbage", 7])),
+            ),
+        ):
+            assert await mfa.has_verified_factor(USER_ID) is False
+
+    @pytest.mark.parametrize(
+        "body",
+        [
+            42,
+            "unexpected",
+            {},
+            {"error": "boom"},
+            {"factors": None},
+            {"factors": "not-a-list"},
+        ],
+    )
+    async def test_unexpected_body_shape_raises_mfa_state_unavailable(self, body):
+        url_patch, key_patch = _supabase_admin()
+        with (
+            url_patch,
+            key_patch,
+            patch(
+                "httpx.AsyncClient.get",
+                new=AsyncMock(return_value=_FakeResponse(200, body)),
+            ),
+        ):
+            with pytest.raises(mfa.MfaStateUnavailable):
+                await mfa.has_verified_factor(USER_ID)
+
+        assert USER_ID not in mfa._cache
 
     async def test_http_404_raises_mfa_state_unavailable(self):
         url_patch, key_patch = _supabase_admin()
