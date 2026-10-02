@@ -129,6 +129,17 @@ export default function SettingsScreen() {
             <Text style={styles.rowText}>Change Password</Text>
             <Text style={styles.arrow}>{"\u2192"}</Text>
           </TouchableOpacity>
+          <TouchableOpacity
+            style={styles.row}
+            activeOpacity={0.6}
+            onPress={() => router.push("/(me)/security")}
+            accessibilityRole="button"
+            accessibilityLabel="Security"
+            testID="settings-security-row"
+          >
+            <Text style={styles.rowText}>Security</Text>
+            <Text style={styles.arrow}>{"\u2192"}</Text>
+          </TouchableOpacity>
         </View>
 
         <View style={styles.section}>

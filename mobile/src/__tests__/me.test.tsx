@@ -254,6 +254,17 @@ describe("SettingsScreen", () => {
     expect(screen.getByText("Preferences")).toBeTruthy();
   });
 
+  it("Security row navigates to /(me)/security", async () => {
+    mockPush.mockClear();
+    await act(async () => {
+      render(<SettingsScreen />);
+    });
+    await act(async () => {
+      fireEvent.press(screen.getByTestId("settings-security-row"));
+    });
+    expect(mockPush).toHaveBeenCalledWith("/(me)/security");
+  });
+
   it("Notifications row is not Coming soon", async () => {
     await act(async () => {
       render(<SettingsScreen />);
