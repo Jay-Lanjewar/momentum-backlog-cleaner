@@ -17,7 +17,7 @@ from app.domain.schemas import (
     StudentProfileResponse,
     StudyStreakResponse,
 )
-from app.services.auth_service import AuthService
+from app.services.auth_service import AuthService, SupabaseTimeoutError
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/auth", tags=["auth"])
@@ -44,6 +44,19 @@ async def signup(
             access_token=result["access_token"],
             refresh_token=result["refresh_token"],
             user=UserResponse.model_validate(user),
+        )
+    except SupabaseTimeoutError:
+        # Signup outcome is unknown or the account may already exist.
+        # Never leak exception details; the student can safely retry.
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail={
+                "code": "signup_unavailable",
+                "message": (
+                    "We couldn't finish setting up your account. "
+                    "Please try again in a moment."
+                ),
+            },
         )
     except ValueError as e:
         msg = str(e).lower()

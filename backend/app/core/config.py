@@ -20,6 +20,8 @@ class Settings(BaseSettings):
     SUPABASE_ANON_KEY: str | None = None
     SUPABASE_SERVICE_KEY: str | None = None
 
+    SUPABASE_TIMEOUT_SECONDS: int = 15
+
     MFA_STATE_CACHE_TTL_SECONDS: int = 30
     MFA_NEGATIVE_STATE_CACHE_TTL_SECONDS: int = 5
 

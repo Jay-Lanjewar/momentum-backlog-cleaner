@@ -12,6 +12,10 @@ from app.domain.models import User, StudyStreak
 logger = logging.getLogger(__name__)
 
 
+class SupabaseTimeoutError(Exception):
+    """A Supabase Auth request timed out; the outcome may be ambiguous."""
+
+
 class AuthService:
     def __init__(self, db: AsyncSession):
         self.db = db
@@ -30,12 +34,22 @@ class AuthService:
         }
 
         logger.info("Calling Supabase Auth URL: %s", url)
-        
-        async with httpx.AsyncClient() as client:
-            if method == "POST":
-                resp = await client.post(url, json=body, headers=headers)
-            else:
-                resp = await client.get(url, headers=headers, params=body)
+
+        timeout = httpx.Timeout(
+            settings.SUPABASE_TIMEOUT_SECONDS,
+            connect=5.0,
+        )
+        async with httpx.AsyncClient(timeout=timeout) as client:
+            try:
+                if method == "POST":
+                    resp = await client.post(url, json=body, headers=headers)
+                else:
+                    resp = await client.get(url, headers=headers, params=body)
+            except httpx.TimeoutException as exc:
+                logger.warning("Supabase Auth request timed out: %s %s", method, path)
+                raise SupabaseTimeoutError(
+                    f"Supabase Auth request timed out: {path}"
+                ) from exc
 
             if resp.status_code >= 400:
                 error_detail = resp.json().get("error_description") or resp.json().get("msg") or resp.text
@@ -87,15 +101,21 @@ class AuthService:
         if email_redirect_to:
             # Preserves the app deep link in the verification email.
             body["email_redirect_to"] = email_redirect_to
-        result = await self._supabase_request(
-            "signup",
-            body,
-            use_service_key=True,
-        )
+        try:
+            result = await self._supabase_request(
+                "signup",
+                body,
+                use_service_key=True,
+            )
+        except SupabaseTimeoutError:
+            # The POST may have succeeded upstream even though we never saw the
+            # response (the confirmation email may already be on its way).
+            # Probe read-only; never blind-retry the POST.
+            return await self._resolve_signup_timeout(email, name)
 
         supabase_user = result.get("user") or result
         supabase_id = supabase_user.get("id")
-        supabase_email = supabase_user.get("email", email)
+        supabase_email = supabase_user.get("email") or email
 
         if not supabase_id:
             raise ValueError(f"Supabase signup returned no user id. Response: {result}")
@@ -118,11 +138,59 @@ class AuthService:
                     "refresh_token": "",
                 }
             raise
+        except SupabaseTimeoutError:
+            # The account exists (the signup POST succeeded); only the login
+            # response was lost. Mirror the email-confirmation path instead of
+            # reporting a failure that did not happen.
+            return {
+                "user": user,
+                "access_token": "",
+                "refresh_token": "",
+            }
 
         return {
             "user": user,
             "access_token": token_result.get("access_token", ""),
             "refresh_token": token_result.get("refresh_token", ""),
+        }
+
+    async def _resolve_signup_timeout(self, email: str, name: str | None) -> dict:
+        """Resolve an ambiguous signup timeout with a read-only probe.
+
+        Never retries the original POST /signup.  Outcomes:
+        - account exists and is unconfirmed -> signup succeeded, awaiting
+          verification (same empty-token result as the email-confirmation path)
+        - account exists and is confirmed -> the existing account-exists
+          ValueError so the current 409 UX is preserved
+        - probe fails or the user cannot be found -> SupabaseTimeoutError;
+          we do not claim the account was created
+        """
+        try:
+            existing = await self.get_user_by_email(email)
+        except (ValueError, SupabaseTimeoutError, httpx.HTTPError):
+            raise SupabaseTimeoutError(
+                "Signup outcome could not be determined"
+            ) from None
+
+        if not existing or not existing.get("id"):
+            # Not found (possibly still processing) or unusable result:
+            # inconclusive. Do not claim success or failure beyond this.
+            raise SupabaseTimeoutError(
+                "Signup outcome could not be determined"
+            )
+
+        if existing.get("email_confirmed_at") or existing.get("confirmed_at"):
+            # Verified duplicate: surface the same error the existing-account
+            # flow raises so the route maps it to the usual 409 account_exists.
+            raise ValueError("User already registered")
+
+        user = await self._get_or_create_user(
+            existing.get("id"), existing.get("email") or email, name
+        )
+        return {
+            "user": user,
+            "access_token": "",
+            "refresh_token": "",
         }
 
     async def login(self, email: str, password: str) -> dict:

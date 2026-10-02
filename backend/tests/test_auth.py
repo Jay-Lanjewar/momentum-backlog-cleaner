@@ -2,14 +2,16 @@ import uuid
 from datetime import datetime, timezone
 from unittest.mock import AsyncMock, patch
 
+import httpx
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from app.api.v1 import router as v1_router
 from app.api.v1.auth import get_auth_service
+from app.core.config import settings
 from app.domain.models import User
-from app.services.auth_service import AuthService
+from app.services.auth_service import AuthService, SupabaseTimeoutError
 
 USER_ID = uuid.UUID("00000000-0000-0000-0000-000000000001")
 EMAIL = "student@example.com"
@@ -360,3 +362,245 @@ class TestAuthService:
             new=AsyncMock(return_value={"users": [{"email": "other@example.com", "email_confirmed_at": "2026-01-01T00:00:00Z"}]}),
         ):
             assert await service.is_email_verified(EMAIL) is False
+
+
+# ─── Supabase timeout resilience ───
+
+
+def _timeout_error() -> SupabaseTimeoutError:
+    return SupabaseTimeoutError("Supabase Auth request timed out: signup")
+
+
+class _StubOkResponse:
+    status_code = 200
+    text = "{}"
+
+    def json(self):
+        return {"access_token": "tok", "refresh_token": "ref"}
+
+
+class TestSupabaseTimeoutConfig:
+    def test_default_timeout_is_15_seconds(self):
+        assert settings.SUPABASE_TIMEOUT_SECONDS == 15
+
+    async def test_configured_timeout_is_passed_to_httpx_client(self):
+        captured: dict = {}
+
+        class _StubAsyncClient:
+            def __init__(self, *args, **kwargs):
+                captured.update(kwargs)
+
+            async def __aenter__(self):
+                return self
+
+            async def __aexit__(self, *exc):
+                return False
+
+            async def post(self, url, json=None, headers=None):
+                return _StubOkResponse()
+
+            async def get(self, url, headers=None, params=None):
+                return _StubOkResponse()
+
+        service = AuthService(db=AsyncMock())
+        with patch.object(settings, "SUPABASE_URL", "https://project.supabase.co"), \
+                patch.object(settings, "SUPABASE_ANON_KEY", "anon-key"), \
+                patch.object(settings, "SUPABASE_TIMEOUT_SECONDS", 22), \
+                patch("httpx.AsyncClient", _StubAsyncClient):
+            result = await service._supabase_request(
+                "token?grant_type=password",
+                {"email": EMAIL, "password": "password123"},
+            )
+
+        timeout = captured.get("timeout")
+        assert isinstance(timeout, httpx.Timeout)
+        assert timeout.read == 22.0
+        assert timeout.write == 22.0
+        assert timeout.pool == 22.0
+        assert timeout.connect == 5.0
+        assert result["access_token"] == "tok"
+
+    async def test_connect_timeout_stays_at_five_seconds(self):
+        captured: dict = {}
+
+        class _StubAsyncClient:
+            def __init__(self, *args, **kwargs):
+                captured.update(kwargs)
+
+            async def __aenter__(self):
+                return self
+
+            async def __aexit__(self, *exc):
+                return False
+
+            async def post(self, url, json=None, headers=None):
+                return _StubOkResponse()
+
+            async def get(self, url, headers=None, params=None):
+                return _StubOkResponse()
+
+        service = AuthService(db=AsyncMock())
+        with patch.object(settings, "SUPABASE_URL", "https://project.supabase.co"), \
+                patch.object(settings, "SUPABASE_ANON_KEY", "anon-key"), \
+                patch("httpx.AsyncClient", _StubAsyncClient):
+            await service._supabase_request("signup", {"email": EMAIL})
+
+        timeout = captured.get("timeout")
+        assert isinstance(timeout, httpx.Timeout)
+        assert timeout.read == float(settings.SUPABASE_TIMEOUT_SECONDS)
+        assert timeout.connect == 5.0
+
+
+class TestSignupTimeoutProbe:
+    async def test_probe_unconfirmed_returns_empty_tokens_and_never_retries_signup(self):
+        service = AuthService(db=AsyncMock())
+        probe_user = {"id": str(USER_ID), "email": EMAIL, "email_confirmed_at": None}
+        with patch.object(
+            AuthService,
+            "_supabase_request",
+            new=AsyncMock(side_effect=[_timeout_error(), {"users": [probe_user]}]),
+        ) as mock_request, patch.object(
+            AuthService,
+            "_get_or_create_user",
+            new=AsyncMock(return_value=make_user()),
+        ) as mock_create:
+            result = await service.signup(EMAIL, "password123", "Student")
+
+        assert result["access_token"] == ""
+        assert result["refresh_token"] == ""
+        assert result["user"].email == EMAIL
+        paths = [call.args[0] for call in mock_request.call_args_list]
+        assert paths.count("signup") == 1
+        assert paths.count("admin/users") == 1
+        mock_create.assert_awaited_once()
+
+    async def test_probe_confirmed_raises_account_exists_value_error(self):
+        service = AuthService(db=AsyncMock())
+        confirmed = {
+            "id": str(USER_ID),
+            "email": EMAIL,
+            "email_confirmed_at": "2026-01-01T00:00:00Z",
+        }
+        with patch.object(
+            AuthService,
+            "_supabase_request",
+            new=AsyncMock(side_effect=[_timeout_error(), {"users": [confirmed]}]),
+        ) as mock_request, patch.object(
+            AuthService, "_get_or_create_user", new=AsyncMock()
+        ) as mock_create:
+            with pytest.raises(ValueError, match="already registered"):
+                await service.signup(EMAIL, "password123", "Student")
+
+        assert [c.args[0] for c in mock_request.call_args_list].count("signup") == 1
+        mock_create.assert_not_awaited()
+
+    async def test_probe_failure_raises_typed_timeout_without_leaking_details(self):
+        service = AuthService(db=AsyncMock())
+        with patch.object(
+            AuthService,
+            "_supabase_request",
+            new=AsyncMock(side_effect=[_timeout_error(), ValueError("admin lookup failed")]),
+        ):
+            with pytest.raises(SupabaseTimeoutError) as excinfo:
+                await service.signup(EMAIL, "password123", "Student")
+
+        assert "admin lookup failed" not in str(excinfo.value)
+
+    async def test_probe_no_user_raises_typed_timeout_without_retrying_signup(self):
+        service = AuthService(db=AsyncMock())
+        with patch.object(
+            AuthService,
+            "_supabase_request",
+            new=AsyncMock(side_effect=[_timeout_error(), {"users": []}]),
+        ) as mock_request:
+            with pytest.raises(SupabaseTimeoutError):
+                await service.signup(EMAIL, "password123", "Student")
+
+        assert [c.args[0] for c in mock_request.call_args_list].count("signup") == 1
+
+    async def test_token_grant_timeout_returns_empty_tokens_without_retry(self):
+        service = AuthService(db=AsyncMock())
+        created = {"user": {"id": str(USER_ID), "email": EMAIL}}
+        with patch.object(
+            AuthService,
+            "_supabase_request",
+            new=AsyncMock(side_effect=[created, _timeout_error()]),
+        ) as mock_request, patch.object(
+            AuthService,
+            "_get_or_create_user",
+            new=AsyncMock(return_value=make_user()),
+        ):
+            result = await service.signup(EMAIL, "password123", "Student")
+
+        assert result["access_token"] == ""
+        assert result["refresh_token"] == ""
+        assert result["user"].email == EMAIL
+        paths = [call.args[0] for call in mock_request.call_args_list]
+        assert paths.count("signup") == 1
+        assert paths.count("token?grant_type=password") == 1
+
+
+class TestSignupTimeoutRoute:
+    def test_confirmed_account_after_timeout_maps_to_409_account_exists(self, app):
+        service = AuthService(db=AsyncMock())
+        confirmed = {
+            "id": str(USER_ID),
+            "email": EMAIL,
+            "email_confirmed_at": "2026-01-01T00:00:00Z",
+        }
+        with patch.object(
+            AuthService,
+            "_supabase_request",
+            new=AsyncMock(
+                side_effect=[
+                    _timeout_error(),          # signup POST times out
+                    {"users": [confirmed]},    # service probe: confirmed -> ValueError
+                    {"users": [confirmed]},    # route is_email_verified probe
+                ]
+            ),
+        ):
+            app.dependency_overrides[get_auth_service] = lambda: service
+            client = TestClient(app)
+            resp = _post_signup(client)
+            app.dependency_overrides.clear()
+
+        assert resp.status_code == 409
+        assert resp.json()["detail"]["code"] == "account_exists"
+
+    def test_probe_failure_maps_to_503_signup_unavailable(self, app):
+        service = AuthService(db=AsyncMock())
+        with patch.object(
+            AuthService,
+            "_supabase_request",
+            new=AsyncMock(side_effect=[_timeout_error(), ValueError("admin lookup failed")]),
+        ) as mock_request:
+            app.dependency_overrides[get_auth_service] = lambda: service
+            client = TestClient(app)
+            resp = _post_signup(client)
+            app.dependency_overrides.clear()
+
+        assert resp.status_code == 503
+        detail = resp.json()["detail"]
+        assert detail["code"] == "signup_unavailable"
+        assert "try again" in detail["message"].lower()
+        body = resp.text
+        assert "timed out" not in body.lower()
+        assert "admin lookup failed" not in body
+        assert "SupabaseTimeout" not in body
+        assert "Signup outcome could not be determined" not in body
+        assert [c.args[0] for c in mock_request.call_args_list].count("signup") == 1
+
+    def test_probe_no_user_maps_to_503_signup_unavailable(self, app):
+        service = AuthService(db=AsyncMock())
+        with patch.object(
+            AuthService,
+            "_supabase_request",
+            new=AsyncMock(side_effect=[_timeout_error(), {"users": []}]),
+        ):
+            app.dependency_overrides[get_auth_service] = lambda: service
+            client = TestClient(app)
+            resp = _post_signup(client)
+            app.dependency_overrides.clear()
+
+        assert resp.status_code == 503
+        assert resp.json()["detail"]["code"] == "signup_unavailable"
