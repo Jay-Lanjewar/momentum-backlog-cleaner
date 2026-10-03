@@ -9,10 +9,10 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
-import { useRouter } from "expo-router";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { SvgXml } from "react-native-svg";
 
+import { MeHeader } from "@/components/MeHeader";
 import { supabase } from "@/lib/supabase";
 import {
   formatSecret,
@@ -43,7 +43,6 @@ type EnrollDraft = {
 };
 
 export default function SecurityScreen() {
-  const router = useRouter();
   const [phase, setPhase] = useState<Phase>("loading");
   const [verified, setVerified] = useState<TotpFactor | null>(null);
   const [draft, setDraft] = useState<EnrollDraft | null>(null);
@@ -322,19 +321,7 @@ export default function SecurityScreen() {
         contentContainerStyle={styles.scroll}
         keyboardShouldPersistTaps="handled"
       >
-        <View style={styles.headerRow}>
-          <TouchableOpacity
-            onPress={() => router.back()}
-            activeOpacity={0.6}
-            accessibilityRole="button"
-            accessibilityLabel="Go back"
-            testID="security-back"
-          >
-            <Text style={styles.backArrow}>{"\u2190"}</Text>
-          </TouchableOpacity>
-          <Text style={styles.header}>Security</Text>
-          <View style={{ width: 24 }} />
-        </View>
+        <MeHeader screen="security" title="Security" />
 
         {phase === "loading" || phase === "off" ? renderError(false) : null}
 
@@ -550,23 +537,6 @@ const styles = StyleSheet.create({
   scroll: {
     paddingHorizontal: 20,
     paddingBottom: 40,
-  },
-  headerRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    paddingTop: 16,
-    paddingBottom: 20,
-  },
-  backArrow: {
-    color: "#2563EB",
-    fontSize: 22,
-    fontWeight: "600",
-  },
-  header: {
-    color: "#F8FAFC",
-    fontSize: 26,
-    fontWeight: "700",
   },
   loadingBox: {
     alignItems: "center",

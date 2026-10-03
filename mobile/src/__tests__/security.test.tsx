@@ -2,7 +2,7 @@
  * Settings > Security — Stage 1 optional 2-step authentication (TOTP).
  *
  * Verifies:
- * 1. Navigation registration (Me stack + Settings row)
+ * 1. Navigation registration (Me stack + Settings row + shared MeHeader)
  * 2. Off state: explainer copy + Enable CTA
  * 3. Enrollment → QR shown, manual setup key hidden until deliberately
  *    revealed, raw otpauth URI never rendered, never marked On before verify
@@ -225,6 +225,14 @@ describe("Security screen when no factor exists", () => {
     ).toBeTruthy();
     expect(screen.getByTestId("security-enable")).toBeTruthy();
     expect(screen.queryByTestId("security-qr")).toBeNull();
+  });
+
+  it("shared header back button calls router.back", async () => {
+    await renderScreen();
+    await act(async () => {
+      fireEvent.press(screen.getByTestId("security-back"));
+    });
+    expect(mockBack).toHaveBeenCalledTimes(1);
   });
 });
 

@@ -1,6 +1,7 @@
 import { View, Text, ScrollView, StyleSheet } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
+import { MeHeader } from "@/components/MeHeader";
 import { useBalanceScore, useStreaks, useDashboard } from "@/services/hooks";
 
 export default function HealthScreen() {
@@ -17,11 +18,7 @@ export default function HealthScreen() {
   return (
     <SafeAreaView style={styles.container} edges={["bottom"]}>
       <ScrollView contentContainerStyle={styles.scroll}>
-        <View style={styles.headerRow}>
-          <View style={{ width: 24 }} />
-          <Text style={styles.header}>Health</Text>
-          <Text style={{ width: 24 }} />
-        </View>
+        <MeHeader screen="health" title="Health" />
 
         <View style={styles.scoreCard}>
           <Text style={styles.scoreLabel}>Study Balance</Text>
@@ -110,18 +107,6 @@ const styles = StyleSheet.create({
   scroll: {
     paddingHorizontal: 20,
     paddingBottom: 40,
-  },
-  headerRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    paddingTop: 16,
-    paddingBottom: 20,
-  },
-  header: {
-    color: "#F8FAFC",
-    fontSize: 26,
-    fontWeight: "700",
   },
   scoreCard: {
     backgroundColor: "#1E293B",

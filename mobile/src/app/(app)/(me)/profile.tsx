@@ -9,16 +9,15 @@ import {
   Alert,
   ActivityIndicator,
 } from "react-native";
-import { useRouter } from "expo-router";
 import { SafeAreaView } from "react-native-safe-area-context";
 
+import { MeHeader } from "@/components/MeHeader";
 import { useProfile, useSaveProfile } from "@/services/hooks";
 import type { ProfileUpdatePayload, SleepTime, StudyWindow } from "@/services/types";
 
 const ENERGY_OPTIONS = ["morning", "afternoon", "evening", "night"];
 
 export default function ProfileEditScreen() {
-  const router = useRouter();
   const { data: profile, isLoading } = useProfile();
   const saveProfile = useSaveProfile();
 
@@ -91,17 +90,7 @@ export default function ProfileEditScreen() {
   return (
     <SafeAreaView style={styles.container} edges={["bottom"]}>
       <ScrollView contentContainerStyle={styles.scroll}>
-        <View style={styles.headerRow}>
-          <TouchableOpacity onPress={() => router.back()} activeOpacity={0.6}>
-            <Text style={styles.backArrow}>{"\u2190"}</Text>
-          </TouchableOpacity>
-          <Text style={styles.header}>Profile</Text>
-          <TouchableOpacity onPress={handleSave} activeOpacity={0.6}>
-            <Text style={styles.saveButton}>
-              {saveProfile.isPending ? "Saving..." : "Save"}
-            </Text>
-          </TouchableOpacity>
-        </View>
+        <MeHeader screen="profile" title="Profile" />
 
         <View style={styles.section}>
           <Text style={styles.sectionHeader}>Personal Info</Text>
@@ -259,28 +248,6 @@ const styles = StyleSheet.create({
   scroll: {
     paddingHorizontal: 20,
     paddingBottom: 40,
-  },
-  headerRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    paddingTop: 16,
-    paddingBottom: 20,
-  },
-  backArrow: {
-    color: "#2563EB",
-    fontSize: 22,
-    fontWeight: "600",
-  },
-  header: {
-    color: "#F8FAFC",
-    fontSize: 26,
-    fontWeight: "700",
-  },
-  saveButton: {
-    color: "#2563EB",
-    fontSize: 16,
-    fontWeight: "600",
   },
   section: {
     marginBottom: 24,

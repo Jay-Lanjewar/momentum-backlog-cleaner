@@ -1,13 +1,12 @@
-import { View, Text, TouchableOpacity, ScrollView, StyleSheet } from "react-native";
-import { useRouter } from "expo-router";
+import { View, Text, ScrollView, StyleSheet } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
+import { MeHeader } from "@/components/MeHeader";
 import { useStreaks } from "@/services/hooks";
 
 const MILESTONES = [3, 7, 14, 30, 100, 365];
 
 export default function StreaksScreen() {
-  const router = useRouter();
   const { data: streaks } = useStreaks();
 
   const momentum = streaks?.momentum;
@@ -22,13 +21,7 @@ export default function StreaksScreen() {
   return (
     <SafeAreaView style={styles.container} edges={["bottom"]}>
       <ScrollView contentContainerStyle={styles.scroll}>
-        <View style={styles.headerRow}>
-          <View style={{ width: 24 }} />
-          <Text style={styles.header}>Streaks</Text>
-          <TouchableOpacity onPress={() => router.back()} activeOpacity={0.6}>
-            <Text style={styles.backText}>{"\u2192"}</Text>
-          </TouchableOpacity>
-        </View>
+        <MeHeader screen="streaks" title="Streaks" />
 
         <View style={styles.statsRow}>
           <View style={styles.statCard}>
@@ -116,22 +109,6 @@ const styles = StyleSheet.create({
   scroll: {
     paddingHorizontal: 20,
     paddingBottom: 40,
-  },
-  headerRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    paddingTop: 16,
-    paddingBottom: 20,
-  },
-  backText: {
-    color: "#64748B",
-    fontSize: 22,
-  },
-  header: {
-    color: "#F8FAFC",
-    fontSize: 26,
-    fontWeight: "700",
   },
   statsRow: {
     flexDirection: "row",

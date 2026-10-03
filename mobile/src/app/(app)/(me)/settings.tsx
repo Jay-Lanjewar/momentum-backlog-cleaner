@@ -3,6 +3,7 @@ import { View, Text, TouchableOpacity, StyleSheet, Alert, ScrollView, Linking } 
 import { useRouter } from "expo-router";
 import { SafeAreaView } from "react-native-safe-area-context";
 
+import { MeHeader } from "@/components/MeHeader";
 import { supabase } from "@/lib/supabase";
 import { useAuthStore } from "@/store/useAuthStore";
 import {
@@ -103,13 +104,7 @@ export default function SettingsScreen() {
   return (
     <SafeAreaView style={styles.container} edges={["bottom"]}>
       <ScrollView contentContainerStyle={styles.scroll}>
-        <View style={styles.headerRow}>
-          <TouchableOpacity onPress={() => router.back()} activeOpacity={0.6}>
-            <Text style={styles.backArrow}>{"\u2190"}</Text>
-          </TouchableOpacity>
-          <Text style={styles.header}>Settings</Text>
-          <View style={{ width: 24 }} />
-        </View>
+        <MeHeader screen="settings" title="Settings" />
 
         <View style={styles.profileSection}>
           <View style={styles.avatar}>
@@ -196,23 +191,6 @@ const styles = StyleSheet.create({
   scroll: {
     paddingHorizontal: 20,
     paddingBottom: 40,
-  },
-  headerRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    paddingTop: 16,
-    paddingBottom: 20,
-  },
-  backArrow: {
-    color: "#2563EB",
-    fontSize: 22,
-    fontWeight: "600",
-  },
-  header: {
-    color: "#F8FAFC",
-    fontSize: 26,
-    fontWeight: "700",
   },
   profileSection: {
     flexDirection: "row",

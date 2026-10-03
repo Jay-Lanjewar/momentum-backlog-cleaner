@@ -8,8 +8,12 @@
  * 4. Health screen renders balance data
  * 5. Profile hooks are exported
  * 6. useSaveProfile invalidates correct caches
+ * 7. Shared MeHeader: every Me subsection screen renders it and its
+ *    back button calls router.back()
  */
 
+import * as fs from "fs";
+import * as path from "path";
 import { Linking } from "react-native";
 import { render, screen, act, fireEvent, waitFor } from "@testing-library/react-native";
 
@@ -19,10 +23,11 @@ jest.mock("react-native-safe-area-context", () => ({
 }));
 
 const mockPush = jest.fn();
+const mockBack = jest.fn();
 jest.mock("expo-router", () => ({
   useRouter: () => ({
     push: mockPush,
-    back: jest.fn(),
+    back: mockBack,
     replace: jest.fn(),
   }),
 }));
@@ -265,6 +270,15 @@ describe("SettingsScreen", () => {
     expect(mockPush).toHaveBeenCalledWith("/(me)/security");
   });
 
+  it("shared header back button calls router.back", async () => {
+    mockBack.mockClear();
+    await act(async () => {
+      render(<SettingsScreen />);
+    });
+    fireEvent.press(screen.getByTestId("settings-back"));
+    expect(mockBack).toHaveBeenCalledTimes(1);
+  });
+
   it("Notifications row is not Coming soon", async () => {
     await act(async () => {
       render(<SettingsScreen />);
@@ -442,17 +456,21 @@ describe("ProfileEditScreen", () => {
   });
 
   it("back button calls router.back", async () => {
-    const mockBack = jest.fn();
-    jest.spyOn(require("expo-router"), "useRouter").mockReturnValue({
-      push: mockPush,
-      back: mockBack,
-      replace: jest.fn(),
-    });
+    mockBack.mockClear();
     await act(async () => {
       render(<ProfileEditScreen />);
     });
     fireEvent.press(screen.getByText("\u2190"));
     expect(mockBack).toHaveBeenCalled();
+  });
+
+  it("shared header back button testID calls router.back", async () => {
+    mockBack.mockClear();
+    await act(async () => {
+      render(<ProfileEditScreen />);
+    });
+    fireEvent.press(screen.getByTestId("profile-back"));
+    expect(mockBack).toHaveBeenCalledTimes(1);
   });
 });
 
@@ -500,6 +518,23 @@ describe("StreaksScreen", () => {
     expect(screen.getByText("14d")).toBeTruthy();
     expect(screen.getByText("30d")).toBeTruthy();
   });
+
+  it("shows the standard left-pointing back control, not a right arrow", async () => {
+    await act(async () => {
+      render(<StreaksScreen />);
+    });
+    expect(screen.getByText("\u2190")).toBeTruthy();
+    expect(screen.queryByText("\u2192")).toBeNull();
+  });
+
+  it("shared header back button calls router.back", async () => {
+    mockBack.mockClear();
+    await act(async () => {
+      render(<StreaksScreen />);
+    });
+    fireEvent.press(screen.getByTestId("streaks-back"));
+    expect(mockBack).toHaveBeenCalledTimes(1);
+  });
 });
 
 // ─── Health Screen ───
@@ -532,6 +567,22 @@ describe("HealthScreen", () => {
     expect(screen.getByText("8")).toBeTruthy();
     expect(screen.getByText("1")).toBeTruthy();
   });
+
+  it("renders the standard left-pointing back control", async () => {
+    await act(async () => {
+      render(<HealthScreen />);
+    });
+    expect(screen.getByText("\u2190")).toBeTruthy();
+  });
+
+  it("shared header back button calls router.back", async () => {
+    mockBack.mockClear();
+    await act(async () => {
+      render(<HealthScreen />);
+    });
+    fireEvent.press(screen.getByTestId("health-back"));
+    expect(mockBack).toHaveBeenCalledTimes(1);
+  });
 });
 
 // ─── Hook exports ───
@@ -562,5 +613,45 @@ describe("useSaveProfile invalidation", () => {
   it("useSaveProfile is exported and returns mutation object", () => {
     const { useSaveProfile } = require("@/services/hooks");
     expect(typeof useSaveProfile).toBe("function");
+  });
+});
+
+// ─── Shared MeHeader structure ───
+
+describe("Me header consistency", () => {
+  const SRC = path.resolve(__dirname, "..");
+  const ME = path.join(SRC, "app/(app)/(me)");
+  const sharedHeaderScreens: [string, string][] = [
+    ["settings", "Settings"],
+    ["profile", "Profile"],
+    ["security", "Security"],
+    ["streaks", "Streaks"],
+    ["health", "Health"],
+  ];
+
+  it.each(sharedHeaderScreens)(
+    "%s.tsx renders the shared MeHeader with title %s",
+    (screenName, title) => {
+      const content = fs.readFileSync(
+        path.join(ME, `${screenName}.tsx`),
+        "utf-8",
+      );
+      expect(content).toContain("MeHeader");
+      expect(content).toContain(`screen="${screenName}"`);
+      expect(content).toContain(`title="${title}"`);
+      expect(content).not.toContain("backArrow");
+      expect(content).not.toContain("backText");
+    },
+  );
+
+  it("streaks.tsx no longer renders a right-pointing back arrow", () => {
+    const content = fs.readFileSync(path.join(ME, "streaks.tsx"), "utf-8");
+    expect(content).not.toContain("\u2192");
+  });
+
+  it("Me root index.tsx keeps its own header and does not use MeHeader", () => {
+    const content = fs.readFileSync(path.join(ME, "index.tsx"), "utf-8");
+    expect(content).not.toContain("MeHeader");
+    expect(content).toContain("styles.header");
   });
 });
