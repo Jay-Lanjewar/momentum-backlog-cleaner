@@ -8,14 +8,22 @@ import {
   StyleSheet,
   Alert,
   ActivityIndicator,
+  KeyboardAvoidingView,
+  Platform,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+import DateTimePicker, {
+  type DateTimePickerEvent,
+} from "@react-native-community/datetimepicker";
 
 import { MeHeader } from "@/components/MeHeader";
 import { useProfile, useSaveProfile } from "@/services/hooks";
 import type { ProfileUpdatePayload, SleepTime, StudyWindow } from "@/services/types";
+import { dateToTime, formatTime12h, timeToDate } from "@/lib/schedule";
 
 const ENERGY_OPTIONS = ["morning", "afternoon", "evening", "night"];
+
+type PickerKey = "sleep-start" | "sleep-end" | "study-start" | "study-end";
 
 export default function ProfileEditScreen() {
   const { data: profile, isLoading } = useProfile();
@@ -30,6 +38,30 @@ export default function ProfileEditScreen() {
   const [sleepEnd, setSleepEnd] = useState("");
   const [studyStart, setStudyStart] = useState("");
   const [studyEnd, setStudyEnd] = useState("");
+  const [picker, setPicker] = useState<PickerKey | null>(null);
+
+  const timeValues: Record<PickerKey, string> = {
+    "sleep-start": sleepStart,
+    "sleep-end": sleepEnd,
+    "study-start": studyStart,
+    "study-end": studyEnd,
+  };
+  const timeSetters: Record<PickerKey, (value: string) => void> = {
+    "sleep-start": setSleepStart,
+    "sleep-end": setSleepEnd,
+    "study-start": setStudyStart,
+    "study-end": setStudyEnd,
+  };
+
+  function handleTimeChange(
+    key: PickerKey,
+    _event: DateTimePickerEvent,
+    selectedDate?: Date,
+  ) {
+    if (Platform.OS === "android") setPicker(null);
+    if (!selectedDate) return;
+    timeSetters[key](dateToTime(selectedDate));
+  }
 
   /* eslint-disable react-hooks/set-state-in-effect */
   useEffect(() => {
@@ -77,6 +109,61 @@ export default function ProfileEditScreen() {
     }
   }
 
+  function renderTimeField(
+    label: string,
+    key: PickerKey,
+    placeholder: string,
+    accessibilityLabel: string,
+  ) {
+    const value = timeValues[key];
+    const display = value ? formatTime12h(value) : "Not set";
+    const testID = `profile-${key}`;
+
+    if (Platform.OS === "web") {
+      return (
+        <View style={styles.timeField}>
+          <Text style={styles.timeLabel}>{label}</Text>
+          <TextInput
+            style={styles.timeInput}
+            value={value}
+            onChangeText={timeSetters[key]}
+            placeholder={placeholder}
+            placeholderTextColor="#64748B"
+            testID={testID}
+          />
+        </View>
+      );
+    }
+
+    return (
+      <View style={styles.timeField}>
+        <Text style={styles.timeLabel}>{label}</Text>
+        <TouchableOpacity
+          style={styles.timeBtn}
+          onPress={() => setPicker(picker === key ? null : key)}
+          activeOpacity={0.7}
+          accessibilityRole="button"
+          accessibilityLabel={accessibilityLabel}
+          accessibilityValue={{ text: display }}
+          testID={testID}
+        >
+          <Text style={styles.timeBtnText}>{display}</Text>
+          <Text style={styles.timeBtnArrow}>{"\u2192"}</Text>
+        </TouchableOpacity>
+        {picker === key && (
+          <DateTimePicker
+            testID={`${testID}-picker`}
+            value={timeToDate(value)}
+            mode="time"
+            is24Hour={false}
+            display={Platform.OS === "ios" ? "spinner" : "default"}
+            onChange={(event, date) => handleTimeChange(key, event, date)}
+          />
+        )}
+      </View>
+    );
+  }
+
   if (isLoading) {
     return (
       <SafeAreaView style={styles.container} edges={["bottom"]}>
@@ -89,148 +176,130 @@ export default function ProfileEditScreen() {
 
   return (
     <SafeAreaView style={styles.container} edges={["bottom"]}>
-      <ScrollView contentContainerStyle={styles.scroll}>
-        <MeHeader screen="profile" title="Profile" />
-
-        <View style={styles.section}>
-          <Text style={styles.sectionHeader}>Personal Info</Text>
-          <View style={styles.field}>
-            <Text style={styles.label}>Name</Text>
-            <TextInput
-              style={styles.input}
-              value={name}
-              onChangeText={setName}
-              placeholder="Your name"
-              placeholderTextColor="#64748B"
-            />
-          </View>
-          <View style={styles.field}>
-            <Text style={styles.label}>Class</Text>
-            <TextInput
-              style={styles.input}
-              value={className}
-              onChangeText={setClassName}
-              placeholder="e.g. 12th"
-              placeholderTextColor="#64748B"
-            />
-          </View>
-          <View style={styles.field}>
-            <Text style={styles.label}>Board</Text>
-            <TextInput
-              style={styles.input}
-              value={board}
-              onChangeText={setBoard}
-              placeholder="e.g. CBSE"
-              placeholderTextColor="#64748B"
-            />
-          </View>
-        </View>
-
-        <View style={styles.section}>
-          <Text style={styles.sectionHeader}>Study Preferences</Text>
-          <View style={styles.field}>
-            <Text style={styles.label}>Daily Target (minutes)</Text>
-            <TextInput
-              style={styles.input}
-              value={dailyTarget}
-              onChangeText={setDailyTarget}
-              placeholder="180"
-              placeholderTextColor="#64748B"
-              keyboardType="numeric"
-            />
-          </View>
-          <View style={styles.field}>
-            <Text style={styles.label}>Energy Peak</Text>
-            <View style={styles.optionRow}>
-              {ENERGY_OPTIONS.map((opt) => (
-                <TouchableOpacity
-                  key={opt}
-                  style={[
-                    styles.optionChip,
-                    energyPeak === opt && styles.optionChipActive,
-                  ]}
-                  onPress={() => setEnergyPeak(energyPeak === opt ? null : opt)}
-                  activeOpacity={0.6}
-                >
-                  <Text
-                    style={[
-                      styles.optionText,
-                      energyPeak === opt && styles.optionTextActive,
-                    ]}
-                  >
-                    {opt.charAt(0).toUpperCase() + opt.slice(1)}
-                  </Text>
-                </TouchableOpacity>
-              ))}
-            </View>
-          </View>
-        </View>
-
-        <View style={styles.section}>
-          <Text style={styles.sectionHeader}>Schedule</Text>
-          <View style={styles.field}>
-            <Text style={styles.label}>Sleep Schedule</Text>
-            <View style={styles.timeRow}>
-              <View style={styles.timeField}>
-                <Text style={styles.timeLabel}>Start</Text>
-                <TextInput
-                  style={styles.timeInput}
-                  value={sleepStart}
-                  onChangeText={setSleepStart}
-                  placeholder="22:00"
-                  placeholderTextColor="#64748B"
-                />
-              </View>
-              <View style={styles.timeField}>
-                <Text style={styles.timeLabel}>End</Text>
-                <TextInput
-                  style={styles.timeInput}
-                  value={sleepEnd}
-                  onChangeText={setSleepEnd}
-                  placeholder="06:00"
-                  placeholderTextColor="#64748B"
-                />
-              </View>
-            </View>
-          </View>
-          <View style={styles.field}>
-            <Text style={styles.label}>Preferred Study Window</Text>
-            <View style={styles.timeRow}>
-              <View style={styles.timeField}>
-                <Text style={styles.timeLabel}>Earliest Start</Text>
-                <TextInput
-                  style={styles.timeInput}
-                  value={studyStart}
-                  onChangeText={setStudyStart}
-                  placeholder="06:00"
-                  placeholderTextColor="#64748B"
-                />
-              </View>
-              <View style={styles.timeField}>
-                <Text style={styles.timeLabel}>Latest End</Text>
-                <TextInput
-                  style={styles.timeInput}
-                  value={studyEnd}
-                  onChangeText={setStudyEnd}
-                  placeholder="22:00"
-                  placeholderTextColor="#64748B"
-                />
-              </View>
-            </View>
-          </View>
-        </View>
-
-        <TouchableOpacity
-          style={styles.saveButtonFull}
-          onPress={handleSave}
-          activeOpacity={0.8}
-          disabled={saveProfile.isPending}
+      <KeyboardAvoidingView
+        style={styles.flex}
+        behavior={Platform.OS === "ios" ? "padding" : "height"}
+      >
+        <ScrollView
+          contentContainerStyle={styles.scroll}
+          keyboardShouldPersistTaps="handled"
         >
-          <Text style={styles.saveButtonText}>
-            {saveProfile.isPending ? "Saving..." : "Save Changes"}
-          </Text>
-        </TouchableOpacity>
-      </ScrollView>
+          <MeHeader screen="profile" title="Profile" />
+
+          <View style={styles.section}>
+            <Text style={styles.sectionHeader}>Personal Info</Text>
+            <View style={styles.field}>
+              <Text style={styles.label}>Name</Text>
+              <TextInput
+                style={styles.input}
+                value={name}
+                onChangeText={setName}
+                placeholder="Your name"
+                placeholderTextColor="#64748B"
+              />
+            </View>
+            <View style={styles.field}>
+              <Text style={styles.label}>Class</Text>
+              <TextInput
+                style={styles.input}
+                value={className}
+                onChangeText={setClassName}
+                placeholder="e.g. 12th"
+                placeholderTextColor="#64748B"
+              />
+            </View>
+            <View style={styles.field}>
+              <Text style={styles.label}>Board</Text>
+              <TextInput
+                style={styles.input}
+                value={board}
+                onChangeText={setBoard}
+                placeholder="e.g. CBSE"
+                placeholderTextColor="#64748B"
+              />
+            </View>
+          </View>
+
+          <View style={styles.section}>
+            <Text style={styles.sectionHeader}>Study Preferences</Text>
+            <View style={styles.field}>
+              <Text style={styles.label}>Daily Target (minutes)</Text>
+              <TextInput
+                style={styles.input}
+                value={dailyTarget}
+                onChangeText={setDailyTarget}
+                placeholder="180"
+                placeholderTextColor="#64748B"
+                keyboardType="numeric"
+              />
+            </View>
+            <View style={styles.field}>
+              <Text style={styles.label}>Energy Peak</Text>
+              <View style={styles.optionRow}>
+                {ENERGY_OPTIONS.map((opt) => (
+                  <TouchableOpacity
+                    key={opt}
+                    style={[
+                      styles.optionChip,
+                      energyPeak === opt && styles.optionChipActive,
+                    ]}
+                    onPress={() => setEnergyPeak(energyPeak === opt ? null : opt)}
+                    activeOpacity={0.6}
+                  >
+                    <Text
+                      style={[
+                        styles.optionText,
+                        energyPeak === opt && styles.optionTextActive,
+                      ]}
+                    >
+                      {opt.charAt(0).toUpperCase() + opt.slice(1)}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            </View>
+          </View>
+
+          <View style={styles.section}>
+            <Text style={styles.sectionHeader}>Schedule</Text>
+            <View style={styles.field}>
+              <Text style={styles.label}>Sleep Schedule</Text>
+              <View style={styles.timeRow}>
+                {renderTimeField("Start", "sleep-start", "22:00", "Sleep start time")}
+                {renderTimeField("End", "sleep-end", "06:00", "Sleep end time")}
+              </View>
+            </View>
+            <View style={styles.field}>
+              <Text style={styles.label}>Preferred Study Window</Text>
+              <View style={styles.timeRow}>
+                {renderTimeField(
+                  "Earliest Start",
+                  "study-start",
+                  "06:00",
+                  "Study window start time",
+                )}
+                {renderTimeField(
+                  "Latest End",
+                  "study-end",
+                  "22:00",
+                  "Study window end time",
+                )}
+              </View>
+            </View>
+          </View>
+
+          <TouchableOpacity
+            style={styles.saveButtonFull}
+            onPress={handleSave}
+            activeOpacity={0.8}
+            disabled={saveProfile.isPending}
+          >
+            <Text style={styles.saveButtonText}>
+              {saveProfile.isPending ? "Saving..." : "Save Changes"}
+            </Text>
+          </TouchableOpacity>
+        </ScrollView>
+      </KeyboardAvoidingView>
     </SafeAreaView>
   );
 }
@@ -244,6 +313,9 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: "center",
     alignItems: "center",
+  },
+  flex: {
+    flex: 1,
   },
   scroll: {
     paddingHorizontal: 20,
@@ -318,6 +390,23 @@ const styles = StyleSheet.create({
     fontWeight: "500",
     marginBottom: 4,
     marginLeft: 4,
+  },
+  timeBtn: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    backgroundColor: "#1E293B",
+    borderRadius: 12,
+    padding: 16,
+  },
+  timeBtnText: {
+    color: "#F8FAFC",
+    fontSize: 16,
+    fontWeight: "600",
+  },
+  timeBtnArrow: {
+    color: "#64748B",
+    fontSize: 16,
   },
   timeInput: {
     backgroundColor: "#1E293B",

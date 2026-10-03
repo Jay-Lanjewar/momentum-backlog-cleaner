@@ -81,6 +81,17 @@ export function formatTime12h(time24: string): string {
   return m === 0 ? `${hour12} ${period}` : `${hour12}:${String(m).padStart(2, "0")} ${period}`;
 }
 
+export function timeToDate(time: string): Date {
+  const [h, m] = time.split(":").map(Number);
+  const d = new Date();
+  d.setHours(Number.isNaN(h) ? 0 : h, Number.isNaN(m) ? 0 : m, 0, 0);
+  return d;
+}
+
+export function dateToTime(d: Date): string {
+  return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
+}
+
 export function isValidTimeRange(start: string, end: string): boolean {
   return start < end;
 }

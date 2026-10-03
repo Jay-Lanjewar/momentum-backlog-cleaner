@@ -10,11 +10,14 @@
  * 6. useSaveProfile invalidates correct caches
  * 7. Shared MeHeader: every Me subsection screen renders it and its
  *    back button calls router.back()
+ * 8. Profile time fields: native DateTimePicker rows (Android/iOS),
+ *    editable HH:mm TextInputs on web, KeyboardAvoidingView wrapping,
+ *    and HH:mm save payloads
  */
 
 import * as fs from "fs";
 import * as path from "path";
-import { Linking } from "react-native";
+import { Alert, Linking, Platform } from "react-native";
 import { render, screen, act, fireEvent, waitFor } from "@testing-library/react-native";
 
 jest.mock("react-native-safe-area-context", () => ({
@@ -24,6 +27,7 @@ jest.mock("react-native-safe-area-context", () => ({
 
 const mockPush = jest.fn();
 const mockBack = jest.fn();
+const mockSaveProfile = jest.fn();
 jest.mock("expo-router", () => ({
   useRouter: () => ({
     push: mockPush,
@@ -54,23 +58,25 @@ jest.mock("@/store/useAuthStore", () => ({
   }),
 }));
 
+const mockProfileData = {
+  id: "p1",
+  user_id: "u1",
+  name: "Alex",
+  class_name: "12th",
+  board: "CBSE",
+  school_timings: null,
+  coaching_timings: null,
+  sleep_schedule: null,
+  energy_peak: "morning",
+  preferred_study_window: null,
+  daily_target_minutes: 180,
+  created_at: "2026-01-01",
+  updated_at: "2026-01-01",
+};
+
 jest.mock("@/services/hooks", () => ({
   useProfile: () => ({
-    data: {
-      id: "p1",
-      user_id: "u1",
-      name: "Alex",
-      class_name: "12th",
-      board: "CBSE",
-      school_timings: null,
-      coaching_timings: null,
-      sleep_schedule: null,
-      energy_peak: "morning",
-      preferred_study_window: null,
-      daily_target_minutes: 180,
-      created_at: "2026-01-01",
-      updated_at: "2026-01-01",
-    },
+    data: mockProfileData,
   }),
   useStreaks: () => ({
     data: {
@@ -120,7 +126,7 @@ jest.mock("@/services/hooks", () => ({
     },
   }),
   useSaveProfile: () => ({
-    mutateAsync: jest.fn(),
+    mutateAsync: mockSaveProfile,
     isPending: false,
   }),
 }));
@@ -138,6 +144,17 @@ jest.mock("@/services/notifications", () => ({
     async () => mockRequestPermissionResult,
   ),
 }));
+
+jest.mock("@react-native-community/datetimepicker", () => {
+  const R = require("react");
+  const { View } = require("react-native");
+  const MockDateTimePicker = (props: any) =>
+    R.createElement(View, {
+      testID: props.testID,
+      onChange: props.onChange,
+    });
+  return { __esModule: true, default: MockDateTimePicker };
+});
 
 // ─── Profile Screen ───
 
@@ -471,6 +488,273 @@ describe("ProfileEditScreen", () => {
     });
     fireEvent.press(screen.getByTestId("profile-back"));
     expect(mockBack).toHaveBeenCalledTimes(1);
+  });
+});
+
+// ─── Profile Edit Screen — time pickers & keyboard handling ───
+
+const ORIGINAL_PLATFORM_OS = Platform.OS;
+
+function setPlatformOS(os: string) {
+  Object.assign(Platform, { OS: os });
+}
+
+describe("ProfileEditScreen time fields", () => {
+  afterEach(() => {
+    setPlatformOS(ORIGINAL_PLATFORM_OS);
+  });
+
+  async function renderProfile() {
+    await act(async () => {
+      render(<ProfileEditScreen />);
+    });
+  }
+
+  it("native time fields are pressable rows with accessibility metadata, not TextInputs", async () => {
+    await renderProfile();
+
+    expect(screen.queryByPlaceholderText("22:00")).toBeNull();
+    expect(screen.queryByPlaceholderText("06:00")).toBeNull();
+
+    for (const id of [
+      "profile-sleep-start",
+      "profile-sleep-end",
+      "profile-study-start",
+      "profile-study-end",
+    ]) {
+      expect(screen.getByTestId(id)).toBeTruthy();
+    }
+
+    const row = screen.getByTestId("profile-sleep-start");
+    expect(row.props.accessibilityRole).toBe("button");
+    expect(row.props.accessibilityLabel).toBe("Sleep start time");
+    expect(row.props.accessibilityValue?.text).toBeTruthy();
+  });
+
+  it("pressing a time row opens its DateTimePicker", async () => {
+    await renderProfile();
+
+    expect(screen.queryByTestId("profile-sleep-start-picker")).toBeNull();
+
+    await fireEvent.press(screen.getByTestId("profile-sleep-start"));
+
+    expect(screen.getByTestId("profile-sleep-start-picker")).toBeTruthy();
+    expect(screen.queryByTestId("profile-sleep-end-picker")).toBeNull();
+  });
+
+  it("picker onChange updates the displayed 12-hour time and stores HH:mm", async () => {
+    await renderProfile();
+
+    await fireEvent.press(screen.getByTestId("profile-sleep-start"));
+    await fireEvent(
+      screen.getByTestId("profile-sleep-start-picker"),
+      "onChange",
+      {},
+      new Date(2026, 0, 1, 22, 0),
+    );
+    expect(screen.getByText("10 PM")).toBeTruthy();
+    // iOS keeps the spinner open — existing project pattern.
+    expect(screen.getByTestId("profile-sleep-start-picker")).toBeTruthy();
+
+    await fireEvent.press(screen.getByTestId("profile-sleep-end"));
+    await fireEvent(
+      screen.getByTestId("profile-sleep-end-picker"),
+      "onChange",
+      {},
+      new Date(2026, 0, 1, 6, 30),
+    );
+    expect(screen.getByText("6:30 AM")).toBeTruthy();
+
+    await fireEvent.press(screen.getByTestId("profile-study-start"));
+    await fireEvent(
+      screen.getByTestId("profile-study-start-picker"),
+      "onChange",
+      {},
+      new Date(2026, 0, 1, 16, 0),
+    );
+    expect(screen.getByText("4 PM")).toBeTruthy();
+
+    await fireEvent.press(screen.getByTestId("profile-study-end"));
+    await fireEvent(
+      screen.getByTestId("profile-study-end-picker"),
+      "onChange",
+      {},
+      new Date(2026, 0, 1, 21, 30),
+    );
+    expect(screen.getByText("9:30 PM")).toBeTruthy();
+
+    // Underlying state is still the original HH:mm form.
+    mockSaveProfile.mockReset();
+    mockSaveProfile.mockResolvedValue(undefined);
+    const alertSpy = jest.spyOn(Alert, "alert").mockImplementation(() => {});
+    await fireEvent.press(screen.getByText("Save Changes"));
+    await waitFor(() => {
+      expect(mockSaveProfile).toHaveBeenCalledWith(
+        expect.objectContaining({
+          sleep_schedule: { start: "22:00", end: "06:30" },
+          preferred_study_window: {
+            earliest_start: "16:00",
+            latest_end: "21:30",
+          },
+        }),
+      );
+    });
+    alertSpy.mockRestore();
+  });
+
+  it("pressing the open row again dismisses the picker without changing the value", async () => {
+    await renderProfile();
+
+    await fireEvent.press(screen.getByTestId("profile-sleep-start"));
+    expect(screen.getByTestId("profile-sleep-start-picker")).toBeTruthy();
+
+    await fireEvent.press(screen.getByTestId("profile-sleep-start"));
+    expect(screen.queryByTestId("profile-sleep-start-picker")).toBeNull();
+    expect(screen.getAllByText("Not set")).toHaveLength(4);
+  });
+
+  describe("on Android", () => {
+    beforeEach(() => {
+      setPlatformOS("android");
+    });
+
+    it("closes the picker after a selection and stores the picked time", async () => {
+      await renderProfile();
+
+      await fireEvent.press(screen.getByTestId("profile-sleep-start"));
+      expect(screen.getByTestId("profile-sleep-start-picker")).toBeTruthy();
+
+      await fireEvent(
+        screen.getByTestId("profile-sleep-start-picker"),
+        "onChange",
+        {},
+        new Date(2026, 0, 1, 9, 30),
+      );
+
+      expect(screen.queryByTestId("profile-sleep-start-picker")).toBeNull();
+      expect(screen.getByText("9:30 AM")).toBeTruthy();
+    });
+
+    it("canceling the dialog leaves the previous value unchanged", async () => {
+      await renderProfile();
+
+      await fireEvent.press(screen.getByTestId("profile-sleep-start"));
+      await fireEvent(
+        screen.getByTestId("profile-sleep-start-picker"),
+        "onChange",
+        {},
+        new Date(2026, 0, 1, 22, 0),
+      );
+      expect(screen.getByText("10 PM")).toBeTruthy();
+
+      await fireEvent.press(screen.getByTestId("profile-sleep-start"));
+      expect(screen.getByTestId("profile-sleep-start-picker")).toBeTruthy();
+
+      await fireEvent(
+        screen.getByTestId("profile-sleep-start-picker"),
+        "onChange",
+        { type: "dismissed" },
+        undefined,
+      );
+
+      expect(screen.queryByTestId("profile-sleep-start-picker")).toBeNull();
+      expect(screen.getByText("10 PM")).toBeTruthy();
+    });
+  });
+
+  describe("on web", () => {
+    beforeEach(() => {
+      setPlatformOS("web");
+    });
+
+    it("keeps editable HH:mm TextInputs and renders no DateTimePicker", async () => {
+      await renderProfile();
+
+      expect(screen.queryByTestId("profile-sleep-start-picker")).toBeNull();
+      expect(screen.getAllByPlaceholderText("22:00")).toHaveLength(2);
+      expect(screen.getAllByPlaceholderText("06:00")).toHaveLength(2);
+
+      await fireEvent.changeText(
+        screen.getByTestId("profile-sleep-start"),
+        "23:45",
+      );
+      expect(screen.getByDisplayValue("23:45")).toBeTruthy();
+    });
+  });
+
+  it("form is wrapped in KeyboardAvoidingView with the project's keyboard pattern", () => {
+    const content = fs.readFileSync(
+      path.join(path.resolve(__dirname, ".."), "app/(app)/(me)/profile.tsx"),
+      "utf-8",
+    );
+
+    expect(content).toContain("<KeyboardAvoidingView");
+    expect(content).toContain(
+      'behavior={Platform.OS === "ios" ? "padding" : "height"}',
+    );
+    expect(content).toContain('keyboardShouldPersistTaps="handled"');
+    expect(content.indexOf("<KeyboardAvoidingView")).toBeLessThan(
+      content.indexOf("<ScrollView"),
+    );
+    expect(content.indexOf("</ScrollView>")).toBeLessThan(
+      content.indexOf("</KeyboardAvoidingView>"),
+    );
+  });
+
+  it("Save sends HH:mm strings for both schedule windows", async () => {
+    mockSaveProfile.mockReset();
+    mockSaveProfile.mockResolvedValue(undefined);
+    const alertSpy = jest.spyOn(Alert, "alert").mockImplementation(() => {});
+
+    await renderProfile();
+
+    await fireEvent.press(screen.getByTestId("profile-sleep-start"));
+    await fireEvent(
+      screen.getByTestId("profile-sleep-start-picker"),
+      "onChange",
+      {},
+      new Date(2026, 0, 1, 22, 0),
+    );
+    await fireEvent.press(screen.getByTestId("profile-sleep-end"));
+    await fireEvent(
+      screen.getByTestId("profile-sleep-end-picker"),
+      "onChange",
+      {},
+      new Date(2026, 0, 1, 6, 30),
+    );
+    await fireEvent.press(screen.getByTestId("profile-study-start"));
+    await fireEvent(
+      screen.getByTestId("profile-study-start-picker"),
+      "onChange",
+      {},
+      new Date(2026, 0, 1, 16, 0),
+    );
+    await fireEvent.press(screen.getByTestId("profile-study-end"));
+    await fireEvent(
+      screen.getByTestId("profile-study-end-picker"),
+      "onChange",
+      {},
+      new Date(2026, 0, 1, 21, 30),
+    );
+
+    await fireEvent.press(screen.getByText("Save Changes"));
+
+    await waitFor(() => {
+      expect(mockSaveProfile).toHaveBeenCalledWith({
+        name: "Alex",
+        class_name: "12th",
+        board: "CBSE",
+        energy_peak: "morning",
+        daily_target_minutes: 180,
+        sleep_schedule: { start: "22:00", end: "06:30" },
+        preferred_study_window: { earliest_start: "16:00", latest_end: "21:30" },
+      });
+    });
+    expect(alertSpy).toHaveBeenCalledWith(
+      "Saved",
+      "Your profile has been updated.",
+    );
+    alertSpy.mockRestore();
   });
 });
 
