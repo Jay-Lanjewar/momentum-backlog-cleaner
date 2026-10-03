@@ -13,6 +13,7 @@
  * 8. Profile time fields: native DateTimePicker rows (Android/iOS),
  *    editable HH:mm TextInputs on web, KeyboardAvoidingView wrapping,
  *    and HH:mm save payloads
+ * 9. Settings Change Password row exists and pushes /(me)/change-password
  */
 
 import * as fs from "fs";
@@ -285,6 +286,25 @@ describe("SettingsScreen", () => {
       fireEvent.press(screen.getByTestId("settings-security-row"));
     });
     expect(mockPush).toHaveBeenCalledWith("/(me)/security");
+  });
+
+  it("Change Password row exists", async () => {
+    await act(async () => {
+      render(<SettingsScreen />);
+    });
+    expect(screen.getByText("Change Password")).toBeTruthy();
+    expect(screen.getByTestId("settings-change-password-row")).toBeTruthy();
+  });
+
+  it("Change Password row navigates to /(me)/change-password", async () => {
+    mockPush.mockClear();
+    await act(async () => {
+      render(<SettingsScreen />);
+    });
+    await act(async () => {
+      fireEvent.press(screen.getByTestId("settings-change-password-row"));
+    });
+    expect(mockPush).toHaveBeenCalledWith("/(me)/change-password");
   });
 
   it("shared header back button calls router.back", async () => {
@@ -911,6 +931,7 @@ describe("Me header consistency", () => {
     ["security", "Security"],
     ["streaks", "Streaks"],
     ["health", "Health"],
+    ["change-password", "Change Password"],
   ];
 
   it.each(sharedHeaderScreens)(

@@ -87,10 +87,11 @@ describe("Navigation file structure", () => {
     expect(fileExists("(social)/search.tsx")).toBe(true);
   });
 
-  it("has me group with index, settings, streaks, health, and _layout", () => {
+  it("has me group with index, settings, change-password, streaks, health, and _layout", () => {
     expect(fileExists("(me)/_layout.tsx")).toBe(true);
     expect(fileExists("(me)/index.tsx")).toBe(true);
     expect(fileExists("(me)/settings.tsx")).toBe(true);
+    expect(fileExists("(me)/change-password.tsx")).toBe(true);
     expect(fileExists("(me)/streaks.tsx")).toBe(true);
     expect(fileExists("(me)/health.tsx")).toBe(true);
   });

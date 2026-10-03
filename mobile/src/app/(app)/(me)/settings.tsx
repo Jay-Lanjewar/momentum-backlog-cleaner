@@ -120,7 +120,14 @@ export default function SettingsScreen() {
 
         <View style={styles.section}>
           <Text style={styles.sectionHeader}>Account</Text>
-          <TouchableOpacity style={styles.row} activeOpacity={0.6}>
+          <TouchableOpacity
+            style={styles.row}
+            activeOpacity={0.6}
+            onPress={() => router.push("/(me)/change-password")}
+            accessibilityRole="button"
+            accessibilityLabel="Change Password"
+            testID="settings-change-password-row"
+          >
             <Text style={styles.rowText}>Change Password</Text>
             <Text style={styles.arrow}>{"\u2192"}</Text>
           </TouchableOpacity>

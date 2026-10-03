@@ -6,6 +6,7 @@ export default function MeLayout() {
       <Stack.Screen name="index" />
       <Stack.Screen name="profile" />
       <Stack.Screen name="settings" />
+      <Stack.Screen name="change-password" />
       <Stack.Screen name="security" />
       <Stack.Screen name="streaks" />
       <Stack.Screen name="health" />
