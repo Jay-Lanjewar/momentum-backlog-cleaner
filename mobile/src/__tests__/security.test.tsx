@@ -4,7 +4,8 @@
  * Verifies:
  * 1. Navigation registration (Me stack + Settings row)
  * 2. Off state: explainer copy + Enable CTA
- * 3. Enrollment → QR + manual secret state (never marked On before verify)
+ * 3. Enrollment → QR shown, manual setup key hidden until deliberately
+ *    revealed, raw otpauth URI never rendered, never marked On before verify
  * 4. Wrong code / expired challenge → friendly copy, fresh challenge retry
  * 5. Successful verification → On state with factor status
  * 6. Disable flow → Alert confirm, unenroll, session refresh
@@ -215,6 +216,7 @@ describe("Security screen when no factor exists", () => {
     await waitFor(() => {
       expect(screen.getByTestId("security-status")).toHaveTextContent("Off");
     });
+    expect(screen.getByText("Keep your account secure")).toBeTruthy();
     expect(
       screen.getByText(/Add a second step when you sign in/),
     ).toBeTruthy();
@@ -246,19 +248,45 @@ describe("Enrollment setup", () => {
     expect(screen.queryByTestId("security-disable")).toBeNull();
   });
 
-  it("shows the QR code and the manual-entry secret", async () => {
+  it("shows the QR code but keeps the setup key hidden until asked", async () => {
     await renderScreen();
     await startSetup();
 
     expect(screen.getByTestId("security-qr")).toBeTruthy();
-    expect(screen.getByText("JBSW Y3DP EHPK 3PXP")).toBeTruthy();
-    expect(screen.getByTestId("security-uri").props.children).toContain(
-      "otpauth://totp/",
-    );
+    expect(screen.queryByTestId("security-secret")).toBeNull();
+    expect(screen.queryByText("JBSW Y3DP EHPK 3PXP")).toBeNull();
+    expect(screen.queryByTestId("security-uri")).toBeNull();
+    expect(screen.queryByText(/otpauth:\/\//)).toBeNull();
     expect(
       screen.getByText(/Open your authenticator app, add a new account/),
     ).toBeTruthy();
     expect(screen.getByTestId("security-code-input")).toBeTruthy();
+    expect(screen.getByText("Set up 2-step authentication")).toBeTruthy();
+    expect(screen.getByText("Show setup key")).toBeTruthy();
+  });
+
+  it("reveals the setup key on demand without ever rendering the raw otpauth URI", async () => {
+    await renderScreen();
+    await startSetup();
+
+    expect(screen.queryByTestId("security-secret")).toBeNull();
+
+    await act(async () => {
+      fireEvent.press(screen.getByTestId("security-show-key"));
+    });
+
+    expect(screen.getByText("JBSW Y3DP EHPK 3PXP")).toBeTruthy();
+    expect(
+      screen.getByText(/Keep this key private/),
+    ).toBeTruthy();
+    expect(screen.queryByText(/otpauth:\/\//)).toBeNull();
+
+    await act(async () => {
+      fireEvent.press(screen.getByTestId("security-hide-key"));
+    });
+
+    expect(screen.queryByTestId("security-secret")).toBeNull();
+    expect(screen.queryByText("JBSW Y3DP EHPK 3PXP")).toBeNull();
   });
 
   it("does not mark 2-step authentication On before verification", async () => {
@@ -335,7 +363,9 @@ describe("Verification", () => {
     // Retry: a new challenge is created for the same factor.
     await enterAndVerify("654321");
     await waitFor(() => {
-      expect(screen.getByTestId("security-status")).toHaveTextContent("On");
+      expect(
+        screen.getByText("2-step authentication is on"),
+      ).toBeTruthy();
     });
     expect(mockChallenge).toHaveBeenCalledTimes(2);
     expect(mockVerify).toHaveBeenCalledTimes(1);
@@ -354,7 +384,9 @@ describe("Verification", () => {
     await enterAndVerify("123456");
 
     await waitFor(() => {
-      expect(screen.getByTestId("security-status")).toHaveTextContent("On");
+      expect(
+        screen.getByText("2-step authentication is on"),
+      ).toBeTruthy();
     });
     expect(screen.getByTestId("security-factor")).toBeTruthy();
     expect(screen.getByText("Momentum")).toBeTruthy();
@@ -364,6 +396,24 @@ describe("Verification", () => {
     ).toBeTruthy();
     expect(screen.getByTestId("security-disable")).toBeTruthy();
     expect(screen.queryByTestId("security-qr")).toBeNull();
+  });
+
+  it("never shows the QR code, setup key, or otpauth URI once On", async () => {
+    mockListFactors.mockResolvedValue(verifiedFactors);
+
+    await renderScreen();
+    await waitFor(() => {
+      expect(
+        screen.getByText("2-step authentication is on"),
+      ).toBeTruthy();
+    });
+
+    expect(screen.queryByTestId("security-qr")).toBeNull();
+    expect(screen.queryByTestId("security-secret")).toBeNull();
+    expect(screen.queryByTestId("security-show-key")).toBeNull();
+    expect(screen.queryByTestId("security-uri")).toBeNull();
+    expect(screen.queryByText(/otpauth:\/\//)).toBeNull();
+    expect(screen.queryByText("JBSW Y3DP EHPK 3PXP")).toBeNull();
   });
 
   it("refuses to submit an incomplete code", async () => {
@@ -388,6 +438,33 @@ describe("Verification", () => {
     expect(mockChallenge).not.toHaveBeenCalled();
     expect(mockVerify).not.toHaveBeenCalled();
   });
+
+  it("enables Verify and turn on only once all six digits are entered", async () => {
+    mockListFactors.mockResolvedValue(noFactors);
+    mockEnroll.mockResolvedValue(enrollOk);
+
+    await renderScreen();
+    await startSetup();
+
+    await act(async () => {
+      fireEvent.changeText(screen.getByTestId("security-code-input"), "12345");
+    });
+    expect(
+      (screen.getByTestId("security-verify") as any).props.accessibilityState
+        ?.disabled,
+    ).toBe(true);
+
+    await act(async () => {
+      fireEvent.changeText(screen.getByTestId("security-code-input"), "123456");
+    });
+    expect(
+      (screen.getByTestId("security-verify") as any).props.accessibilityState
+        ?.disabled,
+    ).toBe(false);
+    expect(screen.getByText("Verify and turn on")).toBeTruthy();
+    expect(mockChallenge).not.toHaveBeenCalled();
+    expect(mockVerify).not.toHaveBeenCalled();
+  });
 });
 
 // ─── Disable ───
@@ -409,7 +486,9 @@ describe("Disable flow", () => {
     try {
       await renderScreen();
       await waitFor(() => {
-        expect(screen.getByTestId("security-status")).toHaveTextContent("On");
+        expect(
+          screen.getByText("2-step authentication is on"),
+        ).toBeTruthy();
       });
 
       await act(async () => {
@@ -454,7 +533,9 @@ describe("Disable flow", () => {
     try {
       await renderScreen();
       await waitFor(() => {
-        expect(screen.getByTestId("security-status")).toHaveTextContent("On");
+        expect(
+          screen.getByText("2-step authentication is on"),
+        ).toBeTruthy();
       });
 
       await act(async () => {
@@ -468,7 +549,9 @@ describe("Disable flow", () => {
       });
       expect(screen.queryByText(/row was deleted/)).toBeNull();
       expect(mockRefreshSession).not.toHaveBeenCalled();
-      expect(screen.getByTestId("security-status")).toHaveTextContent("On");
+      expect(
+        screen.getByText("2-step authentication is on"),
+      ).toBeTruthy();
     } finally {
       alertSpy.mockRestore();
     }
