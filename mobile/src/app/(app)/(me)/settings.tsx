@@ -168,10 +168,15 @@ export default function SettingsScreen() {
               </Text>
             </TouchableOpacity>
           )}
-          <TouchableOpacity style={styles.row} activeOpacity={0.6}>
-            <Text style={styles.rowText}>Theme</Text>
+          <View style={styles.row} testID="settings-theme-row">
+            <View>
+              <Text style={styles.rowText}>Theme</Text>
+              <Text style={styles.themeHint} testID="settings-theme-hint">
+                Theme customization coming later.
+              </Text>
+            </View>
             <Text style={styles.hint}>Dark</Text>
-          </TouchableOpacity>
+          </View>
         </View>
 
         <View style={styles.section}>
@@ -263,6 +268,11 @@ const styles = StyleSheet.create({
   hint: {
     color: "#64748B",
     fontSize: 14,
+  },
+  themeHint: {
+    color: "#64748B",
+    fontSize: 14,
+    marginTop: 2,
   },
   signOutButton: {
     backgroundColor: "rgba(239, 68, 68, 0.1)",

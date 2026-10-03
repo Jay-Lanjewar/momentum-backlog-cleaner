@@ -356,6 +356,53 @@ describe("SettingsScreen", () => {
     expect(screen.queryByTestId("notifications-row")).toBeNull();
   });
 
+  it("Theme row is rendered", async () => {
+    await act(async () => {
+      render(<SettingsScreen />);
+    });
+    expect(screen.getByTestId("settings-theme-row")).toBeTruthy();
+    expect(screen.getByText("Theme")).toBeTruthy();
+  });
+
+  it("Theme row is not pressable", async () => {
+    mockPush.mockClear();
+    mockBack.mockClear();
+    await act(async () => {
+      render(<SettingsScreen />);
+    });
+    await act(async () => {
+      fireEvent.press(screen.getByTestId("settings-theme-row"));
+    });
+    expect(mockPush).not.toHaveBeenCalled();
+    expect(mockBack).not.toHaveBeenCalled();
+  });
+
+  it("Theme row has no button accessibility role", async () => {
+    await act(async () => {
+      render(<SettingsScreen />);
+    });
+    const row = screen.getByTestId("settings-theme-row");
+    expect(row.props.accessibilityRole).toBeUndefined();
+  });
+
+  it("Theme row shows the current value Dark", async () => {
+    await act(async () => {
+      render(<SettingsScreen />);
+    });
+    expect(screen.getByText("Dark")).toBeTruthy();
+  });
+
+  it("Theme row shows an informational hint", async () => {
+    await act(async () => {
+      render(<SettingsScreen />);
+    });
+    expect(screen.getByTestId("settings-theme-hint")).toBeTruthy();
+    expect(
+      screen.getByText("Theme customization coming later."),
+    ).toBeTruthy();
+    expect(screen.queryByText("Coming soon")).toBeNull();
+  });
+
   it("tapping Off with an askable denial invokes the permission helper", async () => {
     mockNotificationPermissionStatus = "denied";
     mockNotificationCanAskAgain = true;
