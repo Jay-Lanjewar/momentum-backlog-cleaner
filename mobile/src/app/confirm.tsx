@@ -1,7 +1,7 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { View, Text, TouchableOpacity, StyleSheet, ActivityIndicator } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { useRouter } from "expo-router";
+import { useRouter, type Href } from "expo-router";
 import { useLinkingURL } from "expo-linking";
 
 import { supabase } from "@/lib/supabase";
@@ -32,22 +32,49 @@ export default function ConfirmScreen() {
   const [state, setState] = useState<ConfirmState>("loading");
   const [errorMessage, setErrorMessage] = useState("");
   const processedRef = useRef(false);
+  const unmountedRef = useRef(false);
+  const navigatedRef = useRef(false);
+  const successTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Single exit point: guarded so the delayed timer, the fallback CTA, and the
+  // recovery branch can never double-navigate. Not dependent on any
+  // linkingURL/effect-cancellation flag.
+  const navigateOnce = useCallback(
+    (href: Href) => {
+      if (navigatedRef.current) return;
+      navigatedRef.current = true;
+      if (successTimerRef.current !== null) {
+        clearTimeout(successTimerRef.current);
+        successTimerRef.current = null;
+      }
+      router.replace(href);
+    },
+    [router],
+  );
 
   useEffect(() => {
     useAuthStore.getState().setConfirming(true);
+    return () => {
+      // Unmount-only cleanup: never triggered by linkingURL changes, so a
+      // re-delivered deep link cannot cancel a scheduled success navigation.
+      unmountedRef.current = true;
+      if (successTimerRef.current !== null) {
+        clearTimeout(successTimerRef.current);
+        successTimerRef.current = null;
+      }
+    };
   }, []);
 
   useEffect(() => {
     if (processedRef.current || !linkingURL) return;
     processedRef.current = true;
 
-    let cancelled = false;
     const url = linkingURL;
 
     async function process() {
       const tokens = parseHashTokens(url);
       if (!tokens?.access_token || !tokens.refresh_token) {
-        if (!cancelled) {
+        if (!unmountedRef.current) {
           setErrorMessage("Invalid or expired confirmation link.");
           setState("error");
           useAuthStore.getState().setConfirming(false);
@@ -61,7 +88,7 @@ export default function ConfirmScreen() {
           refresh_token: tokens.refresh_token,
         });
 
-        if (cancelled) return;
+        if (unmountedRef.current) return;
         if (error) {
           setErrorMessage(error.message);
           setState("error");
@@ -73,29 +100,30 @@ export default function ConfirmScreen() {
 
         try {
           const meResult = await api.get<AuthMeResponse>("/api/v1/auth/me");
-          if (!cancelled && meResult.data) {
+          if (!unmountedRef.current && meResult.data) {
             useAuthStore.getState().setUser(meResult.data);
           }
         } catch {
           // Profile fetch failed — Supabase session is valid, proceed anyway
         }
 
-        if (cancelled) return;
+        if (unmountedRef.current) return;
 
         if (isRecovery) {
           // Keep confirming=true while transitioning to the reset-password
           // screen so AuthGate does not redirect the recovery session away.
-          router.replace("/(auth)/reset-password");
+          navigateOnce("/(auth)/reset-password");
           return;
         }
 
         useAuthStore.getState().setConfirming(false);
         setState("success");
-        setTimeout(() => {
-          if (!cancelled) router.replace("/");
+        successTimerRef.current = setTimeout(() => {
+          successTimerRef.current = null;
+          navigateOnce("/");
         }, 1500);
       } catch {
-        if (!cancelled) {
+        if (!unmountedRef.current) {
           setErrorMessage("Something went wrong. Please try again.");
           setState("error");
           useAuthStore.getState().setConfirming(false);
@@ -104,11 +132,7 @@ export default function ConfirmScreen() {
     }
 
     process();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [linkingURL]);
+  }, [linkingURL, navigateOnce]);
 
   if (state === "loading") {
     return (
@@ -130,6 +154,15 @@ export default function ConfirmScreen() {
           </View>
           <Text style={styles.title}>Email verified!</Text>
           <Text style={styles.body}>Taking you to Momentum...</Text>
+          <TouchableOpacity
+            style={styles.button}
+            onPress={() => navigateOnce("/")}
+            accessibilityRole="button"
+            accessibilityLabel="Continue to Momentum"
+            activeOpacity={0.8}
+          >
+            <Text style={styles.buttonText}>Continue to Momentum</Text>
+          </TouchableOpacity>
         </View>
       </SafeAreaView>
     );

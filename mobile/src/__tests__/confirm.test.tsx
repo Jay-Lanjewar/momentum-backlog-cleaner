@@ -769,7 +769,7 @@ describe("ConfirmScreen - cleanup and unmount", () => {
 
     const { unmount } = screen;
 
-    unmount();
+    await unmount();
 
     await act(async () => {
       resolveSetSession({ error: null });
@@ -777,5 +777,130 @@ describe("ConfirmScreen - cleanup and unmount", () => {
 
     expect(mockSetUser).not.toHaveBeenCalled();
     expect(mockSetConfirming).not.toHaveBeenCalledWith(false);
+  });
+});
+
+describe("ConfirmScreen - success navigation robustness", () => {
+  const primeSuccess = async () => {
+    mockInitialURL =
+      "momentum://confirm#access_token=tok&refresh_token=ref";
+    mockSetSession.mockResolvedValue({ error: null });
+    mockGetMe.mockResolvedValue({ data: mockProfile, error: null, errorCode: null });
+
+    await render(<ConfirmScreen />);
+
+    await waitFor(() => {
+      expect(screen.getByText("Email verified!")).toBeTruthy();
+    });
+  };
+
+  it("navigates after the delay even when linkingURL updates again after success", async () => {
+    jest.useFakeTimers();
+    try {
+      await primeSuccess();
+
+      await act(async () => {
+        mockLinkingURLSetter!("momentum://confirm");
+      });
+
+      expect(screen.getByText("Email verified!")).toBeTruthy();
+
+      await act(async () => {
+        jest.advanceTimersByTime(1500);
+      });
+
+      expect(mockReplace).toHaveBeenCalledTimes(1);
+      expect(mockReplace).toHaveBeenCalledWith("/");
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+
+  it("completes verification and navigates when linkingURL updates while processing", async () => {
+    jest.useFakeTimers();
+    try {
+      let resolveSetSession!: (value: { error: null }) => void;
+      mockSetSession.mockImplementation(
+        () => new Promise((r) => { resolveSetSession = r; }),
+      );
+      mockGetMe.mockResolvedValue({ data: mockProfile, error: null, errorCode: null });
+      mockInitialURL =
+        "momentum://confirm#access_token=tok&refresh_token=ref";
+
+      await render(<ConfirmScreen />);
+      expect(mockSetSession).toHaveBeenCalledTimes(1);
+
+      await act(async () => {
+        mockLinkingURLSetter!("momentum://confirm");
+      });
+      expect(screen.getByText(/Verifying your email/)).toBeTruthy();
+
+      await act(async () => {
+        resolveSetSession({ error: null });
+      });
+
+      await waitFor(() => {
+        expect(screen.getByText("Email verified!")).toBeTruthy();
+      });
+
+      await act(async () => {
+        jest.advanceTimersByTime(1500);
+      });
+
+      expect(mockReplace).toHaveBeenCalledTimes(1);
+      expect(mockReplace).toHaveBeenCalledWith("/");
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+
+  it("fallback 'Continue to Momentum' navigates immediately", async () => {
+    jest.useFakeTimers();
+    try {
+      await primeSuccess();
+
+      fireEvent.press(screen.getByText("Continue to Momentum"));
+
+      expect(mockReplace).toHaveBeenCalledTimes(1);
+      expect(mockReplace).toHaveBeenCalledWith("/");
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+
+  it("does not navigate twice when the CTA is pressed after the timer fired", async () => {
+    jest.useFakeTimers();
+    try {
+      await primeSuccess();
+
+      await act(async () => {
+        jest.advanceTimersByTime(1500);
+      });
+      expect(mockReplace).toHaveBeenCalledTimes(1);
+
+      fireEvent.press(screen.getByText("Continue to Momentum"));
+
+      expect(mockReplace).toHaveBeenCalledTimes(1);
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+
+  it("does not navigate from a stale timer after unmount", async () => {
+    jest.useFakeTimers();
+    try {
+      await primeSuccess();
+      expect(mockReplace).not.toHaveBeenCalled();
+
+      await screen.unmount();
+
+      await act(async () => {
+        jest.advanceTimersByTime(1500);
+      });
+
+      expect(mockReplace).not.toHaveBeenCalled();
+    } finally {
+      jest.useRealTimers();
+    }
   });
 });
