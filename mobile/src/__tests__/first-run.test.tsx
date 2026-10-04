@@ -675,6 +675,106 @@ describe("Onboarding simplified first-run flow", () => {
   });
 });
 
+describe("Backlog live feedback", () => {
+  it('shows "2 tasks found" for two task lines', async () => {
+    await render(<OnboardingScreen />);
+
+    await fireEvent.changeText(
+      screen.getByTestId("backlog-input"),
+      "Maths\nPhysics",
+    );
+
+    expect(screen.getByText("2 tasks found")).toBeTruthy();
+    expect(screen.getByTestId("backlog-task-count")).toBeTruthy();
+    expect(screen.queryByTestId("backlog-zero-error")).toBeNull();
+  });
+
+  it('shows "1 task found" for a single task', async () => {
+    await render(<OnboardingScreen />);
+
+    await fireEvent.changeText(screen.getByTestId("backlog-input"), "Maths");
+
+    expect(screen.getByText("1 task found")).toBeTruthy();
+    expect(screen.getByTestId("backlog-task-count")).toBeTruthy();
+    expect(screen.queryByTestId("backlog-zero-error")).toBeNull();
+  });
+
+  it("updates the task count as text changes", async () => {
+    await render(<OnboardingScreen />);
+
+    await fireEvent.changeText(screen.getByTestId("backlog-input"), "Maths");
+    expect(screen.getByText("1 task found")).toBeTruthy();
+
+    await fireEvent.changeText(
+      screen.getByTestId("backlog-input"),
+      "Maths\nPhysics",
+    );
+    expect(screen.getByText("2 tasks found")).toBeTruthy();
+    expect(screen.queryByText("1 task found")).toBeNull();
+  });
+
+  it("shows neither count nor error for empty input", async () => {
+    await render(<OnboardingScreen />);
+
+    expect(screen.queryByTestId("backlog-task-count")).toBeNull();
+    expect(screen.queryByTestId("backlog-zero-error")).toBeNull();
+    expect(screen.queryByText("No tasks found. Put each task on its own line.")).toBeNull();
+  });
+
+  it("shows neither count nor error for whitespace-only input", async () => {
+    await render(<OnboardingScreen />);
+
+    await fireEvent.changeText(
+      screen.getByTestId("backlog-input"),
+      "   \n \t ",
+    );
+
+    expect(screen.queryByTestId("backlog-task-count")).toBeNull();
+    expect(screen.queryByTestId("backlog-zero-error")).toBeNull();
+
+    const btn = screen.getByText("Interpret tasks");
+    const touchable = btn.parent ?? btn;
+    expect(
+      touchable.props?.accessibilityState?.disabled ??
+        touchable.props?.disabled,
+    ).toBe(true);
+  });
+
+  it("shows zero-state error and keeps CTA disabled when input parses to zero tasks", async () => {
+    const onboardingLib = require("@/lib/onboarding");
+    const spy = jest
+      .spyOn(onboardingLib, "parseBacklogInput")
+      .mockReturnValue([]);
+
+    try {
+      await render(<OnboardingScreen />);
+      await fireEvent.changeText(
+        screen.getByTestId("backlog-input"),
+        "some backlog text",
+      );
+
+      expect(
+        screen.getByText("No tasks found. Put each task on its own line."),
+      ).toBeTruthy();
+      expect(screen.getByTestId("backlog-zero-error")).toBeTruthy();
+      expect(screen.queryByTestId("backlog-task-count")).toBeNull();
+
+      const btn = screen.getByText("Interpret tasks");
+      const touchable = btn.parent ?? btn;
+      expect(
+        touchable.props?.accessibilityState?.disabled ??
+          touchable.props?.disabled,
+      ).toBe(true);
+
+      await fireEvent.press(btn);
+      expect(screen.queryByText("Here's what Momentum understood")).toBeNull();
+      expect(screen.getByText("What do you need to get done?")).toBeTruthy();
+    } finally {
+      spy.mockRestore();
+    }
+  });
+});
+
 describe("Availability step", () => {
   beforeEach(() => {
     mockPost.mockResolvedValue({

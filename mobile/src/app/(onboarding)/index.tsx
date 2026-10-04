@@ -969,6 +969,8 @@ export default function OnboardingScreen() {
   }
 
   function renderBacklogView() {
+    const hasText = backlogText.trim().length > 0;
+
     return (
       <>
         <Text style={styles.stepTitle}>{BACKLOG_TITLE}</Text>
@@ -984,6 +986,20 @@ export default function OnboardingScreen() {
           accessibilityLabel="Your tasks, one per line"
           testID="backlog-input"
         />
+        {hasText && totalTopics > 0 ? (
+          <Text style={styles.backlogCount} testID="backlog-task-count">
+            {`${totalTopics} task${totalTopics === 1 ? "" : "s"} found`}
+          </Text>
+        ) : null}
+        {hasText && totalTopics === 0 ? (
+          <Text
+            style={styles.errorText}
+            accessibilityRole="alert"
+            testID="backlog-zero-error"
+          >
+            No tasks found. Put each task on its own line.
+          </Text>
+        ) : null}
         <TouchableOpacity
           style={[
             styles.primaryButton,
@@ -1255,6 +1271,12 @@ const styles = StyleSheet.create({
     color: "#1A1A1A",
     minHeight: 180,
     marginBottom: 16,
+  },
+  backlogCount: {
+    fontSize: 13,
+    color: "#666",
+    textAlign: "center",
+    marginBottom: 8,
   },
   primaryButton: {
     backgroundColor: "#2563EB",
