@@ -1071,6 +1071,10 @@ describe("Task review step", () => {
     expect(screen.getByText("Here's what Momentum understood")).toBeTruthy();
   }
 
+  async function expandDetails(index: number) {
+    await fireEvent.press(screen.getByTestId(`task-details-toggle-${index}`));
+  }
+
   type OnboardingPayload = {
     courses: { name: string; color: string }[];
     backlog: {
@@ -1103,6 +1107,7 @@ describe("Task review step", () => {
     expect(screen.getByTestId("task-title-1").props.value).toBe(
       "Gravitation",
     );
+    await expandDetails(0);
     expect(
       screen.getByTestId("task-est-0-auto").props.accessibilityState
         ?.selected,
@@ -1170,6 +1175,121 @@ describe("Task review step", () => {
     expect(payload.backlog.map((item) => item.course_index)).toEqual([0, 0]);
   });
 
+  it("collapses advanced details by default with a one-line summary", async () => {
+    await openReview("Physics\nMotion");
+
+    const toggle = screen.getByTestId("task-details-toggle-0");
+    expect(toggle.props.accessibilityRole).toBe("button");
+    expect(toggle.props.accessibilityState?.expanded).toBe(false);
+    expect(screen.getByTestId("task-details-summary-0")).toBeTruthy();
+    expect(screen.getByText("Medium · Auto")).toBeTruthy();
+
+    expect(screen.getByTestId("task-title-0")).toBeTruthy();
+    expect(screen.getByTestId("task-due-0-none")).toBeTruthy();
+    expect(screen.queryByTestId("task-difficulty-0-medium")).toBeNull();
+    expect(screen.queryByTestId("task-est-0-auto")).toBeNull();
+    expect(screen.queryByTestId("task-notes-0")).toBeNull();
+  });
+
+  it("summary adds a note marker only when a note exists", async () => {
+    await openReview("Physics\nMotion");
+    expect(screen.queryByText(/Note added/)).toBeNull();
+
+    await expandDetails(0);
+    await fireEvent.changeText(
+      screen.getByTestId("task-notes-0"),
+      "20 questions",
+    );
+    await fireEvent.press(screen.getByTestId("task-details-toggle-0"));
+
+    expect(screen.getByText("Medium · Auto · Note added")).toBeTruthy();
+  });
+
+  it("tapping the toggle expands only that card", async () => {
+    await openReview("Physics\nMotion\nGravitation");
+
+    await expandDetails(0);
+
+    expect(
+      screen.getByTestId("task-details-toggle-0").props.accessibilityState
+        ?.expanded,
+    ).toBe(true);
+    expect(screen.queryByTestId("task-details-summary-0")).toBeNull();
+    expect(screen.getByTestId("task-difficulty-0-medium")).toBeTruthy();
+    expect(screen.getByTestId("task-est-0-auto")).toBeTruthy();
+    expect(screen.getByTestId("task-notes-0")).toBeTruthy();
+
+    expect(
+      screen.getByTestId("task-details-toggle-1").props.accessibilityState
+        ?.expanded,
+    ).toBe(false);
+    expect(screen.queryByTestId("task-difficulty-1-medium")).toBeNull();
+    expect(screen.queryByTestId("task-notes-1")).toBeNull();
+  });
+
+  it("collapsing hides the advanced controls again", async () => {
+    await openReview("Physics\nMotion");
+    await expandDetails(0);
+
+    await fireEvent.press(screen.getByTestId("task-details-toggle-0"));
+
+    expect(
+      screen.getByTestId("task-details-toggle-0").props.accessibilityState
+        ?.expanded,
+    ).toBe(false);
+    expect(screen.queryByTestId("task-difficulty-0-medium")).toBeNull();
+    expect(screen.queryByTestId("task-est-0-auto")).toBeNull();
+    expect(screen.queryByTestId("task-notes-0")).toBeNull();
+    expect(screen.getByText("Medium · Auto")).toBeTruthy();
+  });
+
+  it("edited values survive collapsing and re-expanding", async () => {
+    await openReview("Physics\nMotion");
+    await expandDetails(0);
+    await fireEvent.press(screen.getByTestId("task-difficulty-0-hard"));
+    await fireEvent.press(screen.getByTestId("task-est-0-45"));
+    await fireEvent.changeText(
+      screen.getByTestId("task-notes-0"),
+      "20 questions",
+    );
+
+    await fireEvent.press(screen.getByTestId("task-details-toggle-0"));
+    expect(screen.getByText("Hard · 45m · Note added")).toBeTruthy();
+    expect(screen.queryByTestId("task-notes-0")).toBeNull();
+
+    await fireEvent.press(screen.getByTestId("task-details-toggle-0"));
+    expect(
+      screen.getByTestId("task-difficulty-0-hard").props.accessibilityState
+        ?.selected,
+    ).toBe(true);
+    expect(
+      screen.getByTestId("task-est-0-45").props.accessibilityState?.selected,
+    ).toBe(true);
+    expect(screen.getByTestId("task-notes-0").props.value).toBe(
+      "20 questions",
+    );
+  });
+
+  it("expanding card 1 leaves card 0 collapsed", async () => {
+    await openReview("Physics\nMotion\nGravitation");
+
+    await expandDetails(1);
+
+    expect(
+      screen.getByTestId("task-details-toggle-1").props.accessibilityState
+        ?.expanded,
+    ).toBe(true);
+    expect(screen.getByTestId("task-difficulty-1-medium")).toBeTruthy();
+
+    expect(
+      screen.getByTestId("task-details-toggle-0").props.accessibilityState
+        ?.expanded,
+    ).toBe(false);
+    expect(screen.queryByTestId("task-difficulty-0-medium")).toBeNull();
+    expect(screen.queryByTestId("task-details-summary-1")).toBeNull();
+    expect(screen.getByTestId("task-details-summary-0")).toBeTruthy();
+  });
+
   it("title edits reach the payload", async () => {
     await openReview("Physics\nMotion");
     await fireEvent.changeText(
@@ -1184,6 +1304,7 @@ describe("Task review step", () => {
 
   it("due, difficulty and estimate chips reach the payload", async () => {
     await openReview("Physics\nMotion");
+    await expandDetails(0);
 
     await fireEvent.press(screen.getByTestId("task-due-0-tomorrow"));
     await fireEvent.press(screen.getByTestId("task-difficulty-0-hard"));
@@ -1203,6 +1324,7 @@ describe("Task review step", () => {
 
   it("keeps the estimate empty when no duration was given", async () => {
     await openReview("Physics read chapter");
+    await expandDetails(0);
 
     expect(
       screen.getByTestId("task-est-0-auto").props.accessibilityState
@@ -1216,6 +1338,7 @@ describe("Task review step", () => {
 
   it("notes reach the payload as description", async () => {
     await openReview("Physics worksheet");
+    await expandDetails(0);
     await fireEvent.changeText(
       screen.getByTestId("task-notes-0"),
       "20 questions",

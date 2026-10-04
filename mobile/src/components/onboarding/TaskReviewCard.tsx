@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { View, Text, TextInput, TouchableOpacity, StyleSheet } from "react-native";
 
 import {
@@ -45,6 +46,7 @@ export function TaskReviewCard({
   onMove,
   onDelete,
 }: TaskReviewCardProps) {
+  const [detailsOpen, setDetailsOpen] = useState(false);
   const ownName = subject.trim() || DEFAULT_SUBJECT;
   const otherCourses = courseNames.filter(
     (name) => name.trim().toLowerCase() !== ownName.toLowerCase(),
@@ -58,6 +60,18 @@ export function TaskReviewCard({
       : [...ESTIMATE_CHIPS, task.estimated_minutes].sort((a, b) => a - b);
 
   const label = (text: string) => `${text}, task ${index + 1}`;
+
+  const difficultyLabel =
+    DIFFICULTIES.find((option) => option.value === difficulty)?.label ?? "";
+  const estimateLabel =
+    task.estimated_minutes === null
+      ? "Auto"
+      : formatMinutes(task.estimated_minutes);
+  const summaryParts = [difficultyLabel, estimateLabel];
+  if (task.description?.trim()) {
+    summaryParts.push("Note added");
+  }
+  const summary = summaryParts.join(" · ");
 
   return (
     <View style={styles.card} testID={`review-card-${index}`}>
@@ -156,81 +170,32 @@ export function TaskReviewCard({
         ) : null}
       </View>
 
-      <View style={styles.chipRow}>
-        {DIFFICULTIES.map((option) => {
-          const selected = difficulty === option.value;
-          return (
-            <TouchableOpacity
-              key={option.value}
-              style={[styles.chip, selected && styles.chipActive]}
-              onPress={() => onUpdate({ priority: priorityFromDifficulty(option.value) })}
-              activeOpacity={0.7}
-              accessibilityRole="button"
-              accessibilityLabel={label(`${option.label} difficulty`)}
-              accessibilityState={{ selected }}
-              testID={`task-difficulty-${index}-${option.value}`}
-            >
-              <Text style={[styles.chipText, selected && styles.chipTextActive]}>
-                {option.label}
-              </Text>
-            </TouchableOpacity>
-          );
-        })}
-      </View>
+      {detailsOpen ? null : (
+        <Text
+          style={styles.detailsSummary}
+          testID={`task-details-summary-${index}`}
+        >
+          {summary}
+        </Text>
+      )}
 
-      <View style={styles.chipRow}>
+      <View style={styles.detailsRow}>
         <TouchableOpacity
-          style={[styles.chip, task.estimated_minutes === null && styles.chipActive]}
-          onPress={() => onUpdate({ estimated_minutes: null })}
+          style={styles.detailsToggle}
+          onPress={() => setDetailsOpen((open) => !open)}
           activeOpacity={0.7}
           accessibilityRole="button"
-          accessibilityLabel={label("Auto estimate")}
-          accessibilityState={{ selected: task.estimated_minutes === null }}
-          testID={`task-est-${index}-auto`}
+          accessibilityLabel={label(
+            detailsOpen ? "Hide details" : "Show details",
+          )}
+          accessibilityState={{ expanded: detailsOpen }}
+          testID={`task-details-toggle-${index}`}
         >
-          <Text
-            style={[
-              styles.chipText,
-              task.estimated_minutes === null && styles.chipTextActive,
-            ]}
-          >
-            Auto
+          <Text style={styles.detailsToggleText}>Details</Text>
+          <Text style={styles.chevron}>
+            {detailsOpen ? "\u25B2" : "\u25BC"}
           </Text>
         </TouchableOpacity>
-        {estimateValues.map((minutes) => {
-          const selected = task.estimated_minutes === minutes;
-          return (
-            <TouchableOpacity
-              key={minutes}
-              style={[styles.chip, selected && styles.chipActive]}
-              onPress={() => onUpdate({ estimated_minutes: minutes })}
-              activeOpacity={0.7}
-              accessibilityRole="button"
-              accessibilityLabel={label(`Estimated ${formatMinutes(minutes)}`)}
-              accessibilityState={{ selected }}
-              testID={`task-est-${index}-${minutes}`}
-            >
-              <Text style={[styles.chipText, selected && styles.chipTextActive]}>
-                {formatMinutes(minutes)}
-              </Text>
-            </TouchableOpacity>
-          );
-        })}
-      </View>
-
-      <View style={styles.notesRow}>
-        <TextInput
-          style={styles.notesInput}
-          value={task.description ?? ""}
-          onChangeText={(value) =>
-            onUpdate({ description: value.trim() ? value : null })
-          }
-          placeholder="Notes (e.g. 20 questions)"
-          placeholderTextColor="#94A3B8"
-          maxLength={200}
-          accessibilityLabel={label("Notes")}
-          testID={`task-notes-${index}`}
-        />
         <TouchableOpacity
           style={styles.deleteBtn}
           onPress={onDelete}
@@ -242,6 +207,96 @@ export function TaskReviewCard({
           <Text style={styles.deleteText}>✕</Text>
         </TouchableOpacity>
       </View>
+
+      {detailsOpen ? (
+        <>
+          <View style={styles.chipRow}>
+            {DIFFICULTIES.map((option) => {
+              const selected = difficulty === option.value;
+              return (
+                <TouchableOpacity
+                  key={option.value}
+                  style={[styles.chip, selected && styles.chipActive]}
+                  onPress={() =>
+                    onUpdate({ priority: priorityFromDifficulty(option.value) })
+                  }
+                  activeOpacity={0.7}
+                  accessibilityRole="button"
+                  accessibilityLabel={label(`${option.label} difficulty`)}
+                  accessibilityState={{ selected }}
+                  testID={`task-difficulty-${index}-${option.value}`}
+                >
+                  <Text
+                    style={[styles.chipText, selected && styles.chipTextActive]}
+                  >
+                    {option.label}
+                  </Text>
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+
+          <View style={styles.chipRow}>
+            <TouchableOpacity
+              style={[
+                styles.chip,
+                task.estimated_minutes === null && styles.chipActive,
+              ]}
+              onPress={() => onUpdate({ estimated_minutes: null })}
+              activeOpacity={0.7}
+              accessibilityRole="button"
+              accessibilityLabel={label("Auto estimate")}
+              accessibilityState={{ selected: task.estimated_minutes === null }}
+              testID={`task-est-${index}-auto`}
+            >
+              <Text
+                style={[
+                  styles.chipText,
+                  task.estimated_minutes === null && styles.chipTextActive,
+                ]}
+              >
+                Auto
+              </Text>
+            </TouchableOpacity>
+            {estimateValues.map((minutes) => {
+              const selected = task.estimated_minutes === minutes;
+              return (
+                <TouchableOpacity
+                  key={minutes}
+                  style={[styles.chip, selected && styles.chipActive]}
+                  onPress={() => onUpdate({ estimated_minutes: minutes })}
+                  activeOpacity={0.7}
+                  accessibilityRole="button"
+                  accessibilityLabel={label(`Estimated ${formatMinutes(minutes)}`)}
+                  accessibilityState={{ selected }}
+                  testID={`task-est-${index}-${minutes}`}
+                >
+                  <Text
+                    style={[styles.chipText, selected && styles.chipTextActive]}
+                  >
+                    {formatMinutes(minutes)}
+                  </Text>
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+
+          <View style={styles.notesRow}>
+            <TextInput
+              style={styles.notesInput}
+              value={task.description ?? ""}
+              onChangeText={(value) =>
+                onUpdate({ description: value.trim() ? value : null })
+              }
+              placeholder="Notes (e.g. 20 questions)"
+              placeholderTextColor="#94A3B8"
+              maxLength={200}
+              accessibilityLabel={label("Notes")}
+              testID={`task-notes-${index}`}
+            />
+          </View>
+        </>
+      ) : null}
     </View>
   );
 }
@@ -342,6 +397,39 @@ const styles = StyleSheet.create({
     marginLeft: 4,
     marginBottom: 6,
   },
+  detailsSummary: {
+    fontSize: 13,
+    color: "#6B7280",
+    marginBottom: 8,
+  },
+  detailsRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginBottom: 8,
+  },
+  detailsToggle: {
+    minHeight: 44,
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: "#E0E0E0",
+    backgroundColor: "#F8FAFC",
+    marginRight: 6,
+  },
+  detailsToggleText: {
+    fontSize: 13,
+    color: "#475569",
+    fontWeight: "600",
+  },
+  chevron: {
+    fontSize: 12,
+    color: "#64748B",
+    marginLeft: 6,
+  },
   notesRow: {
     flexDirection: "row",
     alignItems: "center",
@@ -357,7 +445,6 @@ const styles = StyleSheet.create({
     backgroundColor: "#F8FAFC",
     color: "#1A1A1A",
     fontSize: 14,
-    marginRight: 8,
   },
   deleteBtn: {
     width: 44,
