@@ -136,7 +136,9 @@ jest.mock("@react-native-community/datetimepicker", () => {
   return { __esModule: true, default: MockDateTimePicker };
 });
 
-const OnboardingScreen = require("@/app/(onboarding)/index").default;
+const onboardingModule = require("@/app/(onboarding)/index");
+const OnboardingScreen = onboardingModule.default;
+const { confirmSubtitle } = onboardingModule;
 const RootLayout = require("@/app/_layout").default;
 
 function makeProfileUser() {
@@ -260,23 +262,65 @@ describe("Onboarding simplified first-run flow", () => {
     expect(screen.getByText("Here's what I understood")).toBeTruthy();
     expect(screen.getByText("Physics")).toBeTruthy();
     expect(screen.getByText("Maths")).toBeTruthy();
-    expect(screen.getAllByText("1 topic")).toHaveLength(2);
+    expect(screen.getAllByText("1 task")).toHaveLength(2);
+    expect(
+      screen.getByText(
+        "2 tasks across 2 subjects. Momentum will schedule them around your school week.",
+      ),
+    ).toBeTruthy();
     expect(screen.getByText("Looks correct")).toBeTruthy();
-    expect(screen.getByText("Edit")).toBeTruthy();
+    expect(screen.getByText("Edit tasks")).toBeTruthy();
   });
 
-  it("Edit returns to task review", async () => {
+  it("Edit tasks returns to task review without losing entered tasks", async () => {
     await render(<OnboardingScreen />);
     await reachConfirmation();
 
-    await fireEvent.press(screen.getByText("Edit"));
+    await fireEvent.press(screen.getByTestId("confirm-edit"));
 
     expect(screen.getByText("Here's what Momentum understood")).toBeTruthy();
     expect(screen.queryByText("Here's what I understood")).toBeNull();
+    expect(screen.getByTestId("task-title-0").props.value).toBe("Motion");
 
     await fireEvent.press(screen.getByTestId("review-back"));
 
     expect(screen.getByText("What do you need to get done?")).toBeTruthy();
+    expect(screen.getByTestId("backlog-input").props.value).toBe(
+      "Physics\nMotion",
+    );
+  });
+
+  it("confirmation subtitle uses singular wording for one task and one subject", async () => {
+    await render(<OnboardingScreen />);
+    await reachConfirmation();
+
+    expect(
+      screen.getByText(
+        "1 task across 1 subject. Momentum will schedule them around your school week.",
+      ),
+    ).toBeTruthy();
+    expect(screen.getAllByText("1 task")).toHaveLength(1);
+  });
+
+  it("confirmation subtitle counts fallback subjects for tasks without a subject", async () => {
+    await render(<OnboardingScreen />);
+    await interpretBacklog("Study chapter 3\nReview flashcards");
+    await continueToAvailability();
+    await fireEvent.press(screen.getByText("Continue"));
+
+    expect(screen.getByText("Here's what I understood")).toBeTruthy();
+    expect(screen.getByText("General")).toBeTruthy();
+    expect(
+      screen.getByText(
+        "2 tasks across 1 subject. Momentum will schedule them around your school week.",
+      ),
+    ).toBeTruthy();
+  });
+
+  it("confirmSubtitle handles zero tasks and subjects", () => {
+    expect(confirmSubtitle(0, 0)).toBe(
+      "0 tasks across 0 subjects. Momentum will schedule them around your school week.",
+    );
   });
 
   it("confirmation triggers onboarding POST exactly once", async () => {

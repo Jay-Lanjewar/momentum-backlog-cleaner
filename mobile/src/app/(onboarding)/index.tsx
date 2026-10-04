@@ -67,6 +67,15 @@ const INTERPRET_LABEL = "Interpret tasks";
 const REVIEW_TITLE = "Here's what Momentum understood";
 const REVIEW_SUBTITLE = "Editing is optional. Fix anything we got wrong.";
 
+export function confirmSubtitle(
+  taskCount: number,
+  subjectCount: number,
+): string {
+  const tasks = `${taskCount} task${taskCount === 1 ? "" : "s"}`;
+  const subjects = `${subjectCount} subject${subjectCount === 1 ? "" : "s"}`;
+  return `${tasks} across ${subjects}. Momentum will schedule them around your school week.`;
+}
+
 // Default school-day schedule (Mon–Fri). Editable later from Plan → Schedule.
 const DEFAULT_SCHOOL_BLOCK = { type: "school", start: "08:00", end: "15:00" };
 const DEFAULT_SCHEDULE_DAYS = [
@@ -1108,11 +1117,15 @@ export default function OnboardingScreen() {
 
   function renderConfirmView() {
     const { courses, backlog } = draftsToPayload(drafts);
-    const topicCount = backlog.length;
+    const taskCount = backlog.length;
+    const subjectCount = courses.length;
 
     return (
       <>
         <Text style={styles.stepTitle}>Here&apos;s what I understood</Text>
+        <Text style={styles.stepSubtitle}>
+          {confirmSubtitle(taskCount, subjectCount)}
+        </Text>
         {courses.map((course, i) => {
           const count = backlog.filter(
             (item) => item.course_index === i,
@@ -1124,15 +1137,15 @@ export default function OnboardingScreen() {
               <View style={{ flex: 1 }}>
                 <Text style={styles.confirmSubject}>{course.name}</Text>
                 <Text style={styles.confirmCount}>
-                  {count} topic{count !== 1 ? "s" : ""}
+                  {count} task{count !== 1 ? "s" : ""}
                 </Text>
               </View>
             </View>
           );
         })}
-        {topicCount === 0 ? (
+        {taskCount === 0 ? (
           <Text style={styles.emptyText}>
-            No topics found. Try pasting your list in a different format.
+            No tasks found. Try pasting your list in a different format.
           </Text>
         ) : null}
         <View style={styles.row}>
@@ -1144,18 +1157,18 @@ export default function OnboardingScreen() {
             accessibilityLabel="Edit tasks"
             testID="confirm-edit"
           >
-            <Text style={styles.secondaryButtonText}>Edit</Text>
+            <Text style={styles.secondaryButtonText}>Edit tasks</Text>
           </TouchableOpacity>
           <TouchableOpacity
             style={[
               styles.primaryButton,
-              (topicCount === 0 || submitting) && styles.disabled,
+              (taskCount === 0 || submitting) && styles.disabled,
             ]}
             onPress={() => {
-              if (topicCount === 0 || submittingRef.current) return;
+              if (taskCount === 0 || submittingRef.current) return;
               handleFinish();
             }}
-            disabled={topicCount === 0 || submitting}
+            disabled={taskCount === 0 || submitting}
             activeOpacity={0.8}
             accessibilityRole="button"
             accessibilityLabel="Looks correct"
