@@ -1035,8 +1035,9 @@ export default function OnboardingScreen() {
         {total === 0 ? (
           <Text style={styles.emptyText}>Add at least one task to continue.</Text>
         ) : null}
-        {drafts.map((course, courseIndex) =>
-          course.tasks.map((task) => {
+        {drafts.map((course, courseIndex) => {
+          const groupFirstIndex = taskIndex;
+          return course.tasks.map((task) => {
             const index = taskIndex;
             taskIndex += 1;
             return (
@@ -1047,6 +1048,7 @@ export default function OnboardingScreen() {
                 subject={course.subject}
                 subjectUncertain={course.subjectUncertain}
                 courseNames={courseNames}
+                isGroupHead={index === groupFirstIndex}
                 onUpdate={(patch) => updateTask(courseIndex, task.id, patch)}
                 onSubjectChange={(subject) =>
                   renameCourse(courseIndex, subject)
@@ -1055,8 +1057,8 @@ export default function OnboardingScreen() {
                 onDelete={() => deleteTask(courseIndex, task.id)}
               />
             );
-          }),
-        )}
+          });
+        })}
         <TouchableOpacity
           style={styles.addBtn}
           onPress={addTask}

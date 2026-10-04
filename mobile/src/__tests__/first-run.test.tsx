@@ -1109,6 +1109,67 @@ describe("Task review step", () => {
     ).toBe(true);
   });
 
+  it("only the first card of a subject group keeps the subject input", async () => {
+    await openReview("Physics\nMotion\nGravitation\n\nMaths\nTriangles");
+
+    expect(screen.getByTestId("review-card-2")).toBeTruthy();
+    expect(screen.getByTestId("task-subject-0").props.value).toBe("Physics");
+    expect(screen.queryByTestId("task-subject-1")).toBeNull();
+    expect(screen.getByTestId("task-subject-2").props.value).toBe("Maths");
+    expect(screen.queryByTestId("task-subject-badge-0")).toBeNull();
+    expect(screen.queryByTestId("task-subject-badge-2")).toBeNull();
+  });
+
+  it("mid-group cards show a static subject badge instead of an input", async () => {
+    await openReview("Physics\nMotion\nGravitation");
+
+    expect(screen.queryByTestId("task-subject-1")).toBeNull();
+    const badge = screen.getByTestId("task-subject-badge-1");
+    expect(badge.props.children).toBe("Physics");
+    expect(String(badge.props.accessibilityLabel)).toContain("Physics");
+    expect(screen.getByText("Physics")).toBeTruthy();
+    expect(screen.queryByTestId("task-subject-badge-0")).toBeNull();
+  });
+
+  it("only the first card of a subject group renders move controls", async () => {
+    await openReview("Physics\nMotion\nGravitation\n\nMaths\nTriangles");
+
+    expect(screen.getByTestId("task-move-0-Maths")).toBeTruthy();
+    expect(screen.queryByTestId("task-move-1-Maths")).toBeNull();
+    expect(screen.queryByTestId("task-move-1-Physics")).toBeNull();
+  });
+
+  it("the next subject group's first card gets its own input and move controls", async () => {
+    await openReview("Physics\nMotion\nGravitation\n\nMaths\nTriangles");
+
+    expect(screen.getByTestId("task-subject-2").props.value).toBe("Maths");
+    expect(screen.getByTestId("task-move-2-Physics")).toBeTruthy();
+    expect(screen.queryByTestId("task-subject-badge-2")).toBeNull();
+  });
+
+  it("renaming the group's first subject updates every grouped task", async () => {
+    await openReview("Physics\nMotion\nGravitation");
+
+    await fireEvent.changeText(
+      screen.getByTestId("task-subject-0"),
+      "Mechanics",
+    );
+
+    expect(screen.getByTestId("task-subject-0").props.value).toBe("Mechanics");
+    expect(screen.getByTestId("task-subject-badge-1").props.children).toBe(
+      "Mechanics",
+    );
+
+    const payload = await finishFromReview();
+
+    expect(payload.courses[0].name).toBe("Mechanics");
+    expect(payload.backlog.map((item) => item.title)).toEqual([
+      "Motion",
+      "Gravitation",
+    ]);
+    expect(payload.backlog.map((item) => item.course_index)).toEqual([0, 0]);
+  });
+
   it("title edits reach the payload", async () => {
     await openReview("Physics\nMotion");
     await fireEvent.changeText(

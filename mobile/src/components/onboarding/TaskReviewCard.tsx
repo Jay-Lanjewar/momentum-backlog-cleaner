@@ -26,6 +26,7 @@ interface TaskReviewCardProps {
   subject: string;
   subjectUncertain: boolean;
   courseNames: string[];
+  isGroupHead?: boolean;
   onUpdate: (patch: Partial<TaskDraft>) => void;
   onSubjectChange: (subject: string) => void;
   onMove: (targetSubject: string) => void;
@@ -38,6 +39,7 @@ export function TaskReviewCard({
   subject,
   subjectUncertain,
   courseNames,
+  isGroupHead = true,
   onUpdate,
   onSubjectChange,
   onMove,
@@ -60,32 +62,48 @@ export function TaskReviewCard({
   return (
     <View style={styles.card} testID={`review-card-${index}`}>
       <View style={styles.chipRow}>
-        <TextInput
-          style={[styles.subjectInput, subjectUncertain && styles.subjectPlaceholder]}
-          value={subject}
-          onChangeText={onSubjectChange}
-          placeholder="Add a subject"
-          placeholderTextColor="#94A3B8"
-          maxLength={60}
-          accessibilityLabel={label("Subject")}
-          accessibilityHint="Renames the subject shared by these tasks"
-          testID={`task-subject-${index}`}
-        />
-        {otherCourses.map((name) => (
-          <TouchableOpacity
-            key={name}
-            style={styles.chip}
-            onPress={() => onMove(name)}
-            activeOpacity={0.7}
-            accessibilityRole="button"
-            accessibilityLabel={label(`Move to ${name}`)}
-            testID={`task-move-${index}-${name}`}
+        {isGroupHead ? (
+          <>
+            <TextInput
+              style={[
+                styles.subjectInput,
+                subjectUncertain && styles.subjectPlaceholder,
+              ]}
+              value={subject}
+              onChangeText={onSubjectChange}
+              placeholder="Add a subject"
+              placeholderTextColor="#94A3B8"
+              maxLength={60}
+              accessibilityLabel={label("Subject")}
+              accessibilityHint="Renames the subject shared by these tasks"
+              testID={`task-subject-${index}`}
+            />
+            {otherCourses.map((name) => (
+              <TouchableOpacity
+                key={name}
+                style={styles.chip}
+                onPress={() => onMove(name)}
+                activeOpacity={0.7}
+                accessibilityRole="button"
+                accessibilityLabel={label(`Move to ${name}`)}
+                testID={`task-move-${index}-${name}`}
+              >
+                <Text style={styles.chipText} numberOfLines={1}>
+                  {name}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </>
+        ) : (
+          <Text
+            style={styles.subjectBadge}
+            accessibilityRole="text"
+            accessibilityLabel={`${ownName}, subject for task ${index + 1}`}
+            testID={`task-subject-badge-${index}`}
           >
-            <Text style={styles.chipText} numberOfLines={1}>
-              {name}
-            </Text>
-          </TouchableOpacity>
-        ))}
+            {ownName}
+          </Text>
+        )}
       </View>
 
       <TextInput
@@ -262,6 +280,23 @@ const styles = StyleSheet.create({
   subjectPlaceholder: {
     color: "#94A3B8",
     fontWeight: "500",
+  },
+  subjectBadge: {
+    minHeight: 32,
+    alignSelf: "flex-start",
+    justifyContent: "center",
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: "#E2E8F0",
+    backgroundColor: "#F1F5F9",
+    color: "#64748B",
+    fontSize: 14,
+    fontWeight: "600",
+    marginRight: 6,
+    marginBottom: 6,
+    overflow: "hidden",
   },
   titleInput: {
     minHeight: 44,
