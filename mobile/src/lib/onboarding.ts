@@ -26,8 +26,12 @@ export function parseBacklogInput(text: string): ParsedGroup[] {
   }
   if (current.length > 0) groups.push(current);
 
-  // Strategy 1: blank-line-separated groups
-  if (groups.length > 1 && groups.every((g) => g.length >= 1)) {
+  // Strategy 1: blank-line-separated groups.
+  // A paragraph only qualifies as a subject-header group when it has at least
+  // one item after the header line (g.length > 1). Single-line paragraphs must
+  // fall through to the catch-all path, otherwise every line becomes a header
+  // and the tasks themselves are silently lost.
+  if (groups.length > 1 && groups.every((g) => g.length > 1)) {
     return groups.map((g) => ({
       subject: g[0],
       items: g.slice(1),

@@ -58,6 +58,71 @@ describe("parseBacklogInput", () => {
   });
 });
 
+// ── blank-line regressions: no silent task loss ──
+
+describe("parseBacklogInput blank-line regressions", () => {
+  it("keeps both tasks when two single-line paragraphs are blank-separated", () => {
+    const input = "Task A\n\nTask B";
+    const result = parseBacklogInput(input);
+    expect(getTotalTopics(result)).toBe(2);
+    expect(result).toEqual([
+      { subject: "General", items: ["Task A", "Task B"] },
+    ]);
+  });
+
+  it("keeps every task when a trailing single-line paragraph follows a normal block", () => {
+    const input = "Task A\nTask B\n\nTask C";
+    const result = parseBacklogInput(input);
+    expect(getTotalTopics(result)).toBe(3);
+    expect(result).toEqual([
+      { subject: "General", items: ["Task A", "Task B", "Task C"] },
+    ]);
+  });
+
+  it("does not create phantom subjects from blank lines between normal tasks", () => {
+    const input =
+      "Physics homework\n\nChemistry homework\n\nEnglish homework";
+    const result = parseBacklogInput(input);
+    expect(result).toHaveLength(1);
+    expect(result[0].subject).toBe("General");
+    expect(result[0].items).toEqual([
+      "Physics homework",
+      "Chemistry homework",
+      "English homework",
+    ]);
+    expect(getTotalTopics(result)).toBe(3);
+  });
+
+  it("keeps multi-line subject groups exactly as before", () => {
+    const input = "Physics\nMotion\nGravitation\n\nMaths\nTriangles\nCircles";
+    const result = parseBacklogInput(input);
+    expect(result).toEqual([
+      { subject: "Physics", items: ["Motion", "Gravitation"] },
+      { subject: "Maths", items: ["Triangles", "Circles"] },
+    ]);
+    expect(getTotalTopics(result)).toBe(4);
+  });
+
+  it("keeps subject groups when each paragraph has exactly one item", () => {
+    const input = "Physics\nMotion\n\nMaths\nTriangles";
+    const result = parseBacklogInput(input);
+    expect(result).toEqual([
+      { subject: "Physics", items: ["Motion"] },
+      { subject: "Maths", items: ["Triangles"] },
+    ]);
+    expect(getTotalTopics(result)).toBe(2);
+  });
+
+  it("falls back to dash grouping when blank-separated paragraphs are single-line", () => {
+    const input = "Physics - Motion\n\nMaths - Triangles";
+    const result = parseBacklogInput(input);
+    expect(result).toEqual([
+      { subject: "Physics", items: ["Motion"] },
+      { subject: "Maths", items: ["Triangles"] },
+    ]);
+  });
+});
+
 // ── getTotalTopics ──
 
 describe("getTotalTopics", () => {
