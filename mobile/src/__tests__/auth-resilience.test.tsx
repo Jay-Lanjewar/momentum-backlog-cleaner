@@ -243,7 +243,7 @@ async function enterOnboardingConfirm() {
     screen.getByTestId("backlog-input"),
     "Physics\nMotion",
   );
-  await fireEvent.press(screen.getByText("Interpret tasks"));
+  await fireEvent.press(screen.getByText("Review tasks"));
   await fireEvent.press(screen.getByTestId("review-continue"));
   await fireEvent.press(screen.getByText("Continue"));
   await fireEvent.press(screen.getByText("Looks correct"));

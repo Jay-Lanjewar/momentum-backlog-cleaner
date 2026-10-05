@@ -65,7 +65,7 @@ const BACKLOG_PLACEHOLDER = [
   "Chemistry atoms and molecules chapter",
   "English worksheet tomorrow",
 ].join("\n");
-const INTERPRET_LABEL = "Interpret tasks";
+const INTERPRET_LABEL = "Review tasks";
 const REVIEW_TITLE = "Here's what Momentum understood";
 const REVIEW_SUBTITLE = "Editing is optional. Fix anything we got wrong.";
 

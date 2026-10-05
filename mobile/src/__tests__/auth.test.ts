@@ -308,7 +308,7 @@ describe("Root layout has onboarding gate", () => {
     expect(content).toContain("What do you need to get done?");
     expect(content).toContain("Here&apos;s what I understood");
     expect(content).toContain("Here's what Momentum understood");
-    expect(content).toContain("Interpret tasks");
+    expect(content).toContain("Review tasks");
     expect(content).toContain("Looks correct");
     expect(content).toContain("parseBacklogInput");
   });

@@ -183,7 +183,7 @@ function makeNoProfileUser() {
 
 async function interpretBacklog(text: string) {
   await fireEvent.changeText(screen.getByTestId("backlog-input"), text);
-  await fireEvent.press(screen.getByText("Interpret tasks"));
+  await fireEvent.press(screen.getByText("Review tasks"));
 }
 
 async function enterBacklog() {
@@ -703,10 +703,10 @@ describe("Onboarding simplified first-run flow", () => {
     expect(screen.queryByText("Here's what I understood")).toBeNull();
   });
 
-  it("Interpret tasks is disabled when backlog is empty", async () => {
+  it("Review tasks is disabled when backlog is empty", async () => {
     await render(<OnboardingScreen />);
 
-    const btn = screen.getByText("Interpret tasks");
+    const btn = screen.getByText("Review tasks");
     const touchable = btn.parent ?? btn;
     expect(
       touchable.props?.accessibilityState?.disabled ??
@@ -776,7 +776,7 @@ describe("Backlog live feedback", () => {
     expect(screen.queryByTestId("backlog-task-count")).toBeNull();
     expect(screen.queryByTestId("backlog-zero-error")).toBeNull();
 
-    const btn = screen.getByText("Interpret tasks");
+    const btn = screen.getByText("Review tasks");
     const touchable = btn.parent ?? btn;
     expect(
       touchable.props?.accessibilityState?.disabled ??
@@ -803,7 +803,7 @@ describe("Backlog live feedback", () => {
       expect(screen.getByTestId("backlog-zero-error")).toBeTruthy();
       expect(screen.queryByTestId("backlog-task-count")).toBeNull();
 
-      const btn = screen.getByText("Interpret tasks");
+      const btn = screen.getByText("Review tasks");
       const touchable = btn.parent ?? btn;
       expect(
         touchable.props?.accessibilityState?.disabled ??
@@ -816,6 +816,33 @@ describe("Backlog live feedback", () => {
     } finally {
       spy.mockRestore();
     }
+  });
+});
+
+describe("Task-entry CTA copy", () => {
+  it('shows "Review tasks" as the task-entry CTA with a matching label', async () => {
+    await render(<OnboardingScreen />);
+
+    const btn = screen.getByText("Review tasks");
+    expect(btn).toBeTruthy();
+    expect(screen.queryByText("Interpret tasks")).toBeNull();
+
+    const touchable = btn.parent ?? btn;
+    expect(touchable.props?.accessibilityLabel).toBe("Review tasks");
+    expect(touchable.props?.testID).toBe("interpret-tasks");
+  });
+
+  it("Review tasks still runs interpretation and opens the review step", async () => {
+    await render(<OnboardingScreen />);
+
+    await interpretBacklog("Physics\nMotion");
+
+    expect(screen.getByText("Here's what Momentum understood")).toBeTruthy();
+    expect(screen.getByTestId("review-continue")).toBeTruthy();
+    expect(screen.getByTestId("task-title-0").props.value).toBe("Motion");
+    expect(screen.queryByText("Interpret tasks")).toBeNull();
+    expect(screen.queryByText("Review tasks")).toBeNull();
+    expect(screen.queryByText("What do you need to get done?")).toBeNull();
   });
 });
 
@@ -1273,7 +1300,7 @@ describe("Availability step", () => {
 
     expect(screen.getByText("What do you need to get done?")).toBeTruthy();
 
-    await fireEvent.press(screen.getByText("Interpret tasks"));
+    await fireEvent.press(screen.getByText("Review tasks"));
     await continueToAvailability();
 
     expect(screen.getByText("When are you busy?")).toBeTruthy();
@@ -1679,7 +1706,7 @@ describe("Task review step", () => {
     );
 
     await fireEvent.press(screen.getByTestId("review-back"));
-    await fireEvent.press(screen.getByText("Interpret tasks"));
+    await fireEvent.press(screen.getByText("Review tasks"));
 
     expect(screen.getByTestId("task-title-0").props.value).toBe(
       "Motion essay",
