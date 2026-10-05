@@ -86,6 +86,7 @@ describe("ChangePasswordScreen - rendering", () => {
     expect(screen.getByTestId("change-password-new")).toBeTruthy();
     expect(screen.getByTestId("change-password-confirm")).toBeTruthy();
     expect(screen.getByTestId("change-password-back")).toBeTruthy();
+    expect(screen.queryByTestId("change-password-short")).toBeNull();
   });
 });
 
@@ -99,9 +100,40 @@ describe("ChangePasswordScreen - CTA gating", () => {
     expect(
       screen.getByTestId(SUBMIT).props.accessibilityState?.disabled,
     ).toBe(true);
+    expect(screen.getByTestId("change-password-short")).toBeTruthy();
+    expect(
+      screen.getByText("Password must be at least 8 characters"),
+    ).toBeTruthy();
+    expect(screen.queryByTestId("change-password-mismatch")).toBeNull();
 
     await fireEvent.press(screen.getByTestId(SUBMIT));
     expect(mockUpdateUser).not.toHaveBeenCalled();
+  });
+
+  it("hides the short-password hint at exactly 8 characters and enables the CTA", async () => {
+    await renderScreen();
+    await fillPasswords("Abc12", "Abc12");
+    expect(screen.getByTestId("change-password-short")).toBeTruthy();
+
+    await fillPasswords("Abcd1234", "Abcd1234");
+
+    expect(screen.queryByTestId("change-password-short")).toBeNull();
+    expect(
+      screen.getByTestId(SUBMIT).props.accessibilityState?.disabled,
+    ).toBe(false);
+    expect(screen.queryByTestId("change-password-mismatch")).toBeNull();
+  });
+
+  it("shows short-password and mismatch hints independently", async () => {
+    await renderScreen();
+
+    await fillPasswords("Abc12", "Abc12");
+    expect(screen.getByTestId("change-password-short")).toBeTruthy();
+    expect(screen.queryByTestId("change-password-mismatch")).toBeNull();
+
+    await fillPasswords(VALID_PASSWORD, "Abcd1235!");
+    expect(screen.queryByTestId("change-password-short")).toBeNull();
+    expect(screen.getByTestId("change-password-mismatch")).toBeTruthy();
   });
 
   it("keeps the CTA disabled while confirmation does not match", async () => {
@@ -112,6 +144,7 @@ describe("ChangePasswordScreen - CTA gating", () => {
       screen.getByTestId(SUBMIT).props.accessibilityState?.disabled,
     ).toBe(true);
     expect(screen.getByTestId("change-password-mismatch")).toBeTruthy();
+    expect(screen.queryByTestId("change-password-short")).toBeNull();
 
     await fireEvent.press(screen.getByTestId(SUBMIT));
     expect(mockUpdateUser).not.toHaveBeenCalled();
@@ -125,6 +158,7 @@ describe("ChangePasswordScreen - CTA gating", () => {
       screen.getByTestId(SUBMIT).props.accessibilityState?.disabled,
     ).toBe(false);
     expect(screen.queryByTestId("change-password-mismatch")).toBeNull();
+    expect(screen.queryByTestId("change-password-short")).toBeNull();
   });
 });
 

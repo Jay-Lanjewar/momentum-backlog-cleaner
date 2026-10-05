@@ -137,6 +137,11 @@ export default function ChangePasswordScreen() {
               {strength.label}
             </Text>
           ) : null}
+          {password.length > 0 && password.length < 8 ? (
+            <Text style={styles.hintError} testID="change-password-short">
+              Password must be at least 8 characters
+            </Text>
+          ) : null}
 
           <Text style={styles.label}>Confirm New Password</Text>
           <View style={styles.inputRow}>
