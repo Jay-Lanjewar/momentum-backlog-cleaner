@@ -529,14 +529,17 @@ export default function OnboardingScreen() {
       return "End time must be after start time.";
     }
     for (const day of candidate.days) {
-      const others: WeeklyBlock[] = [];
-      if (schoolDays.includes(day)) {
-        others.push({
-          type: "school",
-          start: schoolStart,
-          end: schoolEnd,
-        });
+      if (
+        schoolDays.includes(day) &&
+        hasOverlap(
+          [{ start: schoolStart, end: schoolEnd }],
+          candidate.start,
+          candidate.end,
+        )
+      ) {
+        return `This overlaps with your school hours on ${DAY_FULL_LABELS[day]}.`;
       }
+      const others: WeeklyBlock[] = [];
       for (const commitment of commitments) {
         if (commitment.id === candidate.id) continue;
         if (commitment.days.includes(day)) {
@@ -596,7 +599,7 @@ export default function OnboardingScreen() {
               onPress={() => onToggle(day)}
               activeOpacity={0.7}
               accessibilityRole="button"
-              accessibilityLabel={`${labelPrefix} ${DAY_LABELS[day]}`}
+              accessibilityLabel={`${labelPrefix} day: ${DAY_FULL_LABELS[day]}`}
               accessibilityState={{ selected: active }}
               testID={`${testIDPrefix}-${day}`}
             >
@@ -633,6 +636,7 @@ export default function OnboardingScreen() {
           activeOpacity={0.7}
           accessibilityRole="button"
           accessibilityLabel={accessibilityLabel}
+          accessibilityValue={{ text: formatTime12h(value) }}
           testID={buttonTestID}
         >
           <Text style={styles.timeBtnText}>{formatTime12h(value)}</Text>
@@ -922,7 +926,11 @@ export default function OnboardingScreen() {
               >
                 <Text style={styles.stepperBtnText}>−</Text>
               </TouchableOpacity>
-              <Text style={styles.stepperValue} testID="daily-target-value">
+              <Text
+                style={styles.stepperValue}
+                testID="daily-target-value"
+                accessibilityLabel={`Daily target: ${dailyTarget} min`}
+              >
                 {dailyTarget} min
               </Text>
               <TouchableOpacity

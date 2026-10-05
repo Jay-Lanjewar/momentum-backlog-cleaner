@@ -1058,6 +1058,100 @@ describe("Availability step", () => {
     expect(mockPost).not.toHaveBeenCalled();
   });
 
+  it("shows a school-specific error when a commitment overlaps school hours", async () => {
+    await openAvailability();
+
+    await fireEvent.press(screen.getByTestId("onboarding-add-commitment"));
+
+    expect(
+      screen.getByTestId("onboarding-commitment-start").props
+        .accessibilityLabel,
+    ).toBe("Commitment start time");
+    expect(
+      screen.getByTestId("onboarding-commitment-end").props
+        .accessibilityLabel,
+    ).toBe("Commitment end time");
+
+    await fireEvent.press(screen.getByTestId("onboarding-commitment-start"));
+    await fireEvent(
+      screen.getByTestId("onboarding-commitment-start-picker"),
+      "onChange",
+      {},
+      new Date(2026, 0, 5, 9, 0),
+    );
+    await fireEvent.press(screen.getByTestId("onboarding-commitment-end"));
+    await fireEvent(
+      screen.getByTestId("onboarding-commitment-end-picker"),
+      "onChange",
+      {},
+      new Date(2026, 0, 5, 10, 0),
+    );
+
+    expect(
+      screen.getByText("This overlaps with your school hours on Monday."),
+    ).toBeTruthy();
+    expect(
+      screen.queryByText("This overlaps with another commitment on Monday."),
+    ).toBeNull();
+
+    const save = screen.getByText("Save");
+    const saveTouchable = save.parent ?? save;
+    expect(
+      saveTouchable.props?.accessibilityState?.disabled ??
+        saveTouchable.props?.disabled,
+    ).toBe(true);
+  });
+
+  it("day chips expose clear accessible labels and selected state", async () => {
+    await openAvailability();
+
+    const monday = screen.getByTestId("school-day-monday");
+    expect(monday.props.accessibilityLabel).toBe("School day: Monday");
+    expect(monday.props.accessibilityState?.selected).toBe(true);
+
+    const saturday = screen.getByTestId("school-day-saturday");
+    expect(saturday.props.accessibilityLabel).toBe("School day: Saturday");
+    expect(saturday.props.accessibilityState?.selected).toBe(false);
+
+    await fireEvent.press(screen.getByTestId("school-day-monday"));
+    expect(
+      screen.getByTestId("school-day-monday").props.accessibilityState
+        ?.selected,
+    ).toBe(false);
+
+    await fireEvent.press(screen.getByTestId("onboarding-add-commitment"));
+    const commitmentMonday = screen.getByTestId("commitment-day-monday");
+    expect(commitmentMonday.props.accessibilityLabel).toBe(
+      "Commitment day: Monday",
+    );
+    expect(commitmentMonday.props.accessibilityState?.selected).toBe(true);
+  });
+
+  it("school time controls expose accessible labels and current values", async () => {
+    await openAvailability();
+
+    const start = screen.getByTestId("onboarding-school-start");
+    expect(start.props.accessibilityLabel).toBe("School start time");
+    expect(start.props.accessibilityValue?.text).toBe("8 AM");
+
+    const end = screen.getByTestId("onboarding-school-end");
+    expect(end.props.accessibilityLabel).toBe("School end time");
+    expect(end.props.accessibilityValue?.text).toBe("3 PM");
+  });
+
+  it("daily target exposes an accessible label and value", async () => {
+    await openAvailability();
+
+    expect(
+      screen.getByTestId("daily-target-value").props.accessibilityLabel,
+    ).toBe("Daily target: 120 min");
+
+    await fireEvent.press(screen.getByTestId("daily-target-increase"));
+    expect(
+      screen.getByTestId("daily-target-value").props.accessibilityLabel,
+    ).toBe("Daily target: 150 min");
+  });
+
   it("availability step has no old weekday-questionnaire UI", async () => {
     await openAvailability();
 
