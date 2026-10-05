@@ -12,7 +12,7 @@ import {
   fireEvent,
   waitFor,
 } from "@testing-library/react-native";
-import { Alert } from "react-native";
+import { Alert, Platform } from "react-native";
 
 const mockReplace = jest.fn();
 const mockPush = jest.fn();
@@ -901,6 +901,12 @@ describe("Availability step", () => {
 
     expect(screen.getByText("9:30 AM")).toBeTruthy();
     expect(screen.getByText("2 PM")).toBeTruthy();
+    const startControl = screen.getByTestId("onboarding-school-start");
+    expect(startControl.props.accessibilityLabel).toBe("School start time");
+    expect(startControl.props.accessibilityValue?.text).toBe("9:30 AM");
+    const endControl = screen.getByTestId("onboarding-school-end");
+    expect(endControl.props.accessibilityLabel).toBe("School end time");
+    expect(endControl.props.accessibilityValue?.text).toBe("2 PM");
 
     const payload = await confirmAndSubmit();
 
@@ -1150,6 +1156,98 @@ describe("Availability step", () => {
     expect(
       screen.getByTestId("daily-target-value").props.accessibilityLabel,
     ).toBe("Daily target: 150 min");
+  });
+
+  it("re-tapping an open time control closes its picker", async () => {
+    await openAvailability();
+
+    expect(screen.queryByTestId("onboarding-school-start-picker")).toBeNull();
+    await fireEvent.press(screen.getByTestId("onboarding-school-start"));
+    expect(screen.getByTestId("onboarding-school-start-picker")).toBeTruthy();
+
+    await fireEvent.press(screen.getByTestId("onboarding-school-start"));
+    expect(screen.queryByTestId("onboarding-school-start-picker")).toBeNull();
+  });
+
+  it("switching time controls opens only one picker", async () => {
+    await openAvailability();
+
+    await fireEvent.press(screen.getByTestId("onboarding-school-start"));
+    expect(screen.getByTestId("onboarding-school-start-picker")).toBeTruthy();
+
+    await fireEvent.press(screen.getByTestId("onboarding-school-end"));
+    expect(screen.queryByTestId("onboarding-school-start-picker")).toBeNull();
+    expect(screen.getByTestId("onboarding-school-end-picker")).toBeTruthy();
+  });
+
+  it("opens and edits commitment times with the native picker", async () => {
+    await openAvailability();
+
+    await fireEvent.press(screen.getByTestId("onboarding-add-commitment"));
+    expect(
+      screen.queryByTestId("onboarding-commitment-start-picker"),
+    ).toBeNull();
+
+    await fireEvent.press(screen.getByTestId("onboarding-commitment-start"));
+    expect(
+      screen.getByTestId("onboarding-commitment-start-picker"),
+    ).toBeTruthy();
+    await fireEvent(
+      screen.getByTestId("onboarding-commitment-start-picker"),
+      "onChange",
+      {},
+      new Date(2026, 0, 5, 15, 30),
+    );
+
+    expect(screen.getByText("3:30 PM")).toBeTruthy();
+    const start = screen.getByTestId("onboarding-commitment-start");
+    expect(start.props.accessibilityLabel).toBe("Commitment start time");
+    expect(start.props.accessibilityValue?.text).toBe("3:30 PM");
+
+    await fireEvent.press(screen.getByTestId("onboarding-commitment-end"));
+    await fireEvent(
+      screen.getByTestId("onboarding-commitment-end-picker"),
+      "onChange",
+      {},
+      new Date(2026, 0, 5, 17, 0),
+    );
+
+    expect(screen.getByText("5 PM")).toBeTruthy();
+    const end = screen.getByTestId("onboarding-commitment-end");
+    expect(end.props.accessibilityLabel).toBe("Commitment end time");
+    expect(end.props.accessibilityValue?.text).toBe("5 PM");
+
+    await fireEvent.press(screen.getByText("Save"));
+    expect(screen.queryByText("New commitment")).toBeNull();
+
+    const payload = await confirmAndSubmit();
+    expect(payload.schedule.schedule.monday).toEqual([
+      { type: "school", start: "08:00", end: "15:00" },
+      { type: "coaching", start: "15:30", end: "17:00" },
+    ]);
+  });
+
+  it("on web, time controls are editable inputs without pickers", async () => {
+    const originalOS = Platform.OS;
+    Object.assign(Platform, { OS: "web" });
+    try {
+      await openAvailability();
+
+      expect(screen.queryByTestId("onboarding-school-start-picker")).toBeNull();
+      expect(screen.queryByTestId("onboarding-school-end-picker")).toBeNull();
+
+      await fireEvent.changeText(
+        screen.getByTestId("onboarding-school-start"),
+        "09:15",
+      );
+
+      expect(screen.getByDisplayValue("09:15")).toBeTruthy();
+      expect(
+        screen.getByTestId("onboarding-school-start").props.accessibilityLabel,
+      ).toBe("School start time");
+    } finally {
+      Object.assign(Platform, { OS: originalOS });
+    }
   });
 
   it("availability step has no old weekday-questionnaire UI", async () => {

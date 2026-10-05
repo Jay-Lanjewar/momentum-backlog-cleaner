@@ -44,9 +44,11 @@ import {
   DAYS,
   DAY_LABELS,
   DAY_FULL_LABELS,
+  dateToTime,
   formatTime12h,
   isValidTimeRange,
   hasOverlap,
+  timeToDate,
 } from "@/lib/schedule";
 
 const SAVING_MSG = "Saving your work...";
@@ -121,17 +123,6 @@ function buildDefaultSchedule(): Record<
     schedule[day] = [{ ...DEFAULT_SCHOOL_BLOCK }];
   }
   return schedule;
-}
-
-function timeToDate(time: string): Date {
-  const [h, m] = time.split(":").map(Number);
-  const d = new Date();
-  d.setHours(h, m, 0, 0);
-  return d;
-}
-
-function dateToTime(d: Date): string {
-  return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
 }
 
 function buildSchedule(
@@ -626,13 +617,31 @@ export default function OnboardingScreen() {
       date?: Date,
     ) => void,
     accessibilityLabel: string,
+    onTimeText: (time: string) => void,
   ) {
+    if (Platform.OS === "web") {
+      return (
+        <View style={styles.timeField}>
+          <Text style={styles.fieldLabel}>{label}</Text>
+          <TextInput
+            style={styles.input}
+            value={value}
+            onChangeText={onTimeText}
+            placeholder="HH:mm"
+            placeholderTextColor="#999"
+            accessibilityLabel={accessibilityLabel}
+            testID={buttonTestID}
+          />
+        </View>
+      );
+    }
+
     return (
       <View style={styles.timeField}>
         <Text style={styles.fieldLabel}>{label}</Text>
         <TouchableOpacity
           style={styles.timeBtn}
-          onPress={() => setPicker(pickerKey)}
+          onPress={() => setPicker(picker === pickerKey ? null : pickerKey)}
           activeOpacity={0.7}
           accessibilityRole="button"
           accessibilityLabel={accessibilityLabel}
@@ -704,6 +713,7 @@ export default function OnboardingScreen() {
                 "onboarding-school-start-picker",
                 (e, d) => handleSchoolTimeChange("start", e, d),
                 "School start time",
+                (time) => setSchoolStart(time),
               )}
               {renderTimeField(
                 "Ends",
@@ -713,6 +723,7 @@ export default function OnboardingScreen() {
                 "onboarding-school-end-picker",
                 (e, d) => handleSchoolTimeChange("end", e, d),
                 "School end time",
+                (time) => setSchoolEnd(time),
               )}
             </View>
           </View>
@@ -848,6 +859,7 @@ export default function OnboardingScreen() {
                   "onboarding-commitment-start-picker",
                   (e, d) => handleCommitmentTimeChange("start", e, d),
                   "Commitment start time",
+                  (time) => setForm({ ...form, start: time }),
                 )}
                 {renderTimeField(
                   "Ends",
@@ -857,6 +869,7 @@ export default function OnboardingScreen() {
                   "onboarding-commitment-end-picker",
                   (e, d) => handleCommitmentTimeChange("end", e, d),
                   "Commitment end time",
+                  (time) => setForm({ ...form, end: time }),
                 )}
               </View>
 
