@@ -59,31 +59,42 @@ export default function SettingsScreen() {
         ? "On"
         : "Off";
 
+  function openSystemSettings() {
+    try {
+      void Linking.openSettings().catch(() => {});
+    } catch {
+      // Settings intent unavailable; nothing to do.
+    }
+  }
+
   async function handleNotificationsPress() {
     if (notificationState === "loading" || notificationState === "granted") {
       return;
     }
     if (notificationState === "blocked") {
       // Permanently denied: the native prompt is no longer available.
-      try {
-        void Linking.openSettings().catch(() => {});
-      } catch {
-        // Settings intent unavailable; nothing to do.
-      }
+      openSystemSettings();
       return;
     }
 
-    // askable: one native attempt. The helper's once-per-session latch and
-    // the platform's own limits prevent repeated nagging.
-    const granted = await requestNotificationPermission();
+    // Explicit user action: bypass the once-per-session anti-nag latch so a
+    // deliberate Settings tap always reaches the native prompt, even when
+    // the latch already tripped (e.g. the Today priming card).
+    const granted = await requestNotificationPermission({
+      bypassSessionLatch: true,
+    });
     if (granted) {
       setNotificationState("granted");
       return;
     }
-    // Status may have just flipped to permanently blocked (second denial).
+
+    // Refused, failed, or denied: never leave the tap looking like a no-op.
+    // Refresh state (a second denial may have flipped us to blocked) and
+    // land the user where they can flip the toggle themselves.
     getPermissionState()
       .then((state) => setNotificationState(classifyNotificationState(state)))
       .catch(() => setNotificationState("askable"));
+    openSystemSettings();
   }
 
   async function handleSignOut() {
@@ -160,6 +171,11 @@ export default function SettingsScreen() {
               onPress={handleNotificationsPress}
               accessibilityRole="button"
               accessibilityLabel={`Notifications, ${notificationHintText}`}
+              accessibilityHint={
+                notificationState === "blocked"
+                  ? "Opens system settings"
+                  : "Requests permission to show notifications"
+              }
               testID="notifications-row"
             >
               <Text style={styles.rowText}>Notifications</Text>

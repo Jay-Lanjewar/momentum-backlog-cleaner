@@ -221,6 +221,46 @@ describe("requestNotificationPermission", () => {
     expect(Notifications.requestPermissionsAsync).toHaveBeenCalledTimes(1);
   });
 
+  it("bypassSessionLatch prompts again even after the session latch is set", async () => {
+    (Notifications.getPermissionsAsync as jest.Mock).mockResolvedValue({
+      status: "denied",
+      canAskAgain: true,
+    });
+    (Notifications.requestPermissionsAsync as jest.Mock).mockResolvedValue({
+      status: "denied",
+    });
+
+    const first = await requestNotificationPermission();
+    const second = await requestNotificationPermission({
+      bypassSessionLatch: true,
+    });
+
+    expect(first).toBe(false);
+    expect(second).toBe(false);
+    expect(Notifications.requestPermissionsAsync).toHaveBeenCalledTimes(2);
+  });
+
+  it("bypassSessionLatch still records the latch for later default callers", async () => {
+    (Notifications.getPermissionsAsync as jest.Mock).mockResolvedValue({
+      status: "denied",
+      canAskAgain: true,
+    });
+    (Notifications.requestPermissionsAsync as jest.Mock).mockResolvedValue({
+      status: "denied",
+    });
+
+    const bypassed = await requestNotificationPermission({
+      bypassSessionLatch: true,
+    });
+    const defaulted = await requestNotificationPermission();
+
+    expect(bypassed).toBe(false);
+    expect(defaulted).toBe(false);
+    // The bypassed attempt recorded the latch: the default caller never
+    // reaches the native prompt (priming/automatic anti-nag stays intact).
+    expect(Notifications.requestPermissionsAsync).toHaveBeenCalledTimes(1);
+  });
+
   it("is non-blocking when permission APIs fail", async () => {
     (Notifications.getPermissionsAsync as jest.Mock).mockRejectedValue(
       new Error("permission API unavailable"),

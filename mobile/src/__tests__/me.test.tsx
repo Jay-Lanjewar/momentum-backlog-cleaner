@@ -345,6 +345,39 @@ describe("SettingsScreen", () => {
     expect(screen.queryByText("Coming soon")).toBeNull();
   });
 
+  it("shows an informational loading row that is not tappable", async () => {
+    const { getPermissionState } = jest.requireMock("@/services/notifications");
+    getPermissionState.mockImplementationOnce(
+      () => new Promise(() => undefined),
+    );
+
+    await act(async () => {
+      render(<SettingsScreen />);
+    });
+
+    expect(screen.getByText("…")).toBeTruthy();
+    expect(screen.queryByTestId("notifications-row")).toBeNull();
+  });
+
+  it("tappable Off row exposes button role, label, and hint", async () => {
+    mockNotificationPermissionStatus = "denied";
+    mockNotificationCanAskAgain = true;
+
+    await act(async () => {
+      render(<SettingsScreen />);
+    });
+    await waitFor(() => {
+      expect(screen.getByText("Off")).toBeTruthy();
+    });
+
+    const row = screen.getByTestId("notifications-row");
+    expect(row.props.accessibilityRole).toBe("button");
+    expect(row.props.accessibilityLabel).toBe("Notifications, Off");
+    expect(row.props.accessibilityHint).toBe(
+      "Requests permission to show notifications",
+    );
+  });
+
   it("notifications row is informational (not pressable) when granted", async () => {
     mockNotificationPermissionStatus = "granted";
     await act(async () => {
@@ -425,16 +458,24 @@ describe("SettingsScreen", () => {
     await waitFor(() => {
       expect(requestNotificationPermission).toHaveBeenCalledTimes(1);
     });
+    // Explicit Settings taps bypass the session latch (the tap must always
+    // reach the native prompt, even if a prior request tripped the latch).
+    expect(requestNotificationPermission).toHaveBeenCalledWith({
+      bypassSessionLatch: true,
+    });
     // Helper reported granted → the row reflects the honest On state.
     await waitFor(() => {
       expect(screen.getByText("On")).toBeTruthy();
     });
   });
 
-  it("tapping Off with a denied helper result keeps the Off state without re-prompting", async () => {
+  it("tapping Off when the request is refused or denied falls back to system settings", async () => {
     mockNotificationPermissionStatus = "denied";
     mockNotificationCanAskAgain = true;
     mockRequestPermissionResult = false;
+    const openSettings = jest
+      .spyOn(Linking, "openSettings")
+      .mockResolvedValue(undefined);
 
     await act(async () => {
       render(<SettingsScreen />);
@@ -451,10 +492,18 @@ describe("SettingsScreen", () => {
       "@/services/notifications",
     );
     await waitFor(() => {
-      expect(requestNotificationPermission).toHaveBeenCalledTimes(1);
+      expect(requestNotificationPermission).toHaveBeenCalledWith({
+        bypassSessionLatch: true,
+      });
+    });
+    // Never a silent re-render of the same Off state: the tap lands the
+    // user in system settings instead.
+    await waitFor(() => {
+      expect(openSettings).toHaveBeenCalledTimes(1);
     });
     expect(screen.getByText("Off")).toBeTruthy();
-    expect(screen.queryByText("Coming soon")).toBeNull();
+
+    openSettings.mockRestore();
   });
 
   it("tapping Off with a permanent denial opens system Settings instead", async () => {
@@ -470,6 +519,9 @@ describe("SettingsScreen", () => {
     await waitFor(() => {
       expect(screen.getByText("Off")).toBeTruthy();
     });
+    expect(
+      screen.getByTestId("notifications-row").props.accessibilityHint,
+    ).toBe("Opens system settings");
 
     await act(async () => {
       fireEvent.press(screen.getByTestId("notifications-row"));

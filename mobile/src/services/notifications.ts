@@ -110,14 +110,23 @@ export async function getPermissionState(): Promise<Notifications.NotificationPe
  *
  * The session latch applies to the fresh-install shape too, so a denied
  * first prompt is never re-attempted automatically in the same session.
+ *
+ * `bypassSessionLatch` is reserved for explicit user-initiated entry points
+ * (Settings > Notifications): a deliberate tap must always reach the native
+ * prompt, even when the latch has already tripped elsewhere this session.
+ * The attempt still records the latch, so automatic/priming callers remain
+ * protected against re-prompting.
  */
-export async function requestNotificationPermission(): Promise<boolean> {
+export async function requestNotificationPermission(options?: {
+  bypassSessionLatch?: boolean;
+}): Promise<boolean> {
   try {
     const { status: existing, canAskAgain } =
       await Notifications.getPermissionsAsync();
     if (existing === "granted") return true;
     if (existing === "denied" && canAskAgain === false) return false;
-    if (permissionRequestedThisSession) return false;
+    if (permissionRequestedThisSession && !options?.bypassSessionLatch)
+      return false;
 
     permissionRequestedThisSession = true;
     const { status } = await Notifications.requestPermissionsAsync();
