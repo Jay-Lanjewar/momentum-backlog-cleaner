@@ -75,6 +75,10 @@ async function request<T>(
       return { data: null as unknown as T, error: errorBody, errorCode };
     }
 
+    if (response.status === 204) {
+      return { data: null as unknown as T, error: null, errorCode: null };
+    }
+
     const data = await response.json();
     return { data, error: null, errorCode: null };
   } catch {

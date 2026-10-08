@@ -7,6 +7,7 @@
  */
 
 import { render, screen, cleanup } from "@testing-library/react-native";
+import { Animated } from "react-native";
 
 const mockReplace = jest.fn();
 const mockPush = jest.fn();
@@ -98,6 +99,13 @@ jest.mock("@/components/adaptive/AdaptiveSessionLegend", () => ({
 jest.mock("@/components/adaptive/AdaptiveChangeGroup", () => ({
   AdaptiveChangeGroup: () => null,
 }));
+
+jest.spyOn(Animated, "timing").mockReturnValue(({
+  start: (callback?: (result: { finished: boolean }) => void) =>
+    callback?.({ finished: true }),
+  stop: jest.fn(),
+  reset: jest.fn(),
+} as any));
 
 afterEach(() => {
   cleanup();

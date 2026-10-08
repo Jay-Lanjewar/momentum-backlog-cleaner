@@ -57,6 +57,20 @@ describe("api client", () => {
     expect(result.data).toEqual({ data: { id: 1 } });
   });
 
+  it("treats a successful 204 response as an empty successful result", async () => {
+    const json = jest.fn().mockRejectedValue(new Error("No content"));
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      status: 204,
+      json,
+    });
+
+    const result = await api.delete<null>("/api/v1/goals/goal-id");
+
+    expect(result).toEqual({ data: null, error: null, errorCode: null });
+    expect(json).not.toHaveBeenCalled();
+  });
+
   it("returns error on non-ok response with detail string", async () => {
     mockFetch.mockResolvedValueOnce({
       ok: false,
