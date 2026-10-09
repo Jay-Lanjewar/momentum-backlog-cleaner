@@ -387,7 +387,7 @@ export function BacklogForm({
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: "#0F172A" },
-  content: { paddingHorizontal: 20, paddingTop: 16, paddingBottom: 40 },
+  content: { paddingHorizontal: 20, paddingTop: 16, paddingBottom: 120 },
   label: {
     fontSize: 13,
     fontWeight: "600",

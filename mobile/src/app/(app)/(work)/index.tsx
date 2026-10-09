@@ -8,6 +8,8 @@ import {
   RefreshControl,
   ActivityIndicator,
   Modal,
+  KeyboardAvoidingView,
+  Platform,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
@@ -380,11 +382,16 @@ export default function BacklogScreen() {
             <Text style={styles.modalTitle}>New Task</Text>
             <View style={{ width: 60 }} />
           </View>
-          <BacklogForm
-            saving={createItem.isPending}
-            submitLabel="Add Task"
-            onSubmit={handleCreate}
-          />
+          <KeyboardAvoidingView
+            style={styles.modalForm}
+            behavior={Platform.OS === "ios" ? "padding" : "height"}
+          >
+            <BacklogForm
+              saving={createItem.isPending}
+              submitLabel="Add Task"
+              onSubmit={handleCreate}
+            />
+          </KeyboardAvoidingView>
         </SafeAreaView>
       </Modal>
     </SafeAreaView>
@@ -562,6 +569,7 @@ const styles = StyleSheet.create({
 
   // Modal
   modalContainer: { flex: 1, backgroundColor: "#0F172A" },
+  modalForm: { flex: 1 },
   modalHeader: {
     flexDirection: "row",
     justifyContent: "space-between",

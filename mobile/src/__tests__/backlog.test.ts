@@ -253,6 +253,39 @@ describe("backlog file structure", () => {
     expect(fileExists("components/BacklogForm.tsx")).toBe(true);
   });
 
+  it("wraps the New Task form in a platform-aware keyboard layout", () => {
+    const content = fs.readFileSync(
+      path.join(SRC, "app/(app)/(work)/index.tsx"),
+      "utf-8",
+    );
+    expect(content).toContain("KeyboardAvoidingView");
+    expect(content).toContain(
+      'behavior={Platform.OS === "ios" ? "padding" : "height"}',
+    );
+    expect(content).toContain("style={styles.modalForm}");
+  });
+
+  it("keeps the New Task header outside the keyboard-adjusted form", () => {
+    const content = fs.readFileSync(
+      path.join(SRC, "app/(app)/(work)/index.tsx"),
+      "utf-8",
+    );
+    const headerStart = content.indexOf("styles.modalHeader");
+    const formStart = content.indexOf("styles.modalForm");
+    expect(headerStart).toBeGreaterThanOrEqual(0);
+    expect(formStart).toBeGreaterThan(headerStart);
+    expect(content.slice(headerStart, formStart)).toContain("New Task");
+    expect(content.slice(formStart)).toContain("<BacklogForm");
+  });
+
+  it("keeps bottom space for the final form controls above the keyboard", () => {
+    const content = fs.readFileSync(
+      path.join(SRC, "components/BacklogForm.tsx"),
+      "utf-8",
+    );
+    expect(content).toContain("paddingBottom: 120");
+  });
+
   it("has backlog types in types.ts", () => {
     const content = fs.readFileSync(
       path.join(SRC, "services/types.ts"),
