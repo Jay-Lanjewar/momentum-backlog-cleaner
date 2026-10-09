@@ -11,6 +11,7 @@ const COLORS = {
 export default function AppLayout() {
   return (
     <Tabs
+      initialRouteName="(today)"
       screenOptions={{
         headerShown: false,
         tabBarActiveTintColor: COLORS.active,

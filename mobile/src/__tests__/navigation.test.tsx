@@ -133,6 +133,14 @@ describe("Navigation file structure", () => {
     expect(content).toContain('"(me)"');
   });
 
+  it("app _layout explicitly starts authenticated navigation on Today", () => {
+    const content = fs.readFileSync(
+      path.join(appDir, "_layout.tsx"),
+      "utf8",
+    );
+    expect(content).toContain('initialRouteName="(today)"');
+  });
+
   it("social tab is hidden from primary navigation", () => {
     const content = fs.readFileSync(
       path.join(appDir, "_layout.tsx"),
