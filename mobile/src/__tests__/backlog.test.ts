@@ -253,6 +253,28 @@ describe("backlog file structure", () => {
     expect(fileExists("components/BacklogForm.tsx")).toBe(true);
   });
 
+  it("labels Notes as optional workload details with an explanatory placeholder", () => {
+    const content = fs.readFileSync(
+      path.join(SRC, "components/BacklogForm.tsx"),
+      "utf-8",
+    );
+    expect(content).toContain(
+      "Notes or workload details (optional)",
+    );
+    expect(content).toContain(
+      "e.g. 20 questions, 3 chapters, or instructions from your teacher",
+    );
+  });
+
+  it("keeps Notes mapped to the trimmed nullable description payload", () => {
+    const content = fs.readFileSync(
+      path.join(SRC, "components/BacklogForm.tsx"),
+      "utf-8",
+    );
+    expect(content).toContain("description: description.trim() || null");
+    expect(content).toContain("onChangeText={setDescription}");
+  });
+
   it("wraps the New Task form in a platform-aware keyboard layout", () => {
     const content = fs.readFileSync(
       path.join(SRC, "app/(app)/(work)/index.tsx"),

@@ -355,12 +355,12 @@ export function BacklogForm({
           maxLength={4}
         />
 
-        <Text style={styles.label}>Notes (optional)</Text>
+        <Text style={styles.label}>Notes or workload details (optional)</Text>
         <TextInput
           style={[styles.input, styles.textArea]}
           value={description}
           onChangeText={setDescription}
-          placeholder="Anything your teacher said..."
+          placeholder="e.g. 20 questions, 3 chapters, or instructions from your teacher"
           placeholderTextColor="#64748B"
           multiline
           numberOfLines={3}
