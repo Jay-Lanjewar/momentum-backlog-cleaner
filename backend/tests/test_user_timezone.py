@@ -114,7 +114,8 @@ def freeze_clock(monkeypatch):
 
 class TestTimezoneHeaderTransport:
     @pytest.mark.asyncio
-    async def test_valid_header_reaches_nested_scope(self):
+    async def test_valid_header_reaches_nested_scope(self, freeze_clock):
+        freeze_clock(DEVICE_UTC)
         seen = {}
 
         async def inner_app(scope, receive, send):

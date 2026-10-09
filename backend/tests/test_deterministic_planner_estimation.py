@@ -213,6 +213,25 @@ class TestSchedulesUnchanged:
 
 
 class TestWorkloadDescriptionFlow:
+    def test_quadratic_questions_task_uses_sixty_minutes(self):
+        item_id = uuid.uuid4()
+        result = generate_deterministic_plan({
+            "available_windows": [_window("09:00", "11:00")],
+            "prioritized_backlog": [
+                _item(
+                    id=item_id,
+                    title="Quadratic equations practice",
+                    description="20 questions",
+                    priority=3,
+                    estimated_minutes=None,
+                )
+            ],
+        })
+        sessions = result["sessions"]
+        assert [_duration(session) for session in sessions] == [30, 30]
+        assert {session["backlog_item_id"] for session in sessions} == {str(item_id)}
+        assert result["overflow"] == []
+
     def test_description_quantity_flows_to_sessions(self):
         result = generate_deterministic_plan({
             "available_windows": [_window()],

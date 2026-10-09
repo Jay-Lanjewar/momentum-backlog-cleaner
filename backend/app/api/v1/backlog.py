@@ -5,12 +5,11 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.dependencies import get_current_user, get_db
-from app.core.timezone import today_in_user_tz
 from app.domain.models import ActivityType, User
 from app.domain.schemas import BacklogItemCreate, BacklogItemResponse, BacklogItemUpdate
 from app.repositories.backlog_repo import BacklogItemRepository
 from app.repositories.course_repo import CourseRepository
-from app.services.adaptive_service import get_active_snapshot, supersede_snapshot
+from app.services.adaptive_service import supersede_current_day_snapshot
 from app.services.backlog_service import BacklogService
 from app.services.activity_service import ActivityService
 
@@ -30,12 +29,15 @@ async def create_backlog_item(
     data: BacklogItemCreate,
     user: User = Depends(get_current_user),
     service: BacklogService = Depends(get_backlog_service),
+    db: AsyncSession = Depends(get_db),
 ):
     try:
         item = await service.create(user.id, data)
-        return item
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+    if item.status in ("pending", "in_progress"):
+        await supersede_current_day_snapshot(db, user.id)
+    return item
 
 
 @router.get("", response_model=list[BacklogItemResponse])
@@ -82,9 +84,7 @@ async def update_backlog_item(
     if old and old.status != "completed" and item.status == "completed":
         act = ActivityService(db)
         await act.record(user.id, ActivityType.TASK_COMPLETED, {"item_id": str(item.id), "title": item.title})
-        snapshot = await get_active_snapshot(db, user.id, today_in_user_tz())
-        if snapshot is not None:
-            await supersede_snapshot(db, snapshot.id)
+    await supersede_current_day_snapshot(db, user.id)
     return item
 
 
@@ -93,7 +93,9 @@ async def delete_backlog_item(
     item_id: uuid.UUID,
     user: User = Depends(get_current_user),
     service: BacklogService = Depends(get_backlog_service),
+    db: AsyncSession = Depends(get_db),
 ):
     deleted = await service.delete(item_id, user.id)
     if not deleted:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Backlog item not found")
+    await supersede_current_day_snapshot(db, user.id)

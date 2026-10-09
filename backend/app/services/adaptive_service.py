@@ -99,6 +99,15 @@ async def supersede_snapshot(db: AsyncSession, snapshot_id: uuid.UUID) -> None:
     )
 
 
+async def supersede_current_day_snapshot(
+    db: AsyncSession, user_id: uuid.UUID
+) -> None:
+    """Supersede only the user's active plan for their current local day."""
+    snapshot = await get_active_snapshot(db, user_id, today_in_user_tz())
+    if snapshot is not None:
+        await supersede_snapshot(db, snapshot.id)
+
+
 async def get_or_create_active_snapshot(
     db: AsyncSession,
     user_id: uuid.UUID,
