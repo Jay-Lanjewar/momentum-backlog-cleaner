@@ -668,8 +668,12 @@ class TestStaleSnapshotRegeneration:
             plan_date,
             plan,
             source="deterministic",
-            version=1,
         ):
+            prior_versions = [
+                state["existing"].version
+            ] if state["existing"] is not None else []
+            prior_versions.extend(entry["version"] for entry in state["created"])
+            version = max(prior_versions, default=0) + 1
             state["created"].append(
                 {"version": version, "plan_date": plan_date, "plan": plan}
             )
@@ -693,6 +697,10 @@ class TestStaleSnapshotRegeneration:
             }
 
         monkeypatch.setattr(adaptive_service, "get_active_snapshot", fake_get_active)
+        async def fake_lock_user(db, user_id):
+            return None
+
+        monkeypatch.setattr(adaptive_service, "_lock_user", fake_lock_user)
         monkeypatch.setattr(adaptive_service, "supersede_snapshot", fake_supersede)
         monkeypatch.setattr(adaptive_service, "create_snapshot", fake_create)
         monkeypatch.setattr(
@@ -885,12 +893,16 @@ class TestStaleSnapshotRegeneration:
             state["superseded"].append(snapshot_id)
 
         async def fake_create(
-            db, user_id, plan_date, plan, source="deterministic", version=1
+            db, user_id, plan_date, plan, source="deterministic"
         ):
-            state["created"].append({"version": version, "plan": plan})
-            return SimpleNamespace(version=version, sessions=plan["sessions"])
+            state["created"].append({"version": 2, "plan": plan})
+            return SimpleNamespace(version=2, sessions=plan["sessions"])
 
         monkeypatch.setattr(adaptive_service, "get_active_snapshot", fake_get_active)
+        async def fake_lock_user(db, user_id):
+            return None
+
+        monkeypatch.setattr(adaptive_service, "_lock_user", fake_lock_user)
         monkeypatch.setattr(adaptive_service, "supersede_snapshot", fake_supersede)
         monkeypatch.setattr(adaptive_service, "create_snapshot", fake_create)
         # Real generate_deterministic_plan is intentionally NOT patched.

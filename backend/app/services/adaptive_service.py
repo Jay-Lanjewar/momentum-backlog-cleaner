@@ -9,7 +9,7 @@ import re
 import uuid
 from datetime import date, datetime, timezone
 
-from sqlalchemy import select, update
+from sqlalchemy import func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.domain.models import (
@@ -17,6 +17,7 @@ from app.domain.models import (
     BacklogItem,
     PlanSnapshot,
     SessionCompletion,
+    User,
 )
 from app.domain.schemas import (
     AdaptivePlanResponse,
@@ -65,19 +66,33 @@ async def get_active_snapshot(
     return result.scalar_one_or_none()
 
 
+async def _lock_user(db: AsyncSession, user_id: uuid.UUID) -> None:
+    """Serialize snapshot lifecycle changes for one user."""
+    await db.execute(
+        select(User.id).where(User.id == user_id).with_for_update()
+    )
+
+
 async def create_snapshot(
     db: AsyncSession,
     user_id: uuid.UUID,
     plan_date: date,
     plan: dict,
     source: str = "deterministic",
-    version: int = 1,
 ) -> PlanSnapshot:
-    """Create a new active plan snapshot."""
+    """Create a snapshot with the next version for this user and date."""
+    await _lock_user(db, user_id)
+    result = await db.execute(
+        select(func.max(PlanSnapshot.version)).where(
+            PlanSnapshot.user_id == user_id,
+            PlanSnapshot.plan_date == plan_date,
+        )
+    )
+    latest_version = result.scalar_one() or 0
     snapshot = PlanSnapshot(
         user_id=user_id,
         plan_date=plan_date,
-        version=version,
+        version=latest_version + 1,
         sessions=plan.get("sessions", []),
         daily_message=plan.get("daily_message", ""),
         overflow=plan.get("overflow", []),
@@ -103,6 +118,7 @@ async def supersede_current_day_snapshot(
     db: AsyncSession, user_id: uuid.UUID
 ) -> None:
     """Supersede only the user's active plan for their current local day."""
+    await _lock_user(db, user_id)
     snapshot = await get_active_snapshot(db, user_id, today_in_user_tz())
     if snapshot is not None:
         await supersede_snapshot(db, snapshot.id)
@@ -125,6 +141,7 @@ async def get_or_create_active_snapshot(
     remains (see ``_is_stale_snapshot``).  Otherwise the stored snapshot is
     reused so we never churn a new version on every request.
     """
+    await _lock_user(db, user_id)
     existing = await get_active_snapshot(db, user_id, plan_date)
     if existing is not None:
         pending_backlog = planning_data.get("prioritized_backlog") or []
@@ -140,7 +157,6 @@ async def get_or_create_active_snapshot(
                 user_id,
                 plan_date,
                 plan,
-                version=existing.version + 1,
             )
         return existing
 
@@ -256,7 +272,8 @@ async def run_adaptive_completion(
     backlog_item_id_str, session_number = parsed
     backlog_item_id = uuid.UUID(backlog_item_id_str)
 
-    # 2. Load active snapshot
+    # 2. Serialize snapshot lifecycle changes before loading the active plan.
+    await _lock_user(db, user_id)
     snapshot = await get_active_snapshot(db, user_id, plan_date)
     if snapshot is None:
         raise ValueError("No active plan for today")
@@ -325,7 +342,7 @@ async def run_adaptive_completion(
     # 8. Supersede old snapshot, create new one
     await supersede_snapshot(db, snapshot.id)
     new_snapshot = await create_snapshot(
-        db, user_id, plan_date, new_plan, source="deterministic", version=snapshot.version + 1
+        db, user_id, plan_date, new_plan, source="deterministic"
     )
 
     # 9. Build item title map for diff

@@ -24,6 +24,10 @@ async def test_supersede_current_day_snapshot_uses_only_current_local_day(
         seen["superseded"] = snapshot_id
 
     monkeypatch.setattr(adaptive_service, "today_in_user_tz", lambda: current_day)
+    async def fake_lock_user(db, user_id):
+        return None
+
+    monkeypatch.setattr(adaptive_service, "_lock_user", fake_lock_user)
     monkeypatch.setattr(adaptive_service, "get_active_snapshot", get_active)
     monkeypatch.setattr(adaptive_service, "supersede_snapshot", supersede)
 
@@ -40,6 +44,10 @@ async def test_supersede_current_day_snapshot_does_nothing_without_active_plan(
     async def get_active(db, user_id, requested_date):
         return None
 
+    async def fake_lock_user(db, user_id):
+        return None
+
+    monkeypatch.setattr(adaptive_service, "_lock_user", fake_lock_user)
     async def fail_if_called(db, snapshot_id):
         raise AssertionError("no snapshot should be superseded")
 

@@ -77,10 +77,13 @@ def _make_mock_db(snapshot, backlog_item):
     mock_db.refresh = AsyncMock(side_effect=_refresh)
 
     mock_db.execute.side_effect = [
+        MagicMock(),                   # 1. lock user row
         _mock_scalar(snapshot),        # 1. get_active_snapshot
         _mock_scalar(backlog_item),    # 2. load BacklogItem
         _mock_scalars([]),             # 3. get_completions_for_snapshot
         MagicMock(),                   # 4. supersede_snapshot (UPDATE)
+        MagicMock(),                   # 5. lock user row for new snapshot
+        MagicMock(scalar_one=MagicMock(return_value=1)),  # 6. max version
     ]
 
     return mock_db
@@ -163,7 +166,8 @@ class TestStreakUpdateOnCompletion:
         """No active plan raises ValueError and does NOT trigger streak update."""
         mock_db = AsyncMock()
         mock_db.execute.side_effect = [
-            _mock_scalar(None),  # 1. get_active_snapshot → no plan
+            MagicMock(),         # 1. lock user row
+            _mock_scalar(None),  # 2. get_active_snapshot → no plan
         ]
 
         with patch("app.services.streak_service.StreakService") as MockStreakService:
