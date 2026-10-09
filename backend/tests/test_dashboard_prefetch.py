@@ -11,6 +11,7 @@ from app.domain.models import (
     SubjectStreak,
 )
 from app.services.streak_service import StreakService
+from app.services import motivation_service
 from app.services.motivation_service import MotivationService
 
 USER_ID = uuid.UUID("00000000-0000-0000-0000-000000000001")
@@ -269,20 +270,22 @@ class TestGetInsightPrefetched:
         assert mock_db.execute.called
         assert "title" in result
 
-    async def test_course_lookups_reused_in_exam_path(
-        self, mock_db, momentum, subject_streaks, courses
+    @pytest.mark.parametrize("due_offset", [0, 3])
+    async def test_due_dated_task_never_generates_exam_insight(
+        self, mock_db, momentum, subject_streaks, courses, monkeypatch, due_offset
     ):
-        today = datetime.now(timezone.utc)
+        today = datetime(2026, 10, 9).date()
+        monkeypatch.setattr(motivation_service, "today_in_user_tz", lambda: today)
         backlog = [
             BacklogItem(
                 id=uuid.uuid4(),
                 user_id=USER_ID,
                 course_id=COURSE_ID_1,
-                title="Exam Topic",
+                title="Quadratic equations practice",
                 priority=1,
                 estimated_minutes=60,
                 status="pending",
-                due_date=today + timedelta(days=1),
+                due_date=datetime.combine(today + timedelta(days=due_offset), datetime.min.time()),
             ),
         ]
         service = MotivationService(mock_db)
@@ -295,7 +298,47 @@ class TestGetInsightPrefetched:
         )
 
         mock_db.get.assert_not_called()
-        assert result["title"] == "Exam Approaching"
+        assert result["title"] not in {"Exam Approaching", "Exams Approaching"}
+
+    async def test_motivation_uses_user_local_calendar_date(
+        self, mock_db, momentum, courses, monkeypatch
+    ):
+        monkeypatch.setattr(
+            motivation_service,
+            "today_in_user_tz",
+            lambda: date(2026, 9, 26),
+        )
+        subject_streaks = [
+            SubjectStreak(
+                id=uuid.uuid4(),
+                user_id=USER_ID,
+                course_id=COURSE_ID_1,
+                current_streak=0,
+                longest_streak=0,
+                last_completion_date=date(2026, 9, 21),
+            ),
+        ]
+
+        result = await MotivationService(mock_db).get_insight(
+            USER_ID,
+            streak=StudyStreak(
+                id=uuid.uuid4(),
+                user_id=USER_ID,
+                current_streak=0,
+                longest_streak=0,
+                total_study_days=0,
+                last_completed_date=None,
+                recovery_tokens_current=0,
+                recovery_tokens_earned=0,
+                recovery_tokens_used=0,
+            ),
+            subject_streaks=subject_streaks,
+            all_backlog=[],
+            courses_by_id=courses,
+        )
+
+        assert result["title"] == "Subject Neglected"
+        assert "5 days" in result["message"]
 
     async def test_course_lookups_reused_in_neglected_path(
         self, mock_db, momentum, courses

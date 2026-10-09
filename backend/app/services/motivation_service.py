@@ -1,10 +1,11 @@
 import uuid
-from datetime import date, datetime, timedelta, timezone
+from datetime import datetime, timedelta, timezone
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.domain.models import BacklogItem, Course, StudyStreak, SubjectStreak
+from app.core.timezone import today_in_user_tz
 from app.repositories.backlog_repo import BacklogItemRepository
 from app.repositories.streak_repo import StudyStreakRepository, SubjectStreakRepository
 
@@ -48,7 +49,7 @@ class MotivationService:
         courses_by_id: dict[uuid.UUID, Course] | None = None,
     ) -> dict:
         today = datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0)
-        today_date = date.today()
+        today_date = today_in_user_tz()
 
         if streak is None:
             streak = await self.study_streak_repo.get_by_user(user_id)
@@ -89,34 +90,6 @@ class MotivationService:
                 "message": "Your Recovery Token protected today's streak.",
                 "priority": 1,
             }
-
-        upcoming_exams = self._get_upcoming_exams(all_backlog, today_date, days_ahead=3)
-        if upcoming_exams:
-            exams_by_course = {}
-            for item in upcoming_exams:
-                course = courses_by_id.get(item.course_id)
-                course_name = course.name if course else "Unknown"
-                if course_name not in exams_by_course:
-                    exams_by_course[course_name] = 0
-                exams_by_course[course_name] += 1
-
-            if len(exams_by_course) == 1:
-                course_name = list(exams_by_course.keys())[0]
-                count = exams_by_course[course_name]
-                days_left = (upcoming_exams[0].due_date.date() - today_date).days if upcoming_exams[0].due_date else 0
-                return {
-                    "title": "Exam Approaching",
-                    "message": f"{course_name} exam in {days_left} day{'s' if days_left != 1 else ''}. {count} topic{'s' if count != 1 else ''} to review.",
-                    "priority": 2,
-                }
-            else:
-                course_names = list(exams_by_course.keys())
-                days_left = (upcoming_exams[0].due_date.date() - today_date).days if upcoming_exams[0].due_date else 0
-                return {
-                    "title": "Exams Approaching",
-                    "message": f"{len(exams_by_course)} exam{'s' if len(exams_by_course) != 1 else ''} in {days_left} day{'s' if days_left != 1 else ''}. Prioritize review.",
-                    "priority": 2,
-                }
 
         for ss in subject_streaks:
             course = courses_by_id.get(ss.course_id)
@@ -214,25 +187,6 @@ class MotivationService:
             "message": encouragement,
             "priority": 10,
         }
-
-    def _get_upcoming_exams(
-        self,
-        items: list,
-        today: date,
-        days_ahead: int = 3,
-    ) -> list:
-        pending = [i for i in items if i.status in ("pending", "in_progress")]
-        result = []
-        for item in pending:
-            if item.due_date:
-                due = item.due_date
-                if isinstance(due, datetime):
-                    due = due.date()
-                days_until = (due - today).days
-                if 0 <= days_until <= days_ahead:
-                    result.append(item)
-        result.sort(key=lambda x: x.due_date or datetime.max)
-        return result
 
     async def _get_all_backlog(self, user_id: uuid.UUID) -> list:
         result = await self.db.execute(
