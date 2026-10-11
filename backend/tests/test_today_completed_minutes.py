@@ -142,9 +142,8 @@ def _setup_dashboard_mocks(app, mock_db, mock_user_obj, completions=None):
     mock_db.execute.side_effect = [
         _mock_unique_scalar(user_with_relations),  # 1. base_user
         _mock_rows([(course, backlog_item)]),       # 2. courses_backlog
-        _mock_scalars([]),                          # 3. goals
-        _mock_scalar(None),                         # 4. subject_streaks
-        _mock_scalars(completions),                 # 5. completions (today)
+        _mock_scalar(None),                         # 3. subject_streaks
+        _mock_scalars(completions),                 # 4. completions (today)
     ]
 
     app.dependency_overrides[get_db] = lambda: mock_db

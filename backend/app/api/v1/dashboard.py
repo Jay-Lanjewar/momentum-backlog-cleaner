@@ -13,7 +13,6 @@ from app.core.timezone import now_in_user_tz, today_in_user_tz
 from app.domain.models import (
     BacklogItem,
     Course,
-    Goal,
     PlanSnapshot,
     SessionCompletion,
     SubjectStreak,
@@ -56,6 +55,7 @@ async def get_dashboard(
             joinedload(User.profile),
             joinedload(User.schedule),
             joinedload(User.study_streak),
+            joinedload(User.goals),
         )
     )
     base_user = base_user_result.unique().scalar_one_or_none()
@@ -79,10 +79,7 @@ async def get_dashboard(
             backlog_items.append(backlog_item)
     courses = list(courses_by_id.values())
 
-    goals_result = await db.execute(
-        select(Goal).where(Goal.user_id == user_id)
-    )
-    goals = goals_result.scalars().all()
+    goals = base_user.goals if base_user else []
 
     engine = PlanningEngine(
         profile=profile,

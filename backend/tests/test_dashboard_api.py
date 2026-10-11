@@ -60,11 +60,12 @@ def _mock_rows(rows):
     return m
 
 
-def _make_user_with_relations(profile=None, schedule=None, streak=None):
+def _make_user_with_relations(profile=None, schedule=None, streak=None, goals=None):
     user = User(id=USER_ID, email="test@test.com", name="Test")
     user.profile = profile
     user.schedule = schedule
     user.study_streak = streak
+    user.goals = goals or []
     return user
 
 
@@ -108,6 +109,69 @@ MOCK_INSIGHT = {"title": "Keep going!", "message": "You're doing great.", "prior
 
 
 class TestDashboardEndpoint:
+    def test_dashboard_passes_eager_loaded_goals_to_planning_engine(
+        self, app, mock_db, mock_user
+    ):
+        profile = _make_profile()
+        schedule = _make_schedule()
+        goals = [
+            Goal(id=uuid.uuid4(), user_id=USER_ID, title="Pass math"),
+            Goal(id=uuid.uuid4(), user_id=USER_ID, title="Finish project"),
+        ]
+        user_with_relations = _make_user_with_relations(
+            profile, schedule, None, goals
+        )
+
+        mock_db.execute.side_effect = [
+            _mock_unique_scalar(user_with_relations),
+            _mock_rows([]),
+            _mock_scalar(None),
+            _mock_scalars([]),
+        ]
+
+        app.dependency_overrides[get_db] = lambda: mock_db
+        app.dependency_overrides[get_current_user_id] = lambda: USER_ID
+
+        planning_data = {
+            "available_windows": [],
+            "prioritized_backlog": [],
+            "total_available_minutes": 0,
+            "total_required_minutes": 0,
+            "estimated_days_to_clear": 0,
+            "backlog_health": {
+                "total_items": 0,
+                "completed_items": 0,
+                "overdue_items": 0,
+                "pending_items": 0,
+                "clear_rate_7d": 100.0,
+                "health_score": "clear",
+            },
+        }
+        with patch("app.api.v1.dashboard.PlanningEngine") as engine_cls, \
+             patch("app.api.v1.dashboard.get_or_create_active_snapshot") as mock_snapshot, \
+             patch("app.api.v1.dashboard.StreakService") as mock_streak_cls, \
+             patch("app.api.v1.dashboard.MotivationService") as mock_motivation_cls:
+            engine_cls.return_value.compute.return_value = planning_data
+            mock_snapshot.return_value = MagicMock(
+                id=uuid.uuid4(),
+                sessions=[],
+                daily_message="No tasks scheduled",
+                overflow=[],
+                source="deterministic",
+            )
+            mock_streak = mock_streak_cls.return_value
+            mock_streak.get_streaks = AsyncMock(return_value=MOCK_STREAKS)
+            mock_streak.compute_balance_score = AsyncMock(return_value=MOCK_BALANCE)
+            mock_motivation = mock_motivation_cls.return_value
+            mock_motivation.get_insight = AsyncMock(return_value=MOCK_INSIGHT)
+
+            response = TestClient(app).get("/api/v1/dashboard")
+
+        app.dependency_overrides.clear()
+
+        assert response.status_code == 200
+        assert engine_cls.call_args.kwargs["goals"] == goals
+
     def test_dashboard_returns_deterministic_plan(self, app, mock_db, mock_user):
         course = Course(id=uuid.uuid4(), user_id=USER_ID, name="Math", color="#6366f1")
         backlog_item = BacklogItem(
@@ -121,7 +185,6 @@ class TestDashboardEndpoint:
         mock_db.execute.side_effect = [
             _mock_unique_scalar(user_with_relations),
             _mock_rows([(course, backlog_item)]),
-            _mock_scalars([]),
             _mock_scalar(None),
             _mock_scalars([]),
         ]
@@ -171,7 +234,6 @@ class TestDashboardEndpoint:
         mock_db.execute.side_effect = [
             _mock_unique_scalar(user_with_relations),
             _mock_rows([(course, backlog_item)]),
-            _mock_scalars([]),
             _mock_scalar(None),
             _mock_scalars([]),
         ]
@@ -216,7 +278,6 @@ class TestDashboardEndpoint:
         mock_db.execute.side_effect = [
             _mock_unique_scalar(user_with_relations),
             _mock_rows([(course, backlog_item)]),
-            _mock_scalars([]),
             _mock_scalar(None),
             _mock_scalars([]),
         ]
@@ -273,7 +334,6 @@ class TestDashboardEndpoint:
         mock_db.execute.side_effect = [
             _mock_unique_scalar(user_with_relations),
             _mock_rows([(course, backlog_item)]),
-            _mock_scalars([]),
             _mock_scalar(None),
             _mock_scalars([]),
         ]
@@ -317,7 +377,7 @@ class TestDashboardEndpoint:
         assert len(data["plan"]["plan"]["sessions"]) == 1
         assert data["plan"]["plan"]["daily_message"] == "You've got this!"
 
-    def test_dashboard_performs_five_queries(self, app, mock_db, mock_user):
+    def test_dashboard_performs_four_queries(self, app, mock_db, mock_user):
         course = Course(id=uuid.uuid4(), user_id=USER_ID, name="Math", color="#6366f1")
         backlog_item = BacklogItem(
             id=uuid.uuid4(), user_id=USER_ID, course_id=course.id,
@@ -330,7 +390,6 @@ class TestDashboardEndpoint:
         mock_db.execute.side_effect = [
             _mock_unique_scalar(user_with_relations),
             _mock_rows([(course, backlog_item)]),
-            _mock_scalars([]),
             _mock_scalar(None),
             _mock_scalars([]),
         ]
@@ -360,7 +419,7 @@ class TestDashboardEndpoint:
         app.dependency_overrides.clear()
 
         assert response.status_code == 200
-        assert mock_db.execute.call_count == 5
+        assert mock_db.execute.call_count == 4
         mock_snapshot.assert_called_once()
 
     def test_dashboard_deduplicates_courses(self, app, mock_db, mock_user):
@@ -373,14 +432,19 @@ class TestDashboardEndpoint:
             id=uuid.uuid4(), user_id=USER_ID, course_id=course.id,
             title="Homework 2", priority=2, estimated_minutes=30, status="pending",
         )
+        goals = [
+            Goal(id=uuid.uuid4(), user_id=USER_ID, title="Goal 1"),
+            Goal(id=uuid.uuid4(), user_id=USER_ID, title="Goal 2"),
+        ]
         profile = _make_profile()
         schedule = _make_schedule()
-        user_with_relations = _make_user_with_relations(profile, schedule, None)
+        user_with_relations = _make_user_with_relations(
+            profile, schedule, None, goals
+        )
 
         mock_db.execute.side_effect = [
             _mock_unique_scalar(user_with_relations),
             _mock_rows([(course, backlog_item1), (course, backlog_item2)]),
-            _mock_scalars([]),
             _mock_scalar(None),
             _mock_scalars([]),
         ]
@@ -421,7 +485,6 @@ class TestDashboardEndpoint:
         mock_db.execute.side_effect = [
             _mock_unique_scalar(user_with_relations),
             _mock_rows([]),
-            _mock_scalars([]),
             _mock_scalar(None),
             _mock_scalars([]),
         ]
@@ -463,7 +526,6 @@ class TestDashboardEndpoint:
         mock_db.execute.side_effect = [
             _mock_unique_scalar(user_with_relations),
             _mock_rows([(course, None)]),
-            _mock_scalars([]),
             _mock_scalar(None),
             _mock_scalars([]),
         ]
