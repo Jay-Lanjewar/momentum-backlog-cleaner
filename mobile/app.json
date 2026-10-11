@@ -2,7 +2,7 @@
   "expo": {
     "name": "Momentum",
     "slug": "mobile",
-    "version": "1.0.0",
+    "version": "1.1.0",
     "orientation": "portrait",
     "icon": "./assets/branding/generated/momentum-icon.png",
     "scheme": "momentum",
