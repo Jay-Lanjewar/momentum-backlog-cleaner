@@ -5,15 +5,21 @@ import { StatusBar } from "expo-status-bar";
 import * as SplashScreen from "expo-splash-screen";
 import * as Notifications from "expo-notifications";
 
-import { useAuth } from "@/hooks/useAuth";
+import {
+  restoreSession,
+  subscribeToAuthState,
+  useAuth,
+} from "@/hooks/useAuth";
 import { useAuthStore } from "@/store/useAuthStore";
 import {
   setNotificationHandler,
   createNotificationChannels,
 } from "@/services/notifications";
+import { performanceMark } from "@/lib/performance";
 
 setNotificationHandler();
 SplashScreen.preventAutoHideAsync();
+performanceMark("startup.begin");
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -23,10 +29,16 @@ const queryClient = new QueryClient({
 
 function AuthGate() {
   const { user, isAuthenticated, isLoading } = useAuth();
+  const clearAuth = useAuthStore((s) => s.clearAuth);
   const confirming = useAuthStore((s) => s.confirming);
   const mfaRequired = useAuthStore((s) => s.mfaRequired);
   const segments = useSegments();
   const router = useRouter();
+
+  useEffect(() => {
+    void restoreSession();
+    return subscribeToAuthState(clearAuth);
+  }, [clearAuth]);
 
   useEffect(() => {
     if (isLoading || confirming) return;
@@ -74,6 +86,7 @@ function AuthGate() {
 
   useEffect(() => {
     if (!isLoading) {
+      performanceMark("startup.splash_hide.requested");
       SplashScreen.hideAsync();
     }
   }, [isLoading]);

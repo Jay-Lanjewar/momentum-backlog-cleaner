@@ -1,10 +1,11 @@
-import { useEffect, useCallback } from "react";
+import { useCallback } from "react";
 import { router } from "expo-router";
 
 import { supabase } from "@/lib/supabase";
 import { api } from "@/lib/api";
 import { useAuthStore } from "@/store/useAuthStore";
 import { friendlyMfaError, pickVerifiedTotpFactor } from "@/lib/mfa";
+import { performanceMark, performanceMeasure } from "@/lib/performance";
 import type { AuthLoginRequest, AuthMeResponse } from "@/services/types";
 
 /**
@@ -77,33 +78,49 @@ async function detectMfaChallenge(): Promise<MfaDetection> {
  * AuthGate routes to (auth)/two-factor. The AuthGate routing is the single
  * source of navigation for this flow — nothing here moves the router.
  */
-export async function restoreSession(): Promise<RestoreOutcome> {
+async function restoreSessionInternal(): Promise<RestoreOutcome> {
+  performanceMark("startup.auth_restore.begin");
   try {
+    performanceMark("startup.supabase_session_retrieval.begin");
     const {
       data: { session },
     } = await supabase.auth.getSession();
+    performanceMeasure(
+      "startup.supabase_session_retrieval.finish",
+      "startup.supabase_session_retrieval.begin",
+    );
 
     if (!session?.access_token) {
       useAuthStore.getState().setLoading(false);
+      performanceMark("startup.auth_restore.finish");
       return "no-session";
     }
 
     const mfa = await detectMfaChallenge();
+    performanceMark("startup.mfa_assurance_checks.finish");
     if (mfa.status === "required") {
       useAuthStore.getState().beginMfaChallenge(mfa.factorId);
       useAuthStore.getState().setLoading(false);
+      performanceMark("startup.auth_restore.finish");
       return "mfa-required";
     }
     if (mfa.status === "unavailable") {
       // Verified factor exists but can't be identified — fail closed.
       await supabase.auth.signOut().catch(() => {});
       useAuthStore.getState().clearAuth();
+      performanceMark("startup.auth_restore.finish");
       return "error";
     }
 
+    performanceMark("startup.auth_me.request.begin");
     const result = await api.get<AuthMeResponse>("/api/v1/auth/me");
+    performanceMeasure(
+      "startup.auth_me.request.finish",
+      "startup.auth_me.request.begin",
+    );
     if (result.data) {
       useAuthStore.getState().setUser(result.data);
+      performanceMark("startup.auth_restore.finish");
       return "ok";
     }
 
@@ -113,11 +130,50 @@ export async function restoreSession(): Promise<RestoreOutcome> {
         "Couldn't load your account. Check your connection and try again.",
     );
     useAuthStore.getState().setLoading(false);
+    performanceMark("startup.auth_restore.finish");
     return "error";
   } catch {
     useAuthStore.getState().setLoading(false);
+    performanceMark("startup.auth_restore.finish");
     return "error";
   }
+}
+
+let restoreSessionInFlight: Promise<RestoreOutcome> | null = null;
+
+/**
+ * Restore the persisted session once for any overlapping callers. The guard
+ * is cleared after completion so a later explicit retry can run normally.
+ */
+export function restoreSession(): Promise<RestoreOutcome> {
+  if (restoreSessionInFlight) return restoreSessionInFlight;
+
+  const operation = restoreSessionInternal();
+  restoreSessionInFlight = operation;
+  void operation.finally(() => {
+    if (restoreSessionInFlight === operation) {
+      restoreSessionInFlight = null;
+    }
+  }).catch(() => {
+    // restoreSessionInternal converts failures into an outcome; this keeps
+    // the cleanup promise from becoming an unhandled rejection if that
+    // implementation changes later.
+  });
+  return operation;
+}
+
+export function subscribeToAuthState(clearAuth: () => void): () => void {
+  const {
+    data: { subscription },
+  } = supabase.auth.onAuthStateChange((_event, session) => {
+    if (!session && !useAuthStore.getState().confirming) {
+      clearAuth();
+    }
+  });
+
+  return () => {
+    subscription.unsubscribe();
+  };
 }
 
 /**
@@ -168,24 +224,16 @@ export async function login(
 }
 
 export function useAuth() {
-  const { user, isAuthenticated, isLoading, meError, clearAuth, setConfirming, setMeError } =
+  const {
+    user,
+    isAuthenticated,
+    isLoading,
+    meError,
+    clearAuth,
+    setConfirming,
+    setMeError,
+  } =
     useAuthStore();
-
-  useEffect(() => {
-    restoreSession();
-
-    const {
-      data: { subscription },
-    } = supabase.auth.onAuthStateChange((_event, session) => {
-      if (!session && !useAuthStore.getState().confirming) {
-        clearAuth();
-      }
-    });
-
-    return () => {
-      subscription.unsubscribe();
-    };
-  }, [clearAuth]);
 
   const doLogin = useCallback(
     (email: string, password: string) => login(email, password),

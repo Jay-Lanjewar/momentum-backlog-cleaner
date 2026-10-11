@@ -1,4 +1,4 @@
-import { useCallback, useMemo } from "react";
+import { useCallback, useEffect, useMemo, useRef } from "react";
 import {
   View,
   Text,
@@ -14,6 +14,7 @@ import { useRouter } from "expo-router";
 import { useDashboard } from "@/services/hooks";
 import { useAuth } from "@/hooks/useAuth";
 import { useNotificationScheduler } from "@/hooks/useNotificationScheduler";
+import { performanceMark } from "@/lib/performance";
 import {
   getGreeting,
   formatPlannedDuration,
@@ -42,8 +43,20 @@ export default function TodayMissionPage() {
   const router = useRouter();
   const { user, logout } = useAuth();
   const { data, isLoading, refetch, isRefetching } = useDashboard();
+  const loggedUsableData = useRef(false);
 
   useNotificationScheduler();
+
+  useEffect(() => {
+    performanceMark("today.screen.mount");
+  }, []);
+
+  useEffect(() => {
+    if (data && !loggedUsableData.current) {
+      loggedUsableData.current = true;
+      performanceMark("today.first_usable_data.render");
+    }
+  }, [data]);
 
   const handleStartStudy = useCallback(
     (session: PlanSession, dashboard: DashboardData) => {

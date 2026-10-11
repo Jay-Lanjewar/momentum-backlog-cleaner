@@ -1,6 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 
 import { api } from "@/lib/api";
+import { performanceMark, performanceMeasure } from "@/lib/performance";
 import type {
   DashboardData,
   AdaptivePlanResponse,
@@ -26,7 +27,12 @@ import type {
 export const dashboardQueryKey = ["dashboard"] as const;
 
 export async function fetchDashboard(): Promise<DashboardData> {
+  performanceMark("today.dashboard.request.begin");
   const result = await api.get<DashboardData>("/api/v1/dashboard");
+  performanceMeasure(
+    "today.dashboard.request.finish",
+    "today.dashboard.request.begin",
+  );
   if (result.error) throw new Error(result.error);
   return result.data;
 }

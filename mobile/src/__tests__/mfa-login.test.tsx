@@ -81,7 +81,7 @@ jest.mock("@/services/notifications", () => ({
   createNotificationChannels: jest.fn(),
 }));
 
-import { login, restoreSession } from "@/hooks/useAuth";
+import { login, restoreSession, useAuth } from "@/hooks/useAuth";
 import { useAuthStore } from "@/store/useAuthStore";
 import RootLayout from "@/app/_layout";
 
@@ -92,6 +92,11 @@ const FACTOR = {
   status: "verified",
   friendly_name: "Momentum",
 };
+
+function AuthConsumer() {
+  useAuth();
+  return null;
+}
 
 function makeProfileUser() {
   return {
@@ -400,7 +405,52 @@ describe("AuthGate cold start routing", () => {
     await waitFor(() => {
       expect(useAuthStore.getState().isAuthenticated).toBe(true);
     });
+    expect(mockGetSession).toHaveBeenCalledTimes(1);
+    expect(mockGet).toHaveBeenCalledTimes(1);
     expect(mockReplace).not.toHaveBeenCalled();
+  });
+
+  it("root owns restoration while the auth hook remains a shared state consumer", async () => {
+    sessionPresent();
+    aalSays(false);
+    mockGet.mockResolvedValue({
+      data: makeProfileUser(),
+      error: null,
+      errorCode: null,
+    });
+
+    await render(
+      <>
+        <RootLayout />
+        <AuthConsumer />
+      </>,
+    );
+
+    await waitFor(() => {
+      expect(useAuthStore.getState().isAuthenticated).toBe(true);
+    });
+
+    expect(mockGetSession).toHaveBeenCalledTimes(1);
+    expect(mockGet).toHaveBeenCalledTimes(1);
+    expect(mockOnAuthStateChange).toHaveBeenCalledTimes(1);
+  });
+
+  it("clears the in-flight guard so a failed restore can be retried", async () => {
+    mockGetSession.mockRejectedValueOnce(new Error("storage unavailable"));
+
+    await expect(restoreSession()).resolves.toBe("error");
+
+    sessionPresent();
+    aalSays(false);
+    mockGet.mockResolvedValue({
+      data: makeProfileUser(),
+      error: null,
+      errorCode: null,
+    });
+
+    await expect(restoreSession()).resolves.toBe("ok");
+    expect(mockGetSession).toHaveBeenCalledTimes(2);
+    expect(mockGet).toHaveBeenCalledTimes(1);
   });
 
   it("already on two-factor with a pending challenge → no navigation", async () => {

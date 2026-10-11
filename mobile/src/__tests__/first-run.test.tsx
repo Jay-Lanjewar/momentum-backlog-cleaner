@@ -95,6 +95,8 @@ let mockIsLoading = false;
 let mockUser: any = null;
 
 jest.mock("@/hooks/useAuth", () => ({
+  restoreSession: jest.fn().mockResolvedValue("no-session"),
+  subscribeToAuthState: jest.fn(() => jest.fn()),
   useAuth: () => ({
     user: mockUser,
     isAuthenticated: mockIsAuthenticated,

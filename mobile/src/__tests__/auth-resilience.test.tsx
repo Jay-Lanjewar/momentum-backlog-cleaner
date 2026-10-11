@@ -117,6 +117,7 @@ jest.mock("@/lib/api", () => ({
 }));
 
 const mockLoadAuthMe = jest.fn();
+const mockRestoreSession = jest.fn().mockResolvedValue("no-session");
 
 jest.mock("@/hooks/useAuth", () => {
   const actual = jest.requireActual("@/hooks/useAuth");
@@ -132,6 +133,8 @@ let mockRetryMeImpl: (() => Promise<any>) | null = null;
 jest.mock("@/hooks/useAuth", () => {
   return {
     loadAuthMe: (...args: any[]) => mockLoadAuthMe(...args),
+    restoreSession: (...args: any[]) => mockRestoreSession(...args),
+    subscribeToAuthState: jest.fn(() => jest.fn()),
     useAuth: () => ({
       user: mockUser,
       isAuthenticated: mockIsAuthenticated,
