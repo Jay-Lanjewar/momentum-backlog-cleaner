@@ -10,6 +10,7 @@ import { getMockConfig } from "expo-router/build/testing-library/mock-config";
 import { TabIcon } from "@/components/TabIcon";
 import { Placeholder } from "@/components/Placeholder";
 import { unstable_settings } from "@/app/(app)/_layout";
+import { getLaunchRoute } from "@/app/index";
 
 jest.mock("expo-router", () => {
   const R = require("react");
@@ -20,7 +21,7 @@ jest.mock("expo-router", () => {
     return null;
   }
   MockTabs.Screen = MockScreen;
-  return { Tabs: MockTabs };
+  return { Redirect: () => null, Tabs: MockTabs };
 });
 
 // ── TabIcon ──
@@ -110,8 +111,8 @@ describe("Navigation file structure", () => {
     expect(fileExists("(me)/health.tsx")).toBe(true);
   });
 
-  it("old (app)/index.tsx and (app)/focus.tsx are removed", () => {
-    expect(fileExists("index.tsx")).toBe(false);
+  it("app index route is present and old app focus route is removed", () => {
+    expect(fileExists("index.tsx")).toBe(true);
     expect(fileExists("focus.tsx")).toBe(false);
   });
 
@@ -175,6 +176,68 @@ describe("Navigation file structure", () => {
     const appConfig = config.screens?.__root?.screens?.["(app)"];
 
     expect(appConfig?.initialRouteName).toBe("(today)");
+  });
+
+  it("root launch waits for auth restoration", () => {
+    expect(
+      getLaunchRoute({
+        isLoading: true,
+        confirming: false,
+        mfaRequired: false,
+        isAuthenticated: false,
+        hasProfile: false,
+      }),
+    ).toBeNull();
+  });
+
+  it("root launch routes an unauthenticated user to login", () => {
+    expect(
+      getLaunchRoute({
+        isLoading: false,
+        confirming: false,
+        mfaRequired: false,
+        isAuthenticated: false,
+        hasProfile: false,
+      }),
+    ).toBe("/(auth)/login");
+  });
+
+  it("root launch routes an incomplete profile to onboarding", () => {
+    expect(
+      getLaunchRoute({
+        isLoading: false,
+        confirming: false,
+        mfaRequired: false,
+        isAuthenticated: true,
+        hasProfile: false,
+      }),
+    ).toBe("/(onboarding)");
+  });
+
+  it("root launch routes a completed profile to Today", () => {
+    expect(
+      getLaunchRoute({
+        isLoading: false,
+        confirming: false,
+        mfaRequired: false,
+        isAuthenticated: true,
+        hasProfile: true,
+      }),
+    ).toBe("/(app)/(today)");
+  });
+
+  it("app group root redirects to Today and remains hidden from tabs", () => {
+    const content = fs.readFileSync(
+      path.join(appDir, "index.tsx"),
+      "utf8",
+    );
+    expect(content).toContain('href="/(app)/(today)"');
+    expect(
+      fs.readFileSync(path.join(appDir, "_layout.tsx"), "utf8"),
+    ).toContain('name="index"');
+    expect(
+      fs.readFileSync(path.join(appDir, "_layout.tsx"), "utf8"),
+    ).toContain("href: null");
   });
 
   it("social tab is hidden from primary navigation", () => {
