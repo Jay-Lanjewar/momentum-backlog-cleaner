@@ -51,6 +51,7 @@ function AuthGate() {
 
     const inAuthGroup = segments[0] === "(auth)";
     const inOnboardingGroup = segments[0] === "(onboarding)";
+    const inAppGroup = segments[0] === "(app)";
     const inConfirmRoute = (segments[0] as string) === "confirm";
     const inResetRoute =
       segments[0] === "(auth)" && (segments[1] as string) === "reset-password";
@@ -83,6 +84,10 @@ function AuthGate() {
       if (hasProfile) {
         router.replace("/(app)");
       }
+    } else if (isAuthenticated && user?.profile && !inAppGroup) {
+      // The root index cannot mount while the startup gate is closed. Route
+      // authenticated users directly into the app once their profile loads.
+      router.replace("/(app)");
     } else if (isAuthenticated && !user?.profile) {
       // Authenticated but profile-less outside auth/onboarding
       // (e.g. after email confirmation). Send to onboarding.

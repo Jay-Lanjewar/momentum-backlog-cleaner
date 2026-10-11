@@ -75,18 +75,18 @@ jest.mock("@/store/useAuthStore", () => {
       setConfirming: mockSetConfirming,
       confirming: (globalThis as any).__mockConfirmingRef?.value ?? false,
       mfaRequired: mockMfaRequired,
-      user: null,
-      isAuthenticated: false,
-      isLoading: false,
+      user: mockUser,
+      isAuthenticated: mockIsAuthenticated,
+      isLoading: mockIsLoading,
     });
   useAuthStore.getState = () => ({
     setUser: mockSetUser,
     setConfirming: mockSetConfirming,
     confirming: (globalThis as any).__mockConfirmingRef?.value ?? false,
     mfaRequired: mockMfaRequired,
-    user: null,
-    isAuthenticated: false,
-    isLoading: false,
+    user: mockUser,
+    isAuthenticated: mockIsAuthenticated,
+    isLoading: mockIsLoading,
   });
   useAuthStore.setState = jest.fn();
   return { useAuthStore };
@@ -1792,6 +1792,25 @@ describe("AuthGate first-run routing", () => {
 
     expect(screen.getByTestId("startup-loading")).toBeTruthy();
     expect(screen.queryByTestId("protected-route")).toBeNull();
+  });
+
+  it("routes an authenticated root launch into Today after auth restore", async () => {
+    mockSegments = [];
+    mockIsAuthenticated = true;
+    mockIsLoading = false;
+    mockUser = makeProfileUser();
+
+    const view = await render(<RootLayout />);
+
+    await waitFor(() => {
+      expect(mockReplace).toHaveBeenCalledWith("/(app)");
+    });
+
+    mockSegments = ["(app)", "(today)"];
+    await view.rerender(<RootLayout />);
+
+    expect(screen.queryByTestId("startup-loading")).toBeNull();
+    expect(screen.getByTestId("protected-route")).toBeTruthy();
   });
 
   it("confirmed user with no profile in app → onboarding", async () => {
