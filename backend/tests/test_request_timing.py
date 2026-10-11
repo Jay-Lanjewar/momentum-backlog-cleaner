@@ -31,6 +31,7 @@ async def test_request_timing_logs_status_for_me_and_dashboard_endpoints(
 
     assert response.status_code == 200
     assert "status=200" in caplog.text
+    assert "request_id=" in caplog.text
     assert path in caplog.text
     assert "total request duration" in caplog.text
 

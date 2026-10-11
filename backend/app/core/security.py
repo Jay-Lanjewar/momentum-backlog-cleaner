@@ -1,6 +1,8 @@
 import logging
+import time
 
 from app.core.config import settings
+from app.core.diagnostics import current_request_id
 
 logger = logging.getLogger(__name__)
 
@@ -25,14 +27,33 @@ def verify_token(token: str) -> dict:
 
     import jwt
 
+    client_started = time.perf_counter()
     jwks_client = _get_jwks_client()
-    signing_key = jwks_client.get_signing_key_from_jwt(token)
+    logger.info(
+        "[AUTH TIMING] request_id=%s phase=jwks_client_creation duration=%.2f ms",
+        current_request_id(),
+        (time.perf_counter() - client_started) * 1000,
+    )
 
+    key_started = time.perf_counter()
+    signing_key = jwks_client.get_signing_key_from_jwt(token)
+    logger.info(
+        "[AUTH TIMING] request_id=%s phase=jwks_key_lookup duration=%.2f ms",
+        current_request_id(),
+        (time.perf_counter() - key_started) * 1000,
+    )
+
+    decode_started = time.perf_counter()
     payload = jwt.decode(
         token,
         signing_key.key,
         algorithms=["ES256"],
         audience="authenticated",
         issuer=f"{settings.SUPABASE_URL}/auth/v1",
+    )
+    logger.info(
+        "[AUTH TIMING] request_id=%s phase=jwt_decode duration=%.2f ms",
+        current_request_id(),
+        (time.perf_counter() - decode_started) * 1000,
     )
     return payload

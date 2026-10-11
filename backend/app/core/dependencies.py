@@ -10,6 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db as _get_db
 from app.core.mfa import MfaStateUnavailable, has_verified_factor
+from app.core.diagnostics import current_request_id
 from app.core.security import verify_token
 from app.domain.models import User
 
@@ -36,6 +37,7 @@ async def _ensure_assurance(
     if payload.get("aal") == "aal2":
         return
 
+    mfa_started = time.perf_counter()
     try:
         factor_present = await has_verified_factor(user_id, access_token)
     except MfaStateUnavailable as e:
@@ -50,6 +52,12 @@ async def _ensure_assurance(
                 ),
             },
         ) from e
+    finally:
+        logger.info(
+            "[AUTH TIMING] request_id=%s phase=mfa_assurance_lookup duration=%.2f ms",
+            current_request_id(),
+            (time.perf_counter() - mfa_started) * 1000,
+        )
 
     if factor_present:
         raise HTTPException(
@@ -72,7 +80,11 @@ async def get_current_user(
     logger.info("[AUTH] before JWT decode")
     try:
         payload = verify_token(credentials.credentials)
-        logger.info("[AUTH] after JWT decode in %.2f ms", (time.perf_counter() - t0) * 1000)
+        logger.info(
+            "[AUTH TIMING] request_id=%s phase=jwt_verification_total duration=%.2f ms",
+            current_request_id(),
+            (time.perf_counter() - t0) * 1000,
+        )
 
         user_id = uuid.UUID(payload.get("sub", ""))
 

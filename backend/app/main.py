@@ -9,6 +9,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.api.v1 import router as v1_router
 from app.core.config import settings
 from app.core.logging import setup_logging
+from app.core.diagnostics import begin_request, end_request
 from app.core.timezone import UserTimezoneMiddleware
 
 logger = logging.getLogger(__name__)
@@ -34,20 +35,30 @@ app = FastAPI(
 
 @app.middleware("http")
 async def log_request_duration(request, call_next):
+    request_id, request_token = begin_request()
     path = request.url.path
-    if not path.startswith(TIMED_PATH_PREFIX) and path not in TIMED_ENDPOINTS:
-        return await call_next(request)
-    t0 = time.perf_counter()
-    logger.info("[HTTP] request enters %s %s", request.method, path)
-    response = await call_next(request)
-    logger.info(
-        "[HTTP] total request duration %.2f ms status=%d (%s %s)",
-        (time.perf_counter() - t0) * 1000,
-        response.status_code,
-        request.method,
-        path,
-    )
-    return response
+    try:
+        if not path.startswith(TIMED_PATH_PREFIX) and path not in TIMED_ENDPOINTS:
+            return await call_next(request)
+        t0 = time.perf_counter()
+        logger.info(
+            "[HTTP] request_id=%s request enters %s %s",
+            request_id,
+            request.method,
+            path,
+        )
+        response = await call_next(request)
+        logger.info(
+            "[HTTP] request_id=%s total request duration %.2f ms status=%d (%s %s)",
+            request_id,
+            (time.perf_counter() - t0) * 1000,
+            response.status_code,
+            request.method,
+            path,
+        )
+        return response
+    finally:
+        end_request(request_token)
 
 
 app.add_middleware(

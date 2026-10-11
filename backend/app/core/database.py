@@ -5,6 +5,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_asyn
 from sqlalchemy.orm import DeclarativeBase
 from collections.abc import AsyncGenerator
 from app.core.config import settings
+from app.core.diagnostics import current_request_id
 from uuid import uuid4
 from sqlalchemy.pool import AsyncAdaptedQueuePool
 
@@ -32,13 +33,25 @@ engine = create_async_engine(
 @event.listens_for(engine.sync_engine, "before_cursor_execute")
 def _log_query_start(conn, cursor, statement, parameters, context, executemany):
     context._query_started = time.perf_counter()
+    context._query_request_id = current_request_id()
 
 
 @event.listens_for(engine.sync_engine, "after_cursor_execute")
 def _log_query_duration(conn, cursor, statement, parameters, context, executemany):
     elapsed_ms = (time.perf_counter() - context._query_started) * 1000
     sql = " ".join(statement.split())[:200]
-    logger.info("[DB QUERY] %.2f ms | %s", elapsed_ms, sql)
+    logger.info(
+        "[DB QUERY] request_id=%s duration=%.2f ms | %s",
+        context._query_request_id,
+        elapsed_ms,
+        sql,
+    )
+
+
+@event.listens_for(engine.sync_engine, "do_connect")
+def _connection_create_start(dialect, connection_record, cargs, cparams):
+    connection_record.info["_diagnostic_connect_started"] = time.perf_counter()
+    connection_record.info["_diagnostic_connect_request_id"] = current_request_id()
 
 
 @event.listens_for(engine.sync_engine, "checkout")
@@ -49,12 +62,18 @@ def _pool_checkout_event(dbapi_conn, connection_rec, connection_proxy):
     try:
         pool = engine.pool
         _pool_diag.info(
-            "[POOL CHECKOUT] id=%s fresh=%s checkedout_before=%d size=%d overflow=%d",
-            conn_id, was_fresh,
+            "[POOL CHECKOUT] request_id=%s id=%s phase=complete fresh=%s "
+            "checkedout_before=%d size=%d overflow=%d",
+            current_request_id(), conn_id, was_fresh,
             pool.checkedout() - 1, pool.size(), pool.overflow(),
         )
     except Exception:
-        _pool_diag.info("[POOL CHECKOUT] id=%s fresh=%s", conn_id, was_fresh)
+        _pool_diag.info(
+            "[POOL CHECKOUT] request_id=%s id=%s phase=complete fresh=%s",
+            current_request_id(),
+            conn_id,
+            was_fresh,
+        )
 
 
 @event.listens_for(engine.sync_engine, "checkin")
@@ -75,7 +94,23 @@ def _pool_checkin_event(dbapi_conn, connection_rec):
 def _pool_connect_event(dbapi_conn, connection_record):
     conn_id = id(dbapi_conn)
     _newly_created_conns.add(conn_id)
-    _pool_diag.info("[POOL CONNECT]  id=%s", conn_id)
+    started = connection_record.info.pop("_diagnostic_connect_started", None)
+    request_id = connection_record.info.pop(
+        "_diagnostic_connect_request_id", current_request_id()
+    )
+    if started is None:
+        _pool_diag.info(
+            "[POOL CONNECT] request_id=%s id=%s phase=complete duration=unavailable",
+            request_id,
+            conn_id,
+        )
+    else:
+        _pool_diag.info(
+            "[POOL CONNECT] request_id=%s id=%s phase=complete duration=%.2f ms",
+            request_id,
+            conn_id,
+            (time.perf_counter() - started) * 1000,
+        )
 
 
 async_session_factory = async_sessionmaker(
