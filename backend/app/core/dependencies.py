@@ -74,11 +74,7 @@ async def get_current_user(
         payload = verify_token(credentials.credentials)
         logger.info("[AUTH] after JWT decode in %.2f ms", (time.perf_counter() - t0) * 1000)
 
-        logger.info("JWT payload: %s", payload)
-
         user_id = uuid.UUID(payload.get("sub", ""))
-
-        logger.info("Looking up user with id: %s", user_id)
 
     except Exception as e:
         logger.warning("Token verification failed: %s", e)
@@ -106,7 +102,6 @@ async def get_current_user(
 
     logger.info("[AUTH] completed in %.2f ms", (time.perf_counter() - t0) * 1000)
     logger.info("[AUTH] before returning the user")
-    logger.info("Database returned user: %s", user)
 
     if user is None:
         raise HTTPException(

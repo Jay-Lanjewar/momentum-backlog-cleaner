@@ -14,6 +14,7 @@ from app.core.timezone import UserTimezoneMiddleware
 logger = logging.getLogger(__name__)
 
 TIMED_PATH_PREFIX = "/api/v1/profile"
+TIMED_ENDPOINTS = {"/api/v1/auth/me", "/api/v1/dashboard"}
 
 
 @asynccontextmanager
@@ -33,16 +34,18 @@ app = FastAPI(
 
 @app.middleware("http")
 async def log_request_duration(request, call_next):
-    if not request.url.path.startswith(TIMED_PATH_PREFIX):
+    path = request.url.path
+    if not path.startswith(TIMED_PATH_PREFIX) and path not in TIMED_ENDPOINTS:
         return await call_next(request)
     t0 = time.perf_counter()
-    logger.info("[HTTP] request enters %s %s", request.method, request.url.path)
+    logger.info("[HTTP] request enters %s %s", request.method, path)
     response = await call_next(request)
     logger.info(
-        "[HTTP] total request duration %.2f ms (%s %s)",
+        "[HTTP] total request duration %.2f ms status=%d (%s %s)",
         (time.perf_counter() - t0) * 1000,
+        response.status_code,
         request.method,
-        request.url.path,
+        path,
     )
     return response
 
