@@ -1,11 +1,13 @@
 import logging
+import uuid
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import joinedload
 
-from app.core.dependencies import get_current_user, get_db
-from app.domain.models import User, StudyStreak, StudentProfile
+from app.core.dependencies import get_current_user, get_current_user_id, get_db
+from app.domain.models import User
 from app.domain.schemas import (
     AuthLoginRequest,
     AuthSignupRequest,
@@ -18,6 +20,7 @@ from app.domain.schemas import (
     StudyStreakResponse,
 )
 from app.services.auth_service import AuthService, SupabaseTimeoutError
+
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/auth", tags=["auth"])
@@ -25,6 +28,27 @@ router = APIRouter(prefix="/auth", tags=["auth"])
 
 async def get_auth_service(db: AsyncSession = Depends(get_db)) -> AuthService:
     return AuthService(db)
+
+
+async def get_auth_me_user(
+    user_id: uuid.UUID = Depends(get_current_user_id),
+    db: AsyncSession = Depends(get_db),
+) -> User:
+    result = await db.execute(
+        select(User)
+        .where(User.id == user_id)
+        .options(
+            joinedload(User.profile),
+            joinedload(User.study_streak),
+        )
+    )
+    user = result.unique().scalar_one_or_none()
+    if user is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="User not found",
+        )
+    return user
 
 
 @router.post("/signup", response_model=AuthResponse)
@@ -169,19 +193,8 @@ async def forgot_password(
 
 @router.get("/me", response_model=AuthMeResponse)
 async def get_me(
-    user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    user: User = Depends(get_auth_me_user),
 ):
-    profile_result = await db.execute(
-        select(StudentProfile).where(StudentProfile.user_id == user.id)
-    )
-    profile = profile_result.scalar_one_or_none()
-
-    streak_result = await db.execute(
-        select(StudyStreak).where(StudyStreak.user_id == user.id)
-    )
-    streak = streak_result.scalar_one_or_none()
-
     return AuthMeResponse(
         id=user.id,
         email=user.email,
@@ -189,6 +202,14 @@ async def get_me(
         avatar_url=user.avatar_url,
         created_at=user.created_at,
         updated_at=user.updated_at,
-        profile=StudentProfileResponse.model_validate(profile) if profile else None,
-        streak=StudyStreakResponse.model_validate(streak) if streak else None,
+        profile=(
+            StudentProfileResponse.model_validate(user.profile)
+            if user.profile
+            else None
+        ),
+        streak=(
+            StudyStreakResponse.model_validate(user.study_streak)
+            if user.study_streak
+            else None
+        ),
     )

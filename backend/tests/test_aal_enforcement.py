@@ -12,7 +12,7 @@ from app.api.v1 import router as v1_router
 from app.core import mfa
 from app.core.config import settings
 from app.core.dependencies import get_current_user_id, get_db
-from app.domain.models import User
+from app.domain.models import StudentProfile, StudyStreak, User
 
 USER_ID = uuid.UUID("00000000-0000-0000-0000-000000000001")
 EMAIL = "student@example.com"
@@ -71,14 +71,15 @@ def make_user() -> User:
     )
 
 
-def _me_db() -> MagicMock:
-    """Mock session for /auth/me: user lookup, then profile and streak lookups."""
+def _me_db(profile=None, streak=None, user=None) -> MagicMock:
+    """Mock session for /auth/me's eager-loaded user lookup."""
     db = MagicMock()
     user_result = MagicMock()
-    user_result.scalar_one_or_none.return_value = make_user()
-    empty_result = MagicMock()
-    empty_result.scalar_one_or_none.return_value = None
-    db.execute = AsyncMock(side_effect=[user_result, empty_result, empty_result])
+    loaded_user = user or make_user()
+    loaded_user.profile = profile
+    loaded_user.study_streak = streak
+    user_result.unique.return_value.scalar_one_or_none.return_value = loaded_user
+    db.execute = AsyncMock(return_value=user_result)
     return db
 
 
@@ -138,8 +139,107 @@ class TestAuthMeEnforcement:
         assert resp.json()["email"] == EMAIL
         # The dependency threads the caller's raw access token through.
         mock_factor.assert_awaited_once_with(USER_ID, "test-token")
-        # Normal behavior preserved: user + profile + streak lookups all ran.
-        assert db.execute.await_count == 3
+        assert db.execute.await_count == 1
+
+    def test_profile_and_streak_are_serialized_from_eager_loaded_user(self, app):
+        now = datetime.now(timezone.utc)
+        profile = StudentProfile(
+            id=uuid.uuid4(),
+            user_id=USER_ID,
+            name="Student",
+            class_name="12th",
+            board="CBSE",
+            created_at=now,
+            updated_at=now,
+        )
+        streak = StudyStreak(
+            id=uuid.uuid4(),
+            user_id=USER_ID,
+            current_streak=4,
+            longest_streak=9,
+            total_study_days=15,
+            recovery_tokens_current=0,
+            recovery_tokens_earned=0,
+            recovery_tokens_used=0,
+            last_completed_date=now,
+            created_at=now,
+            updated_at=now,
+        )
+        db = _me_db(profile=profile, streak=streak)
+        app.dependency_overrides[get_db] = lambda: db
+
+        with patch(
+            "app.core.dependencies.verify_token", return_value=_payload("aal2")
+        ):
+            response = TestClient(app).get(
+                "/api/v1/auth/me", headers=_headers()
+            )
+
+        app.dependency_overrides.clear()
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["profile"]["name"] == "Student"
+        assert data["profile"]["class_name"] == "12th"
+        assert data["streak"]["current_streak"] == 4
+        assert data["streak"]["longest_streak"] == 9
+        assert db.execute.await_count == 1
+
+    @pytest.mark.parametrize("missing", ["profile", "streak", "both"])
+    def test_missing_profile_or_streak_returns_null(self, app, missing):
+        profile = None if missing in ("profile", "both") else StudentProfile(
+            id=uuid.uuid4(),
+            user_id=USER_ID,
+            created_at=datetime.now(timezone.utc),
+            updated_at=datetime.now(timezone.utc),
+        )
+        streak = None if missing in ("streak", "both") else StudyStreak(
+            id=uuid.uuid4(),
+            user_id=USER_ID,
+            current_streak=1,
+            longest_streak=1,
+            total_study_days=1,
+            recovery_tokens_current=0,
+            recovery_tokens_earned=0,
+            recovery_tokens_used=0,
+        )
+        db = _me_db(profile=profile, streak=streak)
+        app.dependency_overrides[get_db] = lambda: db
+
+        with patch(
+            "app.core.dependencies.verify_token", return_value=_payload("aal2")
+        ):
+            response = TestClient(app).get(
+                "/api/v1/auth/me", headers=_headers()
+            )
+
+        app.dependency_overrides.clear()
+
+        assert response.status_code == 200
+        data = response.json()
+        assert (data["profile"] is not None) == (profile is not None)
+        assert (data["streak"] is not None) == (streak is not None)
+        assert db.execute.await_count == 1
+
+    def test_missing_authenticated_user_preserves_404(self, app):
+        db = MagicMock()
+        result = MagicMock()
+        result.unique.return_value.scalar_one_or_none.return_value = None
+        db.execute = AsyncMock(return_value=result)
+        app.dependency_overrides[get_db] = lambda: db
+
+        with patch(
+            "app.core.dependencies.verify_token", return_value=_payload("aal2")
+        ):
+            response = TestClient(app, raise_server_exceptions=False).get(
+                "/api/v1/auth/me", headers=_headers()
+            )
+
+        app.dependency_overrides.clear()
+
+        assert response.status_code == 404
+        assert response.json()["detail"] == "User not found"
+        assert db.execute.await_count == 1
 
     def test_aal1_with_verified_factor_returns_401_insufficient_aal(self, app):
         db = _blocked_db()
