@@ -1,6 +1,10 @@
 import { Tabs } from "expo-router";
 import { TabIcon } from "@/components/TabIcon";
 
+export const unstable_settings = {
+  initialRouteName: "(today)",
+};
+
 const COLORS = {
   active: "#2563EB",
   inactive: "#64748B",

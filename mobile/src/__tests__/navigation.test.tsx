@@ -5,9 +5,23 @@
 
 import React from "react";
 import { render } from "@testing-library/react-native";
+import { getMockConfig } from "expo-router/build/testing-library/mock-config";
 
 import { TabIcon } from "@/components/TabIcon";
 import { Placeholder } from "@/components/Placeholder";
+import { unstable_settings } from "@/app/(app)/_layout";
+
+jest.mock("expo-router", () => {
+  const R = require("react");
+  function MockTabs({ children }: { children?: React.ReactNode }) {
+    return R.createElement(R.Fragment, null, children);
+  }
+  function MockScreen() {
+    return null;
+  }
+  MockTabs.Screen = MockScreen;
+  return { Tabs: MockTabs };
+});
 
 // ── TabIcon ──
 
@@ -134,11 +148,33 @@ describe("Navigation file structure", () => {
   });
 
   it("app _layout explicitly starts authenticated navigation on Today", () => {
-    const content = fs.readFileSync(
-      path.join(appDir, "_layout.tsx"),
-      "utf8",
-    );
-    expect(content).toContain('initialRouteName="(today)"');
+    expect(unstable_settings.initialRouteName).toBe("(today)");
+  });
+
+  it("Expo Router route tree uses Today as the (app) initial entry", () => {
+    const config = getMockConfig({
+      appDir: path.resolve(process.cwd(), "src/app"),
+      overrides: {
+        _layout: { default: () => null },
+        "(app)/_layout": { default: () => null, unstable_settings },
+        "(app)/(today)/_layout": { default: () => null },
+        "(app)/(work)/_layout": { default: () => null },
+        "(app)/(plan)/_layout": { default: () => null },
+        "(app)/(social)/_layout": { default: () => null },
+        "(app)/(me)/_layout": { default: () => null },
+        "(auth)/_layout": { default: () => null },
+        "(onboarding)/_layout": { default: () => null },
+      },
+    }) as {
+      screens?: {
+        __root?: {
+          screens?: Record<string, { initialRouteName?: string }>;
+        };
+      };
+    };
+    const appConfig = config.screens?.__root?.screens?.["(app)"];
+
+    expect(appConfig?.initialRouteName).toBe("(today)");
   });
 
   it("social tab is hidden from primary navigation", () => {
