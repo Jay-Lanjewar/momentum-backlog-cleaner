@@ -1,4 +1,10 @@
 import { useEffect } from "react";
+import {
+  ActivityIndicator,
+  Image,
+  StyleSheet,
+  View,
+} from "react-native";
 import { Slot, useRouter, useSegments } from "expo-router";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { StatusBar } from "expo-status-bar";
@@ -84,18 +90,71 @@ function AuthGate() {
     }
   }, [isAuthenticated, isLoading, confirming, mfaRequired, user, segments, router]);
 
-  useEffect(() => {
-    if (!isLoading) {
-      performanceMark("startup.splash_hide.requested");
-      SplashScreen.hideAsync();
-    }
-  }, [isLoading]);
-
   return null;
+}
+
+function StartupLoadingScreen() {
+  useEffect(() => {
+    performanceMark("startup.branded_loading.ready");
+    performanceMark("startup.splash_hide.requested");
+    void SplashScreen.hideAsync();
+  }, []);
+
+  return (
+    <View style={styles.startupLoading} testID="startup-loading">
+      <Image
+        source={require("../../assets/branding/momentum-logo.png")}
+        style={styles.startupLogo}
+        resizeMode="contain"
+        accessibilityLabel="Momentum"
+      />
+      <ActivityIndicator size="large" color="#2563EB" />
+    </View>
+  );
+}
+
+function isSafeRouteForAuthState(
+  segments: string[],
+  {
+    isLoading,
+    confirming,
+    mfaRequired,
+    isAuthenticated,
+    hasProfile,
+  }: {
+    isLoading: boolean;
+    confirming: boolean;
+    mfaRequired: boolean;
+    isAuthenticated: boolean;
+    hasProfile: boolean;
+  },
+): boolean {
+  const inAuthGroup = segments[0] === "(auth)";
+  const inAppGroup = segments[0] === "(app)";
+  const inOnboardingGroup = segments[0] === "(onboarding)";
+  const inConfirmRoute = segments[0] === "confirm";
+  const inResetRoute = inAuthGroup && segments[1] === "reset-password";
+  const inTwoFactorRoute = inAuthGroup && segments[1] === "two-factor";
+
+  // These routes are intentionally safe to mount while the session is being
+  // established because they perform the confirmation/recovery flow.
+  if (inConfirmRoute || inResetRoute) return true;
+  if (isLoading) return false;
+  if (mfaRequired) return inTwoFactorRoute;
+  if (confirming) return false;
+  if (!isAuthenticated) return inAuthGroup;
+  if (!hasProfile) return inOnboardingGroup;
+  return inAppGroup;
 }
 
 export default function RootLayout() {
   const router = useRouter();
+  const segments = useSegments();
+  const user = useAuthStore((s) => s.user);
+  const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
+  const isLoading = useAuthStore((s) => s.isLoading);
+  const confirming = useAuthStore((s) => s.confirming);
+  const mfaRequired = useAuthStore((s) => s.mfaRequired);
 
   useEffect(() => {
     createNotificationChannels();
@@ -124,8 +183,32 @@ export default function RootLayout() {
   return (
     <QueryClientProvider client={queryClient}>
       <AuthGate />
-      <Slot />
+      {isSafeRouteForAuthState(segments as string[], {
+        isLoading,
+        confirming,
+        mfaRequired,
+        isAuthenticated,
+        hasProfile: !!user?.profile,
+      }) ? (
+        <Slot />
+      ) : (
+        <StartupLoadingScreen />
+      )}
       <StatusBar style="auto" />
     </QueryClientProvider>
   );
 }
+
+const styles = StyleSheet.create({
+  startupLoading: {
+    alignItems: "center",
+    backgroundColor: "#FFFFFF",
+    flex: 1,
+    justifyContent: "center",
+    gap: 24,
+  },
+  startupLogo: {
+    height: 148,
+    width: 148,
+  },
+});

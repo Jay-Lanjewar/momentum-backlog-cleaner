@@ -25,7 +25,11 @@ jest.mock("expo-router", () => ({
     back: mockBack,
   }),
   useSegments: () => mockSegments,
-  Slot: () => null,
+  Slot: () => {
+    const R = require("react");
+    const { View } = require("react-native");
+    return R.createElement(View, { testID: "protected-route" });
+  },
 }));
 
 jest.mock("react-native-safe-area-context", () => {
@@ -70,6 +74,7 @@ jest.mock("@/store/useAuthStore", () => {
       setUser: mockSetUser,
       setConfirming: mockSetConfirming,
       confirming: (globalThis as any).__mockConfirmingRef?.value ?? false,
+      mfaRequired: mockMfaRequired,
       user: null,
       isAuthenticated: false,
       isLoading: false,
@@ -78,6 +83,7 @@ jest.mock("@/store/useAuthStore", () => {
     setUser: mockSetUser,
     setConfirming: mockSetConfirming,
     confirming: (globalThis as any).__mockConfirmingRef?.value ?? false,
+    mfaRequired: mockMfaRequired,
     user: null,
     isAuthenticated: false,
     isLoading: false,
@@ -88,6 +94,7 @@ jest.mock("@/store/useAuthStore", () => {
 
 const mockConfirmingRef = { value: false };
 (globalThis as any).__mockConfirmingRef = mockConfirmingRef;
+let mockMfaRequired = false;
 
 let mockSegments: string[] = ["(app)", "(today)"];
 let mockIsAuthenticated = true;
@@ -107,9 +114,11 @@ jest.mock("@/hooks/useAuth", () => ({
   }),
 }));
 
+const mockHideSplash = jest.fn();
+
 jest.mock("expo-splash-screen", () => ({
   preventAutoHideAsync: jest.fn(),
-  hideAsync: jest.fn(),
+  hideAsync: (...args: any[]) => mockHideSplash(...args),
 }));
 
 jest.mock("expo-notifications", () => ({
@@ -223,6 +232,7 @@ beforeEach(() => {
   mockIsAuthenticated = true;
   mockIsLoading = false;
   mockConfirmingRef.value = false;
+  mockMfaRequired = false;
   mockUser = null;
 });
 
@@ -1758,6 +1768,32 @@ describe("No references to removed first-run steps", () => {
 });
 
 describe("AuthGate first-run routing", () => {
+  it("shows branded loading and hides native splash without mounting protected routes", async () => {
+    mockSegments = ["(app)", "(today)"];
+    mockIsAuthenticated = false;
+    mockIsLoading = true;
+    mockUser = null;
+
+    await render(<RootLayout />);
+
+    expect(screen.getByTestId("startup-loading")).toBeTruthy();
+    expect(screen.queryByTestId("protected-route")).toBeNull();
+    expect(mockHideSplash).toHaveBeenCalled();
+  });
+
+  it("keeps protected routes unmounted while an MFA challenge is pending", async () => {
+    mockSegments = ["(app)", "(today)"];
+    mockIsAuthenticated = true;
+    mockIsLoading = false;
+    mockMfaRequired = true;
+    mockUser = makeProfileUser();
+
+    await render(<RootLayout />);
+
+    expect(screen.getByTestId("startup-loading")).toBeTruthy();
+    expect(screen.queryByTestId("protected-route")).toBeNull();
+  });
+
   it("confirmed user with no profile in app → onboarding", async () => {
     mockSegments = ["(app)", "(today)"];
     mockIsAuthenticated = true;
