@@ -4,6 +4,7 @@ import { router } from "expo-router";
 import { supabase } from "@/lib/supabase";
 import { api } from "@/lib/api";
 import { useAuthStore } from "@/store/useAuthStore";
+import { clearDashboardSessionData } from "@/services/hooks";
 import { friendlyMfaError, pickVerifiedTotpFactor } from "@/lib/mfa";
 import { performanceMark, performanceMeasure } from "@/lib/performance";
 import type { AuthLoginRequest, AuthMeResponse } from "@/services/types";
@@ -27,6 +28,15 @@ export async function loadAuthMe(): Promise<AuthMeResponse | null> {
   );
   useAuthStore.getState().setLoading(false);
   return null;
+}
+
+function isolatePreviousIdentity(nextUserId: string): void {
+  const previousUserId = useAuthStore.getState().user?.id;
+  if (!previousUserId || previousUserId === nextUserId) return;
+
+  clearDashboardSessionData(previousUserId);
+  useAuthStore.getState().clearAuth();
+  useAuthStore.getState().setLoading(true);
 }
 
 /** Password accepted; "mfa-required" means a code must be proven first. */
@@ -96,6 +106,7 @@ async function restoreSessionInternal(): Promise<RestoreOutcome> {
       return "no-session";
     }
 
+    isolatePreviousIdentity(session.user?.id ?? "");
     const mfa = await detectMfaChallenge();
     performanceMark("startup.mfa_assurance_checks.finish");
     if (mfa.status === "required") {
@@ -168,7 +179,10 @@ export function subscribeToAuthState(clearAuth: () => void): () => void {
   } = supabase.auth.onAuthStateChange((_event, session) => {
     if (!session && !useAuthStore.getState().confirming) {
       clearAuth();
+      return;
     }
+
+    if (session) isolatePreviousIdentity(session.user?.id ?? "");
   });
 
   return () => {
@@ -195,6 +209,8 @@ export async function login(
   if (result.error) {
     throw new Error(result.errorCode ?? result.error);
   }
+
+  isolatePreviousIdentity("");
 
   // Establish Supabase session (auth source) before loading profile.
   await supabase.auth.setSession({
@@ -246,11 +262,19 @@ export function useAuth() {
     return loadAuthMe();
   }, [setMeError]);
 
+  const authUserId = user?.id;
   const logout = useCallback(async () => {
-    await supabase.auth.signOut();
-    clearAuth();
-    router.replace("/(auth)/login");
-  }, [clearAuth]);
+    useAuthStore.getState().beginLogout();
+    clearDashboardSessionData(authUserId);
+    try {
+      await supabase.auth.signOut();
+      clearAuth();
+      router.replace("/(auth)/login");
+    } catch (error) {
+      useAuthStore.getState().cancelLogout();
+      throw error;
+    }
+  }, [authUserId, clearAuth]);
 
   return {
     user,

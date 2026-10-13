@@ -29,6 +29,9 @@ jest.mock("react-native-safe-area-context", () => ({
 const mockPush = jest.fn();
 const mockBack = jest.fn();
 const mockSaveProfile = jest.fn();
+const mockSignOut = jest.fn();
+const mockClearDashboardSessionData = jest.fn();
+const mockRemoveDashboardPreview = jest.fn();
 jest.mock("expo-router", () => ({
   useRouter: () => ({
     push: mockPush,
@@ -40,13 +43,13 @@ jest.mock("expo-router", () => ({
 jest.mock("@/lib/supabase", () => ({
   supabase: {
     auth: {
-      signOut: jest.fn(),
+      signOut: (...args: unknown[]) => mockSignOut(...args),
     },
   },
 }));
 
-jest.mock("@/store/useAuthStore", () => ({
-  useAuthStore: () => ({
+jest.mock("@/store/useAuthStore", () => {
+  const state = {
     user: {
       id: "u1",
       email: "test@example.com",
@@ -56,7 +59,18 @@ jest.mock("@/store/useAuthStore", () => ({
       updated_at: "2026-01-01",
     },
     clearAuth: jest.fn(),
-  }),
+    beginLogout: jest.fn(),
+    cancelLogout: jest.fn(),
+  };
+  const useAuthStore = Object.assign(() => state, {
+    getState: () => state,
+  });
+  return { useAuthStore };
+});
+
+jest.mock("@/services/dashboardPreview", () => ({
+  removeDashboardPreview: (...args: unknown[]) =>
+    mockRemoveDashboardPreview(...args),
 }));
 
 const mockProfileData = {
@@ -76,6 +90,8 @@ const mockProfileData = {
 };
 
 jest.mock("@/services/hooks", () => ({
+  clearDashboardSessionData: (...args: unknown[]) =>
+    mockClearDashboardSessionData(...args),
   useProfile: () => ({
     data: mockProfileData,
   }),
@@ -267,6 +283,34 @@ describe("SettingsScreen", () => {
       render(<SettingsScreen />);
     });
     expect(screen.getByText("Sign Out")).toBeTruthy();
+  });
+
+  it("isolates dashboard data before Settings logout awaits sign-out", async () => {
+    mockSignOut.mockImplementation(
+      () => new Promise<void>(() => undefined),
+    );
+    const alertSpy = jest
+      .spyOn(Alert, "alert")
+      .mockImplementation((_title, _message, buttons) => {
+        const signOutButton = buttons?.find(
+          (button) => button.text === "Sign Out",
+        );
+        signOutButton?.onPress?.();
+      });
+
+    await act(async () => {
+      render(<SettingsScreen />);
+    });
+    await act(async () => {
+      fireEvent.press(screen.getByText("Sign Out"));
+    });
+
+    expect(mockClearDashboardSessionData).toHaveBeenCalledWith("u1");
+    expect(
+      (jest.requireMock("@/store/useAuthStore") as any).useAuthStore().beginLogout,
+    ).toHaveBeenCalled();
+    expect(mockSignOut).toHaveBeenCalledTimes(1);
+    alertSpy.mockRestore();
   });
 
   it("renders settings sections", async () => {

@@ -474,7 +474,9 @@ describe("Onboarding simplified first-run flow", () => {
     });
 
     const prefetchArgs = mockPrefetchQuery.mock.calls[0][0];
-    expect(prefetchArgs.queryKey).toEqual(["dashboard"]);
+    expect(prefetchArgs.queryKey).toEqual(
+      expect.arrayContaining(["dashboard", "user-1"]),
+    );
     expect(typeof prefetchArgs.queryFn).toBe("function");
 
     // Prefetch only after onboarding POST (authenticated session ready)
@@ -513,34 +515,29 @@ describe("Onboarding simplified first-run flow", () => {
     expect(screen.getByText("Building your plan...")).toBeTruthy();
   });
 
-  it("overlaps auth/me with dashboard prefetch after POST success", async () => {
+  it("prefetches the user-scoped dashboard after auth/me succeeds", async () => {
     mockPost.mockResolvedValue({ data: { ok: true }, error: null, errorCode: null });
 
     let resolveMe!: (value: any) => void;
-    let resolvePrefetch!: (value: any) => void;
     mockGet.mockImplementation(
       () => new Promise((r) => { resolveMe = r; }),
-    );
-    mockPrefetchQuery.mockImplementation(
-      () => new Promise((r) => { resolvePrefetch = r; }),
     );
 
     await render(<OnboardingScreen />);
     await reachConfirmation();
     await fireEvent.press(screen.getByText("Looks correct"));
 
-    await waitFor(() => {
-      expect(mockGet).toHaveBeenCalledWith("/api/v1/auth/me");
-      expect(mockPrefetchQuery).toHaveBeenCalledTimes(1);
-    });
+    expect(mockGet).toHaveBeenCalledWith("/api/v1/auth/me");
+    expect(mockPrefetchQuery).not.toHaveBeenCalled();
 
-    // Both in flight before either finishes → overlapped
+    // The dashboard key is not constructed until the authenticated user ID
+    // has been confirmed.
     expect(mockReplace).not.toHaveBeenCalled();
 
-    resolvePrefetch(undefined);
     resolveMe({ data: makeProfileUser(), error: null, errorCode: null });
 
     await waitFor(() => {
+      expect(mockPrefetchQuery).toHaveBeenCalledTimes(1);
       expect(mockReplace).toHaveBeenCalledWith("/(app)");
     });
   });

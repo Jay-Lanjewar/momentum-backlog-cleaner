@@ -345,9 +345,9 @@ describe("Root layout has onboarding gate", () => {
       "utf-8",
     );
     expect(content).toContain("prefetchQuery");
-    expect(content).toContain("dashboardQueryKey");
+    expect(content).toContain("getDashboardQueryKey");
     expect(content).toContain("fetchDashboard");
-    expect(content).toContain("Promise.all");
+    expect(content).not.toContain("Promise.all");
     expect(content).toContain('api.get<AuthMeResponse>("/api/v1/auth/me"');
     expect(content).toContain("Saving your work...");
     expect(content).toContain("Building your plan...");

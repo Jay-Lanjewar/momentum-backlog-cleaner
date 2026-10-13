@@ -26,7 +26,11 @@ import type {
   DayName,
   WeeklyBlock,
 } from "@/services/types";
-import { dashboardQueryKey, fetchDashboard } from "@/services/hooks";
+import {
+  fetchDashboard,
+  getDashboardQueryKey,
+  getDashboardScope,
+} from "@/services/hooks";
 import { parseBacklogInput, getTotalTopics } from "@/lib/onboarding";
 import {
   countDraftTasks,
@@ -225,16 +229,16 @@ export default function OnboardingScreen() {
    */
   async function completeAfterPost(): Promise<boolean> {
     setLoadingMsg(BUILDING_MSG);
-    const [meResult] = await Promise.all([
-      api.get<AuthMeResponse>("/api/v1/auth/me"),
-      queryClient.prefetchQuery({
-        queryKey: dashboardQueryKey,
-        queryFn: fetchDashboard,
-      }),
-    ]);
+    const meResult = await api.get<AuthMeResponse>("/api/v1/auth/me");
 
     if (meResult.data?.profile) {
       setUser(meResult.data);
+      await queryClient.prefetchQuery({
+        queryKey: getDashboardQueryKey(
+          getDashboardScope(meResult.data.id),
+        ),
+        queryFn: fetchDashboard,
+      });
       router.replace("/(app)");
       return true;
     }
@@ -342,7 +346,9 @@ export default function OnboardingScreen() {
       if (meResult.data?.profile) {
         setUser(meResult.data);
         await queryClient.prefetchQuery({
-          queryKey: dashboardQueryKey,
+          queryKey: getDashboardQueryKey(
+            getDashboardScope(meResult.data.id),
+          ),
           queryFn: fetchDashboard,
         });
         router.replace("/(app)");

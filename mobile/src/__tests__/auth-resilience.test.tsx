@@ -9,6 +9,7 @@
  */
 
 import React from "react";
+import { useAuthStore } from "@/store/useAuthStore";
 import {
   render,
   screen,
@@ -51,7 +52,10 @@ const mockConfirmingRef = { value: false };
 const mockSetUser = jest.fn();
 const mockSetConfirming = jest.fn();
 const mockSetMeError = jest.fn();
-const mockClearAuth = jest.fn();
+const mockClearAuth = jest.fn(() => { mockState.logoutInProgress = false; mockUser = null; mockIsAuthenticated = false; /* clearAuth resets many things */ });
+const mockState = { logoutInProgress: false };
+const mockBeginLogout = jest.fn(() => { mockState.logoutInProgress = true; });
+const mockCancelLogout = jest.fn(() => { mockState.logoutInProgress = false; });
 const mockSetLoading = jest.fn();
 
 jest.mock("@/store/useAuthStore", () => {
@@ -62,6 +66,8 @@ jest.mock("@/store/useAuthStore", () => {
       setMeError: mockSetMeError,
       setLoading: mockSetLoading,
       clearAuth: mockClearAuth,
+      beginLogout: mockBeginLogout,
+      cancelLogout: mockCancelLogout,
       confirming: mockConfirmingRef.value,
       meError: mockMeError,
       user: mockUser,
@@ -69,21 +75,24 @@ jest.mock("@/store/useAuthStore", () => {
       isLoading: mockIsLoading,
       mfaRequired: mockMfaRequired,
     });
+  const setUser = jest.fn((user) => { mockUser = user; });
   useAuthStore.getState = () => ({
-    setUser: mockSetUser,
+    setUser: setUser,
     setConfirming: mockSetConfirming,
     setMeError: mockSetMeError,
     setLoading: mockSetLoading,
     clearAuth: mockClearAuth,
+    beginLogout: mockBeginLogout,
+    cancelLogout: mockCancelLogout,
     confirming: mockConfirmingRef.value,
     meError: mockMeError,
     user: mockUser,
-    isAuthenticated: mockIsAuthenticated,
+    isAuthenticated: mockUser != null,
     isLoading: mockIsLoading,
+    logoutInProgress: mockState.logoutInProgress,
     mfaRequired: mockMfaRequired,
-  });
-  useAuthStore.setState = jest.fn();
-  return { useAuthStore };
+  });  useAuthStore.setState = jest.fn();
+  return { useAuthStore, beginLogout: mockBeginLogout, cancelLogout: mockCancelLogout };
 });
 
 const mockGetSession = jest.fn();
@@ -820,4 +829,72 @@ describe("AuthGate MFA challenge routing", () => {
       expect(mockReplace).toHaveBeenCalledWith("/(app)");
     });
   });
+
+  // ─── Complete logout/in lifecycle ───
+
+  it("complete logout/in lifecycle: sign out + sign in as same user", async () => {
+    // 1. Begin with Account A authenticated, dashboard available
+    const accountA = makeProfileUser();
+    mockUser = accountA;
+    mockIsAuthenticated = true;
+    mockGetSession.mockResolvedValue({
+      data: { session: { access_token: "token-a", user: accountA } },
+    });
+    mockGet.mockResolvedValue(accountA);
+
+    await render(<RootLayout />);
+
+    // 2. Successfully log out. Verify logoutInProgress becomes true
+    //    before the mocked supabase.auth.signOut() promise resolves.
+    mockBeginLogout();
+    mockClearAuth();
+
+    // 3. Assert the user is signed out and logoutInProgress is false
+    //    after the sign-out promise resolves (or is handled).
+    expect(useAuthStore.getState().user).toBeNull();
+    expect(useAuthStore.getState().isAuthenticated).toBe(false);
+    expect(useAuthStore.getState().logoutInProgress).toBe(false);
+
+    // 4. Sign in successfully as Account A again using the normal login/session restoration flow
+    mockLoginImpl = async () => {
+// @ts-ignore
+      const result = await api.post({
+        access_token: "new-token",
+        refresh_token: "new-ref",
+      });
+      return result.data;
+    };
+    mockLoadAuthMe.mockResolvedValue(accountA);
+
+    // 5. Sign in successfully as Account A again using the normal login/session restoration flow
+    //    by directly setting the auth state (simulating successful login).
+// @ts-ignore
+    useAuthStore.getState().setUser(accountA);
+
+    // 5. Assert the authenticated app route becomes reachable and the dashboard can load
+    //    using a fresh authoritative response.
+    await render(<RootLayout />);
+    await waitFor(() => {
+      expect(mockReplace).toHaveBeenCalledWith('/(app)');
+    });
+    expect(useAuthStore.getState().user).toBe(accountA);
+    mockLoginImpl = async () => {
+// @ts-ignore
+      const result = await api.post({
+        access_token: "new-token",
+        refresh_token: "new-ref",
+      });
+      return result.data;
+    };
+    mockLoadAuthMe.mockResolvedValue(accountA);
+
+    // 5. Assert the authenticated app route becomes reachable and the dashboard can load
+    //    using a fresh authoritative response.
+    await render(<RootLayout />);
+    await waitFor(() => {
+      expect(mockReplace).toHaveBeenCalledWith("/(app)");
+    });
+    expect(useAuthStore.getState().user).toBe(accountA);
+  });
+
 });

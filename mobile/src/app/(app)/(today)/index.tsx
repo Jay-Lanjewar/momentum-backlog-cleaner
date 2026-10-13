@@ -14,7 +14,12 @@ import { useRouter } from "expo-router";
 import { useDashboard } from "@/services/hooks";
 import { useAuth } from "@/hooks/useAuth";
 import { useNotificationScheduler } from "@/hooks/useNotificationScheduler";
+import { useAuthStore } from "@/store/useAuthStore";
 import { performanceMark } from "@/lib/performance";
+import {
+  loadDashboardPreview,
+  saveDashboardPreview,
+} from "@/services/dashboardPreview";
 import {
   getGreeting,
   formatPlannedDuration,
@@ -41,11 +46,50 @@ import { BalanceScoreCard } from "@/components/dashboard/BalanceScoreCard";
 
 export default function TodayMissionPage() {
   const router = useRouter();
-  const { user, logout } = useAuth();
-  const { data, isLoading, refetch, isRefetching } = useDashboard();
+  const { user, isLoading: isAuthLoading, logout } = useAuth();
+  const logoutInProgress = useAuthStore((state) => state.logoutInProgress);
+  const {
+    data: freshDashboard,
+    isLoading,
+    isFetching,
+    isFetchedAfterMount,
+    isSuccess,
+    error,
+    refetch,
+    dashboardScope = {
+      userId: user?.id ?? "",
+      localDate: "",
+      timezone: "",
+    },
+  } = useDashboard({ refetchOnMount: "always", staleTime: 0 });
   const loggedUsableData = useRef(false);
 
   useNotificationScheduler();
+
+  const previewDashboard =
+    !logoutInProgress && !isAuthLoading && user?.id
+      ? loadDashboardPreview(user.id)
+      : null;
+
+  const dashboardIsFresh =
+    !!freshDashboard &&
+    (isSuccess ?? !!freshDashboard) &&
+    (isFetchedAfterMount ?? true) &&
+    dashboardScope.userId === (user?.id ?? "") &&
+    !isFetching &&
+    !error;
+  const isRefetching = isFetching && !!freshDashboard;
+  const data = !logoutInProgress && dashboardIsFresh
+    ? freshDashboard
+    : !logoutInProgress
+      ? previewDashboard
+      : null;
+
+  useEffect(() => {
+    if (dashboardIsFresh && freshDashboard && user?.id) {
+      saveDashboardPreview(user.id, freshDashboard);
+    }
+  }, [dashboardIsFresh, freshDashboard, user?.id]);
 
   useEffect(() => {
     performanceMark("today.screen.mount");
@@ -131,7 +175,7 @@ export default function TodayMissionPage() {
     return d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
   }, [allSessions, backlogItemMap]);
 
-  if (isLoading) {
+  if (logoutInProgress || (isLoading && !previewDashboard)) {
     return (
       <SafeAreaView style={styles.container}>
         <View style={styles.center}>
@@ -211,6 +255,26 @@ export default function TodayMissionPage() {
           <RefreshControl refreshing={isRefetching} onRefresh={refetch} />
         }
       >
+        {!dashboardIsFresh && (
+          <View style={styles.previewStatus}>
+            <Text style={styles.previewStatusText}>
+              {error
+                ? "Showing your last saved plan. It may be out of date."
+                : "Updating today's plan…"}
+            </Text>
+            {error && (
+              <TouchableOpacity
+                onPress={() => refetch()}
+                style={styles.previewRetryButton}
+                accessibilityRole="button"
+                accessibilityLabel="Retry updating today's plan"
+                activeOpacity={0.7}
+              >
+                <Text style={styles.previewRetryText}>Retry</Text>
+              </TouchableOpacity>
+            )}
+          </View>
+        )}
         {/* Header */}
         <View style={styles.header}>
           <Text
@@ -249,7 +313,13 @@ export default function TodayMissionPage() {
               String(missionSession.backlog_item_id) === String(topBacklogId)
             }
             nowMin={nowMin}
-            onStart={() => handleStartStudy(missionSession, data)}
+            disabled={!dashboardIsFresh}
+            accessibilityState={{ disabled: !dashboardIsFresh }}
+            onStart={() => {
+              if (dashboardIsFresh && freshDashboard) {
+                handleStartStudy(missionSession, freshDashboard);
+              }
+            }}
           />
         ) : hasEmptyBacklog ? (
           <View style={styles.emptyCard}>
@@ -379,7 +449,12 @@ export default function TodayMissionPage() {
                   style={
                     isFirstRun ? styles.sessionRowFirstRun : styles.sessionRow
                   }
-                  onPress={() => handleStartStudy(s, data)}
+                  onPress={() => {
+                    if (dashboardIsFresh && freshDashboard) {
+                      handleStartStudy(s, freshDashboard);
+                    }
+                  }}
+                  disabled={!dashboardIsFresh}
                   activeOpacity={0.7}
                   accessibilityRole="button"
                   accessibilityLabel={`${subject}: ${title}, ${formatHourMinute(
@@ -451,6 +526,29 @@ const styles = StyleSheet.create({
   scrollContent: {
     paddingHorizontal: 20,
     paddingBottom: 40,
+  },
+  previewStatus: {
+    alignItems: "center",
+    gap: 6,
+    paddingTop: 12,
+  },
+  previewStatusText: {
+    color: "#92400E",
+    fontSize: 13,
+    lineHeight: 18,
+    textAlign: "center",
+  },
+  previewRetryButton: {
+    minHeight: 36,
+    justifyContent: "center",
+    paddingHorizontal: 14,
+    borderRadius: 8,
+    backgroundColor: "#FEF3C7",
+  },
+  previewRetryText: {
+    color: "#92400E",
+    fontSize: 13,
+    fontWeight: "600",
   },
   header: {
     flexDirection: "row",

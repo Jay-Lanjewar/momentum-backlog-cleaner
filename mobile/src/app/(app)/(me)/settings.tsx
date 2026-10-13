@@ -6,6 +6,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { MeHeader } from "@/components/MeHeader";
 import { supabase } from "@/lib/supabase";
 import { useAuthStore } from "@/store/useAuthStore";
+import { clearDashboardSessionData } from "@/services/hooks";
 import {
   getPermissionState,
   requestNotificationPermission,
@@ -29,7 +30,7 @@ function classifyNotificationState(state: {
 
 export default function SettingsScreen() {
   const router = useRouter();
-  const { user, clearAuth } = useAuthStore();
+  const { user, clearAuth, beginLogout, cancelLogout } = useAuthStore();
   const [notificationState, setNotificationState] =
     useState<NotificationRowState>("loading");
 
@@ -107,9 +108,17 @@ export default function SettingsScreen() {
 
     if (!confirmed) return;
 
-    await supabase.auth.signOut();
-    clearAuth();
-    router.replace("/(auth)/login");
+    const currentUserId = useAuthStore.getState().user?.id;
+    beginLogout();
+    clearDashboardSessionData(currentUserId);
+    try {
+      await supabase.auth.signOut();
+      clearAuth();
+      router.replace("/(auth)/login");
+    } catch (error) {
+      cancelLogout();
+      throw error;
+    }
   }
 
   return (

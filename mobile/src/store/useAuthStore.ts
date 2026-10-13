@@ -5,6 +5,7 @@ import type { AuthMeResponse } from "@/services/types";
 interface AuthState {
   isAuthenticated: boolean;
   isLoading: boolean;
+  logoutInProgress: boolean;
   confirming: boolean;
   /** Non-auth error from GET /api/v1/auth/me (session may still be valid). */
   meError: string | null;
@@ -26,11 +27,14 @@ interface AuthState {
   beginMfaChallenge: (factorId: string) => void;
   completeMfaChallenge: () => void;
   clearAuth: () => void;
+  beginLogout: () => void;
+  cancelLogout: () => void;
 }
 
 export const useAuthStore = create<AuthState>((set) => ({
   isAuthenticated: false,
   isLoading: true,
+  logoutInProgress: false,
   confirming: false,
   meError: null,
   user: null,
@@ -69,5 +73,8 @@ export const useAuthStore = create<AuthState>((set) => ({
       mfaRequired: false,
       mfaFactorId: null,
       mfaAal: null,
+      logoutInProgress: false,
     }),
+  beginLogout: () => set({ logoutInProgress: true }),
+  cancelLogout: () => set({ logoutInProgress: false }),
 }));

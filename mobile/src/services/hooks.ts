@@ -1,7 +1,16 @@
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { AppState, type AppStateStatus } from "react-native";
+import { useEffect, useMemo, useState } from "react";
+import {
+  QueryClient,
+  useQuery,
+  useMutation,
+  useQueryClient,
+} from "@tanstack/react-query";
 
 import { api } from "@/lib/api";
 import { performanceMark, performanceMeasure } from "@/lib/performance";
+import { useAuthStore } from "@/store/useAuthStore";
+import { removeDashboardPreview } from "@/services/dashboardPreview";
 import type {
   DashboardData,
   AdaptivePlanResponse,
@@ -25,6 +34,71 @@ import type {
 } from "@/services/types";
 
 export const dashboardQueryKey = ["dashboard"] as const;
+let dashboardQueryClient: QueryClient | null = null;
+
+export function registerDashboardQueryClient(queryClient: QueryClient): void {
+  dashboardQueryClient = queryClient;
+}
+
+export function clearDashboardQueryCache(): void {
+  dashboardQueryClient?.removeQueries({ queryKey: dashboardQueryKey });
+}
+
+export function clearDashboardSessionData(userId?: string): void {
+  if (userId) removeDashboardPreview(userId);
+  clearDashboardQueryCache();
+}
+
+export interface DashboardScope {
+  userId: string;
+  localDate: string;
+  timezone: string;
+}
+
+export function getDashboardScope(
+  userId: string,
+  now = new Date(),
+): DashboardScope {
+  const localDate = [
+    now.getFullYear(),
+    String(now.getMonth() + 1).padStart(2, "0"),
+    String(now.getDate()).padStart(2, "0"),
+  ].join("-");
+  const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+  return { userId, localDate, timezone };
+}
+
+export function getDashboardQueryKey(scope: DashboardScope) {
+  return [
+    ...dashboardQueryKey,
+    scope.userId,
+    scope.localDate,
+    scope.timezone,
+  ] as const;
+}
+
+function useDashboardScope(): DashboardScope {
+  const userId = useAuthStore((state) => state.user?.id ?? "");
+  const [now, setNow] = useState(() => new Date());
+
+  useEffect(() => {
+    const refreshScope = () => setNow(new Date());
+    const interval = setInterval(refreshScope, 30_000);
+    const subscription = AppState.addEventListener(
+      "change",
+      (state: AppStateStatus) => {
+        if (state === "active") refreshScope();
+      },
+    );
+
+    return () => {
+      clearInterval(interval);
+      subscription.remove();
+    };
+  }, []);
+
+  return useMemo(() => getDashboardScope(userId, now), [userId, now]);
+}
 
 export async function fetchDashboard(): Promise<DashboardData> {
   performanceMark("today.dashboard.request.begin");
@@ -37,13 +111,20 @@ export async function fetchDashboard(): Promise<DashboardData> {
   return result.data;
 }
 
-export function useDashboard() {
-  return useQuery({
-    queryKey: dashboardQueryKey,
+export function useDashboard(options?: {
+  refetchOnMount?: boolean | "always";
+  staleTime?: number;
+}) {
+  const scope = useDashboardScope();
+  const query = useQuery({
+    queryKey: getDashboardQueryKey(scope),
     queryFn: fetchDashboard,
-    staleTime: 1000 * 60,
+    enabled: !!scope.userId,
+    staleTime: options?.staleTime ?? 1000 * 60,
     retry: 1,
+    refetchOnMount: options?.refetchOnMount,
   });
+  return { ...query, dashboardScope: scope };
 }
 
 export function useAnalyticsProgress() {

@@ -19,6 +19,8 @@ interface RecommendedNextCardProps {
   /** Minutes since midnight used for the running-session countdown. */
   nowMin?: number;
   onStart: () => void;
+  disabled?: boolean;
+  accessibilityState?: { disabled?: boolean };
 }
 
 export function RecommendedNextCard({
@@ -29,6 +31,8 @@ export function RecommendedNextCard({
   isTopPriority = false,
   nowMin,
   onStart,
+  disabled = false,
+  accessibilityState,
 }: RecommendedNextCardProps) {
   const courseColor = backlogItem?.course_color ?? "#6B7280";
   const subject = backlogItem?.course_name ?? "Unknown Subject";
@@ -121,11 +125,17 @@ export function RecommendedNextCard({
 
         {/* CTA */}
         <TouchableOpacity
-          style={[styles.startButton, { backgroundColor: courseColor }]}
+          style={[
+            styles.startButton,
+            { backgroundColor: courseColor },
+            disabled && styles.disabledButton,
+          ]}
           onPress={onStart}
+          disabled={disabled}
           activeOpacity={0.7}
           accessibilityRole="button"
           accessibilityLabel={`${isCurrent ? "Start focus session" : "Start next session"}: ${topic}`}
+          accessibilityState={accessibilityState}
           testID="recommended-next-start"
         >
           <Text style={styles.startButtonText}>
@@ -228,6 +238,9 @@ const styles = StyleSheet.create({
     paddingVertical: 14,
     alignItems: "center",
     justifyContent: "center",
+  },
+  disabledButton: {
+    opacity: 0.5,
   },
   startButtonText: {
     color: "#FFF",

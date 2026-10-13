@@ -30,6 +30,10 @@ jest.mock("react-native-safe-area-context", () => {
 });
 
 const mockRefetch = jest.fn();
+let mockLogoutInProgress = false;
+const mockLogout = jest.fn(async () => {
+  mockLogoutInProgress = true;
+});
 
 jest.mock("@/services/hooks", () => ({
   useDashboard: jest.fn(),
@@ -37,13 +41,23 @@ jest.mock("@/services/hooks", () => ({
   dashboardQueryKey: ["dashboard"],
 }));
 
+jest.mock("@/services/dashboardPreview", () => ({
+  loadDashboardPreview: jest.fn().mockReturnValue(null),
+  saveDashboardPreview: jest.fn(),
+}));
+
 jest.mock("@/hooks/useAuth", () => ({
   useAuth: () => ({
-    user: { name: "Ada", email: "ada@example.com" },
+    user: { id: "user-1", name: "Ada", email: "ada@example.com" },
     isAuthenticated: true,
     isLoading: false,
-    logout: jest.fn(),
+    logout: mockLogout,
   }),
+}));
+
+jest.mock("@/store/useAuthStore", () => ({
+  useAuthStore: (selector: (state: { logoutInProgress: boolean }) => unknown) =>
+    selector({ logoutInProgress: mockLogoutInProgress }),
 }));
 
 jest.mock("@/hooks/useNotificationScheduler", () => ({
@@ -157,20 +171,185 @@ function setDashboard(result: {
   data?: any;
   isLoading?: boolean;
   isRefetching?: boolean;
+  isFetching?: boolean;
+  isFetchedAfterMount?: boolean;
+  error?: Error | null;
+  dashboardScope?: {
+    userId: string;
+    localDate: string;
+    timezone: string;
+  };
 }) {
   (useDashboard as jest.Mock).mockReturnValue({
     data: result.data ?? null,
     isLoading: result.isLoading ?? false,
     isRefetching: result.isRefetching ?? false,
+    isFetching: result.isFetching ?? result.isRefetching ?? false,
+    isFetchedAfterMount: result.isFetchedAfterMount ?? true,
+    error: result.error ?? null,
+    dashboardScope: result.dashboardScope ?? {
+      userId: "user-1",
+      localDate: "2026-10-11",
+      timezone: "UTC",
+    },
     refetch: mockRefetch,
   });
 }
 
 beforeEach(() => {
   jest.clearAllMocks();
+  mockLogoutInProgress = false;
+  require("@/services/dashboardPreview").loadDashboardPreview.mockReturnValue(
+    null,
+  );
 });
 
 describe("Today first-load with prefetched dashboard", () => {
+  it("shows a read-only persisted preview while the fresh dashboard loads", async () => {
+    const preview = makeDashboard();
+    const { loadDashboardPreview } = require("@/services/dashboardPreview");
+    loadDashboardPreview.mockReturnValue(preview);
+    setDashboard({
+      data: null,
+      isLoading: false,
+      isFetching: true,
+      isFetchedAfterMount: false,
+    });
+
+    await render(<Today />);
+
+    expect(screen.getByText("Updating today's plan…")).toBeTruthy();
+    expect(screen.getByText("Motion 1")).toBeTruthy();
+    expect(
+      screen.getByTestId("recommended-next-start").props.accessibilityState
+        .disabled,
+    ).toBe(true);
+  });
+
+  it("replaces the preview and enables plan actions after a fresh response", async () => {
+    const preview = makeDashboard();
+    const fresh = makeDashboard();
+    const { loadDashboardPreview } = require("@/services/dashboardPreview");
+    loadDashboardPreview.mockReturnValue(preview);
+    setDashboard({
+      data: null,
+      isLoading: false,
+      isFetching: true,
+      isFetchedAfterMount: false,
+    });
+
+    const view = await render(<Today />);
+    setDashboard({
+      data: fresh,
+      isLoading: false,
+      isFetching: false,
+      isFetchedAfterMount: true,
+    });
+    await view.rerender(<Today />);
+
+    expect(screen.queryByText("Updating today's plan…")).toBeNull();
+    expect(screen.getByText("Motion 1")).toBeTruthy();
+    expect(
+      screen.getByTestId("recommended-next-start").props.accessibilityState
+        .disabled,
+    ).toBe(false);
+    expect(
+      require("@/services/dashboardPreview").saveDashboardPreview,
+    ).toHaveBeenCalledWith("user-1", fresh);
+    await fireEvent.press(screen.getByTestId("recommended-next-start"));
+    expect(mockPush).toHaveBeenCalledWith(
+      expect.objectContaining({ pathname: "/(app)/(today)/focus" }),
+    );
+  });
+
+  it("keeps preview actions disabled when the refresh fails", async () => {
+    const preview = makeDashboard();
+    const { loadDashboardPreview } = require("@/services/dashboardPreview");
+    loadDashboardPreview.mockReturnValue(preview);
+    setDashboard({
+      data: null,
+      isLoading: false,
+      isFetching: false,
+      isFetchedAfterMount: true,
+      error: new Error("offline"),
+    });
+
+    await render(<Today />);
+
+    expect(
+      screen.getByText("Showing your last saved plan. It may be out of date."),
+    ).toBeTruthy();
+    expect(
+      screen.getByTestId("recommended-next-start").props.accessibilityState
+        .disabled,
+    ).toBe(true);
+  });
+
+  it("offers Retry for a failed refresh with a retained preview", async () => {
+    const preview = makeDashboard();
+    const { loadDashboardPreview } = require("@/services/dashboardPreview");
+    loadDashboardPreview.mockReturnValue(preview);
+    setDashboard({
+      data: null,
+      isLoading: false,
+      isFetching: false,
+      isFetchedAfterMount: true,
+      error: new Error("offline"),
+    });
+
+    await render(<Today />);
+
+    expect(
+      screen.getByRole("button", { name: "Retry updating today's plan" }),
+    ).toBeTruthy();
+    await fireEvent.press(
+      screen.getByRole("button", { name: "Retry updating today's plan" }),
+    );
+    expect(mockRefetch).toHaveBeenCalled();
+  });
+
+  it("disables plan actions while a new local-day scope is fetching", async () => {
+    const dashboard = makeDashboard();
+    require("@/services/dashboardPreview").loadDashboardPreview.mockReturnValue(
+      dashboard,
+    );
+    setDashboard({
+      data: dashboard,
+      isLoading: false,
+      isFetching: false,
+      isFetchedAfterMount: true,
+      dashboardScope: {
+        userId: "user-1",
+        localDate: "2026-10-11",
+        timezone: "UTC",
+      },
+    });
+
+    const view = await render(<Today />);
+    expect(
+      screen.getByTestId("recommended-next-start").props.accessibilityState
+        .disabled,
+    ).toBe(false);
+
+    setDashboard({
+      data: dashboard,
+      isLoading: false,
+      isFetching: true,
+      isFetchedAfterMount: false,
+      dashboardScope: {
+        userId: "user-1",
+        localDate: "2026-10-12",
+        timezone: "UTC",
+      },
+    });
+    await view.rerender(<Today />);
+
+    expect(
+      screen.getByTestId("recommended-next-start").props.accessibilityState
+        .disabled,
+    ).toBe(true);
+  });
+
   it("renders recommendation immediately when dashboard data is prefetched", async () => {
     setDashboard({ data: makeDashboard(), isLoading: false });
 
@@ -180,6 +359,18 @@ describe("Today first-load with prefetched dashboard", () => {
     // Full-screen loading only when isLoading (cold fetch), not when cache warm
     expect(screen.getByText("Motion 1")).toBeTruthy();
     expect(screen.getByText(/Start (Focus|Next) Session/)).toBeTruthy();
+  });
+
+  it("hides authenticated content while logout is pending", async () => {
+    setDashboard({ data: makeDashboard(), isLoading: false });
+    const view = await render(<Today />);
+    expect(screen.getByText("Motion 1")).toBeTruthy();
+
+    await mockLogout();
+    await view.rerender(<Today />);
+
+    expect(screen.queryByText("Motion 1")).toBeNull();
+    expect(screen.queryByTestId("recommended-next-start")).toBeNull();
   });
 
   it("shows student-facing plan status near the recommendation", async () => {

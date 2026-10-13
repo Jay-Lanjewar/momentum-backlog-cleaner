@@ -6,7 +6,11 @@ import {
   View,
 } from "react-native";
 import { Slot, useRouter, useSegments } from "expo-router";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import {
+  QueryClient,
+  QueryClientProvider,
+  useQueryClient,
+} from "@tanstack/react-query";
 import { StatusBar } from "expo-status-bar";
 import * as SplashScreen from "expo-splash-screen";
 import * as Notifications from "expo-notifications";
@@ -22,6 +26,10 @@ import {
   createNotificationChannels,
 } from "@/services/notifications";
 import { performanceMark } from "@/lib/performance";
+import {
+  clearDashboardSessionData,
+  registerDashboardQueryClient,
+} from "@/services/hooks";
 
 setNotificationHandler();
 SplashScreen.preventAutoHideAsync();
@@ -32,21 +40,34 @@ const queryClient = new QueryClient({
     queries: { staleTime: 1000 * 60 * 5, retry: 1 },
   },
 });
+registerDashboardQueryClient(queryClient);
 
 function AuthGate() {
   const { user, isAuthenticated, isLoading } = useAuth();
   const clearAuth = useAuthStore((s) => s.clearAuth);
   const confirming = useAuthStore((s) => s.confirming);
   const mfaRequired = useAuthStore((s) => s.mfaRequired);
+  const logoutInProgress = useAuthStore((s) => s.logoutInProgress);
   const segments = useSegments();
   const router = useRouter();
+  const queryClient = useQueryClient();
 
   useEffect(() => {
     void restoreSession();
-    return subscribeToAuthState(clearAuth);
-  }, [clearAuth]);
+    return subscribeToAuthState(() => {
+      const previousUserId = useAuthStore.getState().user?.id;
+      clearDashboardSessionData(previousUserId);
+      clearAuth();
+    });
+  }, [clearAuth, queryClient]);
 
   useEffect(() => {
+    if (logoutInProgress) {
+      if (segments[0] !== "(auth)" || segments[1] !== "login") {
+        router.replace("/(auth)/login");
+      }
+      return;
+    }
     if (isLoading || confirming) return;
 
     const inAuthGroup = segments[0] === "(auth)";
@@ -93,7 +114,16 @@ function AuthGate() {
       // (e.g. after email confirmation). Send to onboarding.
       router.replace("/(onboarding)");
     }
-  }, [isAuthenticated, isLoading, confirming, mfaRequired, user, segments, router]);
+  }, [
+    isAuthenticated,
+    isLoading,
+    confirming,
+    mfaRequired,
+    logoutInProgress,
+    user,
+    segments,
+    router,
+  ]);
 
   return null;
 }
@@ -124,12 +154,14 @@ function isSafeRouteForAuthState(
     isLoading,
     confirming,
     mfaRequired,
+    logoutInProgress,
     isAuthenticated,
     hasProfile,
   }: {
     isLoading: boolean;
     confirming: boolean;
     mfaRequired: boolean;
+    logoutInProgress: boolean;
     isAuthenticated: boolean;
     hasProfile: boolean;
   },
@@ -143,6 +175,7 @@ function isSafeRouteForAuthState(
 
   // These routes are intentionally safe to mount while the session is being
   // established because they perform the confirmation/recovery flow.
+  if (logoutInProgress) return false;
   if (inConfirmRoute || inResetRoute) return true;
   if (isLoading) return false;
   if (mfaRequired) return inTwoFactorRoute;
@@ -160,6 +193,7 @@ export default function RootLayout() {
   const isLoading = useAuthStore((s) => s.isLoading);
   const confirming = useAuthStore((s) => s.confirming);
   const mfaRequired = useAuthStore((s) => s.mfaRequired);
+  const logoutInProgress = useAuthStore((s) => s.logoutInProgress);
 
   useEffect(() => {
     createNotificationChannels();
@@ -192,6 +226,7 @@ export default function RootLayout() {
         isLoading,
         confirming,
         mfaRequired,
+        logoutInProgress,
         isAuthenticated,
         hasProfile: !!user?.profile,
       }) ? (
