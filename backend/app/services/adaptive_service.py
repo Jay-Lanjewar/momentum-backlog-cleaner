@@ -135,16 +135,33 @@ async def get_or_create_active_snapshot(
 
     This is used by the dashboard endpoint.
 
-    A stored snapshot is regenerated only when it is *stale*: it is for the
-    user's current local day, it still has sessions but every one of them has
-    already ended before the current local time, and pending backlog work
-    remains (see ``_is_stale_snapshot``).  Otherwise the stored snapshot is
-    reused so we never churn a new version on every request.
+    A stored snapshot is regenerated when it has become stale, or when its
+    empty session list can now be replaced by a non-empty candidate for the
+    user's current local day. Empty candidates are not persisted, avoiding a
+    new snapshot version on every request when nothing is schedulable.
     """
     await _lock_user(db, user_id)
     existing = await get_active_snapshot(db, user_id, plan_date)
     if existing is not None:
         pending_backlog = planning_data.get("prioritized_backlog") or []
+        existing_sessions = existing.sessions or []
+        if pending_backlog and not existing_sessions:
+            if plan_date == today_in_user_tz():
+                candidate = generate_deterministic_plan(
+                    planning_data,
+                    daily_capacity_minutes=daily_capacity_minutes,
+                    target_date=plan_date,
+                )
+                if candidate.get("sessions"):
+                    await supersede_snapshot(db, existing.id)
+                    return await create_snapshot(
+                        db,
+                        user_id,
+                        plan_date,
+                        candidate,
+                    )
+            return existing
+
         if pending_backlog and _is_stale_snapshot(existing, plan_date):
             plan = generate_deterministic_plan(
                 planning_data,

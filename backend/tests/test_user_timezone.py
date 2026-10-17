@@ -327,6 +327,65 @@ class TestScheduleFloorUsesDeviceTime:
         assert utc_windows[0]["start"] == "16:00"
         assert local_windows[0]["start"] != utc_windows[0]["start"]
 
+    def test_saturday_coaching_keeps_later_evening_capacity(
+        self, set_tz, freeze_clock
+    ):
+        set_tz("Asia/Kolkata")
+        freeze_clock(datetime(2026, 10, 17, 11, 42, tzinfo=dt_timezone.utc))
+        schedule = {
+            "saturday": [
+                {"type": "coaching", "start": "17:55", "end": "20:30"}
+            ]
+        }
+
+        windows = compute_available_windows(
+            weekly_schedule=schedule,
+            sleep_schedule={"start": "22:00", "end": "06:00"},
+            preferred_window={"earliest_start": "16:00", "latest_end": "22:00"},
+            energy_peak="morning",
+            target_date=date(2026, 10, 17),
+        )
+
+        assert windows == [
+            {
+                "start": "17:27",
+                "end": "17:55",
+                "total_minutes": 28,
+                "energy_rating": "low",
+            },
+            {
+                "start": "20:30",
+                "end": "22:00",
+                "total_minutes": 90,
+                "energy_rating": "low",
+            },
+        ]
+        assert sum(window["total_minutes"] for window in windows) == 118
+
+        task_id = uuid.uuid4()
+        plan = generate_deterministic_plan(
+            {
+                "available_windows": windows,
+                "prioritized_backlog": [
+                    {
+                        "id": task_id,
+                        "title": "Eligible 30 minute task",
+                        "score": 100,
+                        "priority": 1,
+                        "estimated_minutes": 30,
+                        "course_name": "Math",
+                    }
+                ],
+            },
+            target_date=date(2026, 10, 17),
+        )
+
+        assert len(plan["sessions"]) == 1
+        session = plan["sessions"][0]
+        assert session["backlog_item_id"] == str(task_id)
+        assert session["start_time"] == "20:30"
+        assert session["end_time"] == "21:00"
+
 
 # ─── 4. weekday / local-date resolution across the day boundary ───
 
@@ -779,12 +838,22 @@ class TestStaleSnapshotRegeneration:
         assert harness["superseded"] == []
 
     @pytest.mark.asyncio
-    async def test_empty_session_snapshot_is_not_regenerated(self, harness):
-        # Documented decision: an empty-session snapshot is not stale.
-        # Regenerating it on every request would mint a new version each
-        # time even though no window can be moved forward.
+    async def test_empty_candidate_does_not_create_snapshot_churn(
+        self, harness, monkeypatch
+    ):
+        # Recheck an empty active snapshot, but do not persist another empty
+        # version when current planning still yields no sessions.
         existing = _snapshot([], version=1)
         harness["existing"] = existing
+        monkeypatch.setattr(
+            adaptive_service,
+            "generate_deterministic_plan",
+            lambda *args, **kwargs: {
+                "sessions": [],
+                "daily_message": "empty",
+                "overflow": [],
+            },
+        )
 
         result = await get_or_create_active_snapshot(
             None, USER_ID, DEVICE_TODAY, harness["planning_data"]
