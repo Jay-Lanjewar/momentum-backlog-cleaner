@@ -444,20 +444,14 @@ export default function TodayMissionPage() {
               const subject = item?.course_name ?? "Study session";
               const duration = formatPlannedDuration(s);
               return (
-                <TouchableOpacity
+                <View
                   key={s.session_id}
                   testID={`today-upcoming-${s.session_id}`}
                   style={
                     isFirstRun ? styles.sessionRowFirstRun : styles.sessionRow
                   }
-                  onPress={() => {
-                    if (dashboardIsFresh && freshDashboard) {
-                      handleStartStudy(s, freshDashboard);
-                    }
-                  }}
-                  disabled={!dashboardIsFresh}
-                  activeOpacity={0.7}
-                  accessibilityRole="button"
+                  accessible
+                  accessibilityRole="text"
                   accessibilityLabel={`${subject}: ${title}, ${formatHourMinute(
                     s.start_time,
                   )}, ${duration ? duration.replace("~", "about ") : ""}`}
@@ -480,7 +474,7 @@ export default function TodayMissionPage() {
                   <Text style={styles.sessionDuration}>
                     {duration}
                   </Text>
-                </TouchableOpacity>
+                </View>
               );
             })}
           </View>

@@ -670,6 +670,37 @@ describe("Today routing", () => {
       }),
     });
   });
+
+  it("scheduled task rows do not start focus; Start Next Session still does", async () => {
+    const dashboard = makeDashboard({
+      items: [makeItem("item-1"), makeItem("item-2")],
+      sessions: [
+        makeSession("item-1", "16:15", "16:55", 0),
+        makeSession("item-2", "17:15", "17:55", 0),
+      ],
+      pendingItems: 2,
+    });
+    setDashboard({ data: dashboard });
+
+    await render(<Today />);
+
+    expect(screen.getByText("Start Next Session")).toBeTruthy();
+    await fireEvent.press(screen.getByTestId("today-upcoming-item-2:s1"));
+    expect(mockPush).not.toHaveBeenCalled();
+
+    await fireEvent.press(screen.getByTestId("recommended-next-start"));
+
+    expect(mockPush).toHaveBeenCalledTimes(1);
+    expect(mockPush).toHaveBeenCalledWith({
+      pathname: "/(app)/(today)/focus",
+      params: expect.objectContaining({
+        sessionId: "item-1:s1",
+        backlogItemId: "item-1",
+        startTime: "16:15",
+        endTime: "16:55",
+      }),
+    });
+  });
 });
 
 // ─── K13. Notification scheduler ───
