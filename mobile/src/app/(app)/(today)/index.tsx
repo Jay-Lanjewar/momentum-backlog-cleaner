@@ -346,7 +346,8 @@ export default function TodayMissionPage() {
                 : "You've finished everything planned for today. Nothing else needs you right now."}
             </Text>
           </View>
-        ) : allSessions.length === 0 ? (
+        ) : data?.planning.total_available_minutes === 0 &&
+          allSessions.length === 0 ? (
           <View style={styles.emptyCard}>
             <Text style={styles.emptyTitle}>No study time left today</Text>
             <Text style={styles.emptySubtitle}>

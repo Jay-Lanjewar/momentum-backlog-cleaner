@@ -167,6 +167,7 @@ function makeEstablishedDashboard(
   return dash;
 }
 
+
 function setDashboard(result: {
   data?: any;
   isLoading?: boolean;
@@ -615,6 +616,98 @@ describe("Today empty states", () => {
 
     expect(screen.getByText("All caught up!")).toBeTruthy();
     expect(screen.queryByText("No more sessions today")).toBeNull();
+  });
+
+  it("pending tasks + zero available minutes + no scheduled sessions shows No study time left today", async () => {
+    const dash = makeDashboard();
+    dash.plan.plan.sessions = [];
+    dash.planning.prioritized_backlog = [];
+    dash.planning.total_available_minutes = 0;
+    setDashboard({ data: dash, isLoading: false });
+
+    await render(<Today />);
+
+    expect(screen.getByText("No study time left today")).toBeTruthy();
+    expect(screen.queryByText("Add your first task")).toBeNull();
+    expect(screen.queryByText("Progress")).toBeNull();
+    expect(screen.queryByText("Momentum")).toBeNull();
+    expect(screen.queryByText("Backlog Health")).toBeNull();
+  });
+
+  it("pending tasks + positive available minutes + no scheduled sessions does not show No study time left today", async () => {
+    const dash = makeDashboard();
+    dash.plan.plan.sessions = [];
+    dash.planning.prioritized_backlog = [];
+    dash.planning.total_available_minutes = 30;
+    dash.planning.backlog_health = {
+      total_items: 0,
+      completed_items: 0,
+      overdue_items: 0,
+      pending_items: 0,
+      clear_rate_7d: 0,
+      health_score: "good",
+      estimated_completion_date: null,
+    };
+    setDashboard({ data: dash, isLoading: false });
+
+    await render(<Today />);
+
+    // Should not show No study time left today message
+    expect(screen.queryByText("No study time left today")).toBeNull();
+    // Should not show "Add your first task" CTA (tasks already exist)
+    expect(screen.queryByText("Add your first task")).toBeNull();
+    // Should render truthful empty-plan state indicating tasks remain to be scheduled
+    expect(screen.getByText(/Good (morning|afternoon|evening), Ada/)).toBeTruthy();
+    expect(screen.queryByText("Progress")).toBeNull();
+    expect(screen.queryByText("Momentum")).toBeNull();
+  });
+
+  it("when sessions exist, current Today behavior remains unchanged", async () => {
+    const dash = makeEstablishedDashboard();
+    dash.today_completed_minutes = 25;
+    // Ensure prioritized_backlog is preserved for backlogItemMap
+    dash.planning.prioritized_backlog = [makeBacklogItem("item-1")];
+    dash.plan.plan.sessions[0].reason = `Work on ${dash.planning.prioritized_backlog[0].title}`;
+    dash.planning.total_available_minutes = 30;
+    dash.planning.backlog_health = {
+      total_items: 1,
+      completed_items: 0,
+      overdue_items: 0,
+      pending_items: 0,
+      clear_rate_7d: 0,
+      health_score: "fair",
+      estimated_completion_date: null,
+    };
+    setDashboard({ data: dash, isLoading: false });
+
+    await render(<Today />);
+
+    expect(screen.getByText("Progress")).toBeTruthy();
+    expect(screen.queryByText("No study time left today")).toBeNull();
+    expect(screen.getByText("Motion item-1")).toBeTruthy();
+  });
+
+  it("no backlog items shows Add Task empty state remains unchanged", async () => {
+    const dash = makeDashboard();
+    dash.plan.plan.sessions = [];
+    dash.planning.prioritized_backlog = [];
+    dash.planning.total_available_minutes = 0;
+    dash.planning.backlog_health = {
+      total_items: 0,
+      completed_items: 0,
+      overdue_items: 0,
+      pending_items: 0,
+      clear_rate_7d: 0,
+      health_score: "good",
+      estimated_completion_date: null,
+    };
+    setDashboard({ data: dash, isLoading: false });
+
+    await render(<Today />);
+
+    expect(screen.getByText(/Add your first task/)).toBeTruthy();
+    expect(screen.queryByText("No study time left today")).toBeNull();
+    expect(screen.queryByText("Progress")).toBeNull();
   });
 });
 
