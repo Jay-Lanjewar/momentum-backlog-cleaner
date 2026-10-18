@@ -7,12 +7,13 @@ from __future__ import annotations
 
 import re
 import uuid
-from datetime import date, datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 
 from sqlalchemy import func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.domain.models import (
+    ActiveFocusSession,
     ActivityType,
     BacklogItem,
     PlanSnapshot,
@@ -21,6 +22,8 @@ from app.domain.models import (
 )
 from app.domain.schemas import (
     AdaptivePlanResponse,
+    FocusSessionLifecycleRequest,
+    FocusSessionLifecycleResponse,
     GeneratedPlan,
     PlanChange,
     PlanSession,
@@ -34,6 +37,11 @@ _SESSION_ID_RE = re.compile(
     r"^([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}):s(\d+)$",
     re.IGNORECASE,
 )
+FOCUS_SESSION_LEASE_SECONDS = 90
+
+
+class FocusSessionConflict(Exception):
+    """The requested Focus lifecycle transition is stale or conflicts."""
 
 
 def parse_session_id(session_id: str) -> tuple[str, int] | None:
@@ -163,12 +171,24 @@ async def get_or_create_active_snapshot(
                     )
             return existing
 
+        completed_session_ids: set[str] = set()
+        invalidation_now = now_in_user_tz()
+        if _has_current_scheduled_session(existing, plan_date, invalidation_now):
+            current_completions = await get_completions_for_snapshot(
+                db, existing.id
+            )
+            completed_session_ids = {
+                row["session_id"]
+                for row in current_completions
+                if row.get("status") == "completed" and row.get("session_id")
+            }
         transition_violation = _has_upcoming_transition_violation(
-            existing, plan_date
+            existing, plan_date, completed_session_ids, invalidation_now
         )
-        if pending_backlog and (
-            _is_stale_snapshot(existing, plan_date) or transition_violation
-        ):
+        needs_refresh = _is_stale_snapshot(existing, plan_date) or transition_violation
+        if pending_backlog and needs_refresh:
+            if await _has_valid_focus_lease(db, user_id, existing):
+                return existing
             plan = generate_deterministic_plan(
                 planning_data,
                 daily_capacity_minutes=daily_capacity_minutes,
@@ -229,12 +249,15 @@ def _is_stale_snapshot(snapshot: PlanSnapshot, plan_date: date) -> bool:
 
 
 def _has_upcoming_transition_violation(
-    snapshot: PlanSnapshot, plan_date: date
+    snapshot: PlanSnapshot,
+    plan_date: date,
+    completed_session_ids: set[str] | None = None,
+    now: datetime | None = None,
 ) -> bool:
     """Return whether an upcoming pair violates the current transition rule.
 
-    A running session keeps the current plan stable until it ends. Completed
-    and past sessions are excluded; only future sessions are checked.
+    Completed and past sessions are excluded; only future sessions are checked.
+    Focus state is checked separately from persisted lifecycle leases.
     """
     if plan_date != today_in_user_tz():
         return False
@@ -243,10 +266,13 @@ def _has_upcoming_transition_violation(
     if not sessions:
         return False
 
-    now = now_in_user_tz()
+    now = now or now_in_user_tz()
     now_minutes = now.hour * 60 + now.minute
+    completed_session_ids = completed_session_ids or set()
     upcoming: list[tuple[int, int]] = []
     for session in sessions:
+        if session.get("session_id") in completed_session_ids:
+            continue
         start_time = session.get("start_time")
         end_time = session.get("end_time")
         if not start_time or not end_time:
@@ -259,16 +285,202 @@ def _has_upcoming_transition_violation(
             return False
         if end <= start:
             return False
-        if start <= now_minutes < end:
-            # Do not move or replace a session that is currently in progress.
-            return False
-        if start > now_minutes:
+        if end > now_minutes:
             upcoming.append((start, end))
 
     upcoming.sort()
     return any(
         next_start - previous_end < SESSION_TRANSITION_MINUTES
         for (_, previous_end), (next_start, _) in zip(upcoming, upcoming[1:])
+    )
+
+
+def _has_current_scheduled_session(
+    snapshot: PlanSnapshot, plan_date: date, now: datetime | None = None
+) -> bool:
+    if plan_date != today_in_user_tz():
+        return False
+    now = now or now_in_user_tz()
+    now_minutes = now.hour * 60 + now.minute
+    for session in (snapshot.sessions or []):
+        start_time = session.get("start_time")
+        end_time = session.get("end_time")
+        if not start_time or not end_time:
+            continue
+        try:
+            start = _time_to_minutes(start_time)
+            end = _time_to_minutes(end_time)
+        except (AttributeError, TypeError, ValueError):
+            continue
+        if start <= now_minutes < end:
+            return True
+    return False
+
+
+def _lease_now() -> datetime:
+    return datetime.now(timezone.utc)
+
+
+async def _get_focus_lease(
+    db: AsyncSession, user_id: uuid.UUID, *, lock: bool = False
+) -> ActiveFocusSession | None:
+    query = select(ActiveFocusSession).where(
+        ActiveFocusSession.user_id == user_id
+    )
+    if lock:
+        query = query.with_for_update()
+    result = await db.execute(query)
+    return result.scalar_one_or_none()
+
+
+async def _has_valid_focus_lease(
+    db: AsyncSession, user_id: uuid.UUID, snapshot: PlanSnapshot
+) -> bool:
+    lease = await _get_focus_lease(db, user_id)
+    if (
+        lease is None
+        or lease.user_id != user_id
+        or lease.state != "running"
+        or lease.plan_snapshot_id != snapshot.id
+        or lease.lease_expires_at <= _lease_now()
+    ):
+        return False
+    return any(
+        session.get("session_id") == lease.session_id
+        for session in (snapshot.sessions or [])
+    )
+
+
+async def run_focus_session_lifecycle(
+    db: AsyncSession,
+    user_id: uuid.UUID,
+    request: FocusSessionLifecycleRequest,
+) -> FocusSessionLifecycleResponse:
+    """Apply an authenticated, fenced Focus lifecycle transition."""
+    if parse_session_id(request.session_id) is None:
+        raise ValueError("Invalid session_id format")
+
+    await _lock_user(db, user_id)
+    now = _lease_now()
+    result = await db.execute(
+        select(PlanSnapshot).where(
+            PlanSnapshot.id == request.snapshot_id,
+            PlanSnapshot.user_id == user_id,
+            PlanSnapshot.plan_date == today_in_user_tz(),
+            PlanSnapshot.active.is_(True),
+        )
+    )
+    snapshot = result.scalar_one_or_none()
+    if snapshot is None:
+        raise ValueError("Plan snapshot is no longer active")
+    if not any(
+        session.get("session_id") == request.session_id
+        for session in (snapshot.sessions or [])
+    ):
+        raise ValueError("Session is not in the active plan")
+
+    lease = await _get_focus_lease(db, user_id, lock=True)
+    if request.action in {"start", "resume"}:
+        completion_result = await db.execute(
+            select(SessionCompletion.id).where(
+                SessionCompletion.plan_snapshot_id == snapshot.id,
+                SessionCompletion.session_id == request.session_id,
+                SessionCompletion.status == "completed",
+            ).limit(1)
+        )
+        if completion_result.scalar_one_or_none() is not None:
+            raise ValueError("Session is already completed")
+
+    if request.action == "start":
+        same_lease = (
+            lease is not None
+            and lease.generation == request.generation
+            and lease.session_id == request.session_id
+            and lease.plan_snapshot_id == snapshot.id
+        )
+        if same_lease:
+            if lease.state == "running" and lease.lease_expires_at > now:
+                # A retry of the same start is idempotent and must not extend
+                # the lease; only a foreground heartbeat may renew it.
+                return FocusSessionLifecycleResponse(
+                    session_id=lease.session_id,
+                    snapshot_id=lease.plan_snapshot_id,
+                    generation=lease.generation,
+                    state=lease.state,
+                    lease_expires_at=lease.lease_expires_at,
+                )
+            raise FocusSessionConflict("Focus session lease is no longer current")
+        if (
+            lease is not None
+            and lease.state == "running"
+            and lease.lease_expires_at > now
+            and (
+                lease.generation != request.generation
+                or lease.session_id != request.session_id
+                or lease.plan_snapshot_id != snapshot.id
+            )
+        ):
+            raise FocusSessionConflict("Another Focus session is active")
+        if lease is None:
+            lease = ActiveFocusSession(
+                user_id=user_id,
+                plan_snapshot_id=snapshot.id,
+                session_id=request.session_id,
+                generation=request.generation,
+                state="running",
+                lease_expires_at=now + timedelta(seconds=FOCUS_SESSION_LEASE_SECONDS),
+            )
+            db.add(lease)
+        else:
+            if (
+                lease.generation == request.generation
+                and lease.state in {"cancelled", "completed"}
+            ):
+                raise FocusSessionConflict("Focus session has already ended")
+            lease.plan_snapshot_id = snapshot.id
+            lease.session_id = request.session_id
+            lease.generation = request.generation
+            lease.state = "running"
+            lease.lease_expires_at = now + timedelta(
+                seconds=FOCUS_SESSION_LEASE_SECONDS
+            )
+    else:
+        if (
+            lease is None
+            or lease.plan_snapshot_id != snapshot.id
+            or lease.session_id != request.session_id
+            or lease.generation != request.generation
+        ):
+            raise FocusSessionConflict("Focus session lease is no longer current")
+
+        if request.action == "heartbeat":
+            if lease.state != "running" or lease.lease_expires_at <= now:
+                raise FocusSessionConflict("Focus session lease has expired")
+            lease.lease_expires_at = now + timedelta(
+                seconds=FOCUS_SESSION_LEASE_SECONDS
+            )
+        elif request.action == "pause":
+            if lease.state not in {"cancelled", "completed"}:
+                lease.state = "paused"
+                lease.lease_expires_at = now
+        elif request.action == "resume":
+            if lease.state in {"cancelled", "completed"}:
+                raise FocusSessionConflict("Focus session has already ended")
+            lease.state = "running"
+            lease.lease_expires_at = now + timedelta(
+                seconds=FOCUS_SESSION_LEASE_SECONDS
+            )
+        elif request.action == "cancel":
+            lease.state = "cancelled"
+            lease.lease_expires_at = now
+
+    await db.flush()
+    return FocusSessionLifecycleResponse(
+        session_id=lease.session_id,
+        snapshot_id=lease.plan_snapshot_id,
+        generation=lease.generation,
+        state=lease.state,
+        lease_expires_at=lease.lease_expires_at,
     )
 
 
@@ -327,6 +539,7 @@ async def get_completions_for_snapshot(
     rows = result.scalars().all()
     return [
         {
+            "session_id": row.session_id,
             "backlog_item_id": str(row.backlog_item_id),
             "session_number": row.session_number,
             "status": row.status,
@@ -334,6 +547,37 @@ async def get_completions_for_snapshot(
         }
         for row in rows
     ]
+
+
+async def _already_completed_response(
+    db: AsyncSession,
+    user_id: uuid.UUID,
+    active_snapshot: PlanSnapshot,
+    session_id: str,
+) -> AdaptivePlanResponse | None:
+    result = await db.execute(
+        select(SessionCompletion.id)
+        .join(PlanSnapshot, SessionCompletion.plan_snapshot_id == PlanSnapshot.id)
+        .where(
+            PlanSnapshot.user_id == user_id,
+            SessionCompletion.session_id == session_id,
+            SessionCompletion.status == "completed",
+        )
+        .limit(1)
+    )
+    if result.scalar_one_or_none() is None:
+        return None
+    sessions = [PlanSession(**session) for session in (active_snapshot.sessions or [])]
+    return AdaptivePlanResponse(
+        plan=GeneratedPlan(
+            sessions=sessions,
+            daily_message=active_snapshot.daily_message,
+            overflow=[uuid.UUID(value) for value in (active_snapshot.overflow or [])],
+        ),
+        changes=[],
+        snapshot_id=active_snapshot.id,
+        previous_sessions=[],
+    )
 
 
 # ─── Adaptive flow ───
@@ -347,6 +591,7 @@ async def run_adaptive_completion(
     actual_minutes: int,
     planning_data: dict,
     daily_capacity_minutes: int | None = None,
+    focus_generation: str | None = None,
 ) -> AdaptivePlanResponse:
     """Execute the full adaptive completion transaction.
 
@@ -383,7 +628,31 @@ async def run_adaptive_completion(
             estimated_minutes = max(1, est)
             break
     if not session_found:
+        duplicate_response = await _already_completed_response(
+            db, user_id, snapshot, session_id
+        )
+        if duplicate_response is not None:
+            return duplicate_response
         raise ValueError(f"Session {session_id} not found in active plan")
+
+    lease = await _get_focus_lease(db, user_id, lock=True)
+    if (
+        lease is not None
+        and lease.plan_snapshot_id == snapshot.id
+        and lease.state == "running"
+        and lease.lease_expires_at > _lease_now()
+        and lease.session_id != session_id
+    ):
+        raise FocusSessionConflict("Another Focus session is active")
+    if lease is not None and (
+        lease.plan_snapshot_id == snapshot.id and lease.session_id == session_id
+    ):
+        if lease.state in {"cancelled", "completed"}:
+            raise FocusSessionConflict("Focus session has already ended")
+        if focus_generation != lease.generation:
+            raise FocusSessionConflict("Focus session ownership changed")
+    elif focus_generation is not None:
+        raise FocusSessionConflict("Focus session lease is no longer current")
 
     # 4. Mark backlog item completed
     result = await db.execute(
@@ -419,6 +688,12 @@ async def run_adaptive_completion(
         db, snapshot, session_id, actual_minutes,
         backlog_item_id, session_number, estimated_minutes,
     )
+    if lease is not None and (
+        lease.plan_snapshot_id == snapshot.id and lease.session_id == session_id
+    ):
+        lease.state = "completed"
+        lease.lease_expires_at = _lease_now()
+        await db.flush()
 
     # 6. Build completions list for rescheduler
     all_completions = await get_completions_for_snapshot(db, snapshot.id)

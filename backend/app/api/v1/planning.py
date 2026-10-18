@@ -1,6 +1,6 @@
 import logging
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -9,6 +9,8 @@ from app.core.timezone import today_in_user_tz
 from app.domain.models import BacklogItem, Course, Goal, StudentProfile, User, WeeklySchedule
 from app.domain.schemas import (
     AdaptivePlanResponse,
+    FocusSessionLifecycleRequest,
+    FocusSessionLifecycleResponse,
     PlanningPreviewResponse,
     SessionCompletionRequest,
     TimeBlock,
@@ -16,11 +18,31 @@ from app.domain.schemas import (
     BacklogHealth,
 )
 from app.services.planning_engine import PlanningEngine
-from app.services.adaptive_service import run_adaptive_completion
+from app.services.adaptive_service import (
+    FocusSessionConflict,
+    run_adaptive_completion,
+    run_focus_session_lifecycle,
+)
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/planning", tags=["planning"])
+
+
+@router.post(
+    "/focus-session", response_model=FocusSessionLifecycleResponse
+)
+async def focus_session_lifecycle(
+    data: FocusSessionLifecycleRequest,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    try:
+        return await run_focus_session_lifecycle(db, user.id, data)
+    except FocusSessionConflict as e:
+        raise HTTPException(status_code=409, detail=str(e)) from e
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e)) from e
 
 
 @router.post("/preview", response_model=PlanningPreviewResponse)
@@ -141,9 +163,11 @@ async def complete_session(
             actual_minutes=data.actual_minutes,
             planning_data=planning_data,
             daily_capacity_minutes=daily_capacity,
+            focus_generation=data.focus_generation,
         )
+    except FocusSessionConflict as e:
+        raise HTTPException(status_code=409, detail=str(e)) from e
     except ValueError as e:
-        from fastapi import HTTPException
         raise HTTPException(status_code=404, detail=str(e))
 
     return result

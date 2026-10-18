@@ -2,7 +2,16 @@ import enum
 import uuid
 from datetime import date, datetime
 
-from sqlalchemy import DateTime, ForeignKey, Integer, String, Text, UniqueConstraint, func
+from sqlalchemy import (
+    CheckConstraint,
+    DateTime,
+    ForeignKey,
+    Integer,
+    String,
+    Text,
+    UniqueConstraint,
+    func,
+)
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -71,7 +80,7 @@ class User(Base):
         "Activity", back_populates="user"
     )
     plan_snapshots: Mapped[list["PlanSnapshot"]] = relationship(
-        "PlanSnapshot", cascade="all, delete-orphan"
+        "PlanSnapshot", back_populates="user", cascade="all, delete-orphan"
     )
 
 
@@ -228,7 +237,7 @@ class StudyStreak(Base):
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
     )
 
-    user: Mapped["User"] = relationship("User")
+    user: Mapped["User"] = relationship("User", back_populates="study_streak")
 
 
 class SubjectStreak(Base):
@@ -349,7 +358,7 @@ class PlanSnapshot(Base):
         DateTime(timezone=True), server_default=func.now()
     )
 
-    user: Mapped["User"] = relationship("User")
+    user: Mapped["User"] = relationship("User", back_populates="plan_snapshots")
 
 
 class SessionCompletion(Base):
@@ -369,4 +378,40 @@ class SessionCompletion(Base):
     status: Mapped[str] = mapped_column(String(20), nullable=False, default="completed")
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
+    )
+
+
+class ActiveFocusSession(Base):
+    """Current Focus lifecycle lease for one authenticated user."""
+
+    __tablename__ = "active_focus_sessions"
+    __table_args__ = (
+        CheckConstraint(
+            "state IN ('running', 'paused', 'cancelled', 'completed')",
+            name="ck_active_focus_sessions_state",
+        ),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+    )
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=False, unique=True,
+    )
+    plan_snapshot_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("plan_snapshots.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    session_id: Mapped[str] = mapped_column(String(255), nullable=False)
+    generation: Mapped[str] = mapped_column(String(80), nullable=False)
+    state: Mapped[str] = mapped_column(String(16), nullable=False)
+    lease_expires_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
     )

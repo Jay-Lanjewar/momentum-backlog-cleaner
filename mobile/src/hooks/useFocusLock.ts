@@ -23,38 +23,38 @@ function now(): number {
   return Date.now();
 }
 
-export function useFocusLock(totalDurationMs: number): UseFocusLockReturn {
-  const [phase, setPhase] = useState<FocusLockPhase>("entering");
-  const [, setTick] = useState(0);
-
+export function useFocusLock(
+  totalDurationMs: number,
+  enabled = true,
+): UseFocusLockReturn {
+  const [phase, setPhase] = useState<FocusLockPhase>(
+    enabled ? "focusing" : "entering",
+  );
+  const [focusedElapsedMs, setFocusedElapsedMs] = useState(0);
   const accumulatedMsRef = useRef(0);
   const focusStartedAtRef = useRef<number | null>(null);
   const activeRef = useRef(false);
   const phaseRef = useRef<FocusLockPhase>("entering");
-
-  const focusedElapsedMs =
-    accumulatedMsRef.current +
-    (activeRef.current && focusStartedAtRef.current !== null
-      ? now() - focusStartedAtRef.current
-      : 0);
+  const visiblePhase = enabled && phase === "entering" ? "focusing" : phase;
 
   const remainingMs = Math.max(0, totalDurationMs - focusedElapsedMs);
 
-  const pause = useCallback(() => {
+  const pause = useCallback((nextPhase: "paused_by_user" | "paused_lost_focus") => {
     if (!activeRef.current) return;
-    accumulatedMsRef.current += now() - focusStartedAtRef.current!;
+    const startedAt = focusStartedAtRef.current;
+    if (startedAt === null) return;
+    accumulatedMsRef.current += now() - startedAt;
     focusStartedAtRef.current = null;
     activeRef.current = false;
-    setPhase("paused_by_user");
+    setFocusedElapsedMs(accumulatedMsRef.current);
+    setPhase(nextPhase);
   }, []);
 
-  const pauseLostFocus = useCallback(() => {
-    if (!activeRef.current) return;
-    accumulatedMsRef.current += now() - focusStartedAtRef.current!;
-    focusStartedAtRef.current = null;
-    activeRef.current = false;
-    setPhase("paused_lost_focus");
-  }, []);
+  const pauseByUser = useCallback(() => pause("paused_by_user"), [pause]);
+  const pauseLostFocus = useCallback(
+    () => pause("paused_lost_focus"),
+    [pause],
+  );
 
   const resume = useCallback(() => {
     focusStartedAtRef.current = now();
@@ -68,6 +68,7 @@ export function useFocusLock(totalDurationMs: number): UseFocusLockReturn {
       focusStartedAtRef.current = null;
     }
     activeRef.current = false;
+    setFocusedElapsedMs(accumulatedMsRef.current);
     setPhase("complete");
   }, []);
 
@@ -75,30 +76,33 @@ export function useFocusLock(totalDurationMs: number): UseFocusLockReturn {
     accumulatedMsRef.current = 0;
     focusStartedAtRef.current = null;
     activeRef.current = false;
+    setFocusedElapsedMs(0);
     setPhase("entering");
   }, []);
 
-  // Initial focus start
+  // Start timing only after the session identity has been resolved.
   useEffect(() => {
-    if (phase !== "entering") return;
-    focusStartedAtRef.current = now();
-    activeRef.current = true;
-    setPhase("focusing");
-  }, [phase]);
-
-  // Display tick: re-render once per second for countdown display
-  useEffect(() => {
-    if (!activeRef.current) return;
-    const id = setInterval(() => setTick((t) => t + 1), 1000);
+    if (!enabled || visiblePhase !== "focusing") return;
+    if (!activeRef.current) {
+      focusStartedAtRef.current = now();
+      activeRef.current = true;
+    }
+    const id = setInterval(() => {
+      const startedAt = focusStartedAtRef.current;
+      if (activeRef.current && startedAt !== null) {
+        setFocusedElapsedMs(
+          accumulatedMsRef.current + now() - startedAt,
+        );
+      }
+    }, 1000);
     return () => clearInterval(id);
-  }, [phase]);
+  }, [enabled, visiblePhase]);
 
   // AppState listener — pauses on background, shows focus_returned on foreground
   useEffect(() => {
     function onAppStateChange(state: AppStateStatus) {
       if (
-        phaseRef.current === "complete" ||
-        phaseRef.current === "entering"
+        phaseRef.current === "complete" || phaseRef.current === "entering"
       ) {
         return;
       }
@@ -121,14 +125,14 @@ export function useFocusLock(totalDurationMs: number): UseFocusLockReturn {
 
   // Keep phaseRef in sync
   useEffect(() => {
-    phaseRef.current = phase;
-  }, [phase]);
+    phaseRef.current = visiblePhase;
+  }, [visiblePhase]);
 
   return {
-    phase,
+    phase: visiblePhase,
     focusedElapsedMs,
     remainingMs,
-    pause,
+    pause: pauseByUser,
     resume,
     complete,
     reset,

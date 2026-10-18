@@ -21,6 +21,7 @@ const mockPush = jest.fn();
 const mockBack = jest.fn();
 
 jest.mock("expo-router", () => ({
+  useFocusEffect: jest.fn(),
   useLocalSearchParams: jest.fn(),
   useRouter: () => ({
     replace: mockReplace,
@@ -79,6 +80,7 @@ jest.mock("@/hooks/useFocusLock", () => {
 });
 
 const mockMutate = jest.fn();
+const mockFocusLifecycleMutateAsync = jest.fn();
 let mockSetIsPending: (v: boolean) => void = () => {};
 
 jest.mock("@/services/hooks", () => {
@@ -89,6 +91,9 @@ jest.mock("@/services/hooks", () => {
       mockSetIsPending = setPending;
       return { mutate: mockMutate, isPending };
     },
+    useFocusSessionLifecycle: () => ({
+      mutateAsync: mockFocusLifecycleMutateAsync,
+    }),
     useDashboard: () => ({
       data: null,
       isLoading: false,
@@ -225,6 +230,7 @@ beforeEach(() => {
   mockPush.mockClear();
   mockBack.mockClear();
   mockMutate.mockClear();
+  mockFocusLifecycleMutateAsync.mockReset().mockResolvedValue({ state: "running" });
   mockSetIsPending = () => {};
   completeCallbacks = {};
   backHandler = null;
@@ -402,5 +408,36 @@ describe("Pause / resume remains unchanged", () => {
   it("Finish Early is available while focusing", async () => {
     await renderFocus();
     expect(screen.getByText("Finish Early")).toBeTruthy();
+  });
+
+  it("reports start, pause, and resume through the focus lifecycle API", async () => {
+    await renderFocus();
+    await act(async () => {
+      await Promise.resolve();
+    });
+    expect(mockFocusLifecycleMutateAsync).toHaveBeenCalledWith(
+      expect.objectContaining({
+        action: "start",
+        session_id: "sess-1",
+        snapshot_id: "snap-1",
+        generation: expect.any(String),
+      }),
+    );
+
+    await fireEvent.press(screen.getByText("Pause"));
+    await act(async () => {
+      await Promise.resolve();
+    });
+    expect(mockFocusLifecycleMutateAsync).toHaveBeenCalledWith(
+      expect.objectContaining({ action: "pause" }),
+    );
+
+    await fireEvent.press(screen.getByText("Resume"));
+    await act(async () => {
+      await Promise.resolve();
+    });
+    expect(mockFocusLifecycleMutateAsync).toHaveBeenCalledWith(
+      expect.objectContaining({ action: "resume" }),
+    );
   });
 });

@@ -55,6 +55,9 @@ def _snapshot_reuse_harness(
     async def fake_lock_user(db, user_id):
         return None
 
+    async def no_focus_lease(db, user_id, snapshot):
+        return False
+
     async def get_completions(db, snapshot_id):
         state["completion_lookups"].append(snapshot_id)
         return state["completions"]
@@ -66,6 +69,7 @@ def _snapshot_reuse_harness(
         lambda: datetime(2026, 10, 17, 15, 30, tzinfo=timezone.utc),
     )
     monkeypatch.setattr(adaptive_service, "_lock_user", fake_lock_user)
+    monkeypatch.setattr(adaptive_service, "_has_valid_focus_lease", no_focus_lease)
     monkeypatch.setattr(adaptive_service, "get_active_snapshot", get_active)
     monkeypatch.setattr(adaptive_service, "supersede_snapshot", supersede)
     monkeypatch.setattr(adaptive_service, "create_snapshot", create)
@@ -249,7 +253,9 @@ async def test_valid_upcoming_transition_plan_is_reused(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_back_to_back_plan_is_not_replaced_during_active_session(monkeypatch):
+async def test_scheduled_time_interval_without_focus_lease_does_not_protect_plan(
+    monkeypatch,
+):
     sessions = [
         {
             "session_id": "active:s1",
@@ -267,12 +273,89 @@ async def test_back_to_back_plan_is_not_replaced_during_active_session(monkeypat
             "end_time": "17:00",
         },
     ]
-    day, existing, state = _snapshot_reuse_harness(monkeypatch, [], sessions)
+    candidate = [{
+        "session_id": "replacement:s1",
+        "backlog_item_id": str(uuid.uuid4()),
+        "start_time": "16:00",
+        "end_time": "16:30",
+        "reason": "Replacement",
+        "remaining_minutes": 0,
+    }]
+    day, existing, state = _snapshot_reuse_harness(monkeypatch, candidate, sessions)
     monkeypatch.setattr(
         adaptive_service,
         "now_in_user_tz",
         lambda: datetime(2026, 10, 17, 15, 30, tzinfo=timezone.utc),
     )
+
+    result = await adaptive_service.get_or_create_active_snapshot(
+        None,
+        uuid.uuid4(),
+        day,
+        {"prioritized_backlog": [{"id": "task"}], "available_windows": []},
+    )
+
+    assert result is not existing
+    assert result.sessions == candidate
+    assert len(state["generated"]) == 1
+    assert state["superseded"] == [existing.id]
+    assert state["created"][0]["sessions"] == candidate
+
+
+@pytest.mark.asyncio
+async def test_valid_focus_lease_protects_invalid_plan(monkeypatch):
+    sessions = [
+        {"session_id": "active:s1", "start_time": "15:00", "end_time": "15:45"},
+        {"session_id": "task-a:s1", "start_time": "16:00", "end_time": "16:30"},
+        {"session_id": "task-b:s1", "start_time": "16:30", "end_time": "17:00"},
+    ]
+    day, existing, state = _snapshot_reuse_harness(
+        monkeypatch,
+        [{"session_id": "candidate:s1", "start_time": "17:00", "end_time": "17:30"}],
+        sessions,
+    )
+
+    async def active_lease(db, user_id, snapshot):
+        return True
+
+    monkeypatch.setattr(adaptive_service, "_has_valid_focus_lease", active_lease)
+    monkeypatch.setattr(
+        adaptive_service,
+        "now_in_user_tz",
+        lambda: datetime(2026, 10, 17, 15, 30, tzinfo=timezone.utc),
+    )
+
+    result = await adaptive_service.get_or_create_active_snapshot(
+        None,
+        uuid.uuid4(),
+        day,
+        {"prioritized_backlog": [{"id": "task"}], "available_windows": []},
+    )
+
+    assert result is existing
+    assert state["generated"] == []
+    assert state["superseded"] == []
+    assert state["created"] == []
+
+
+@pytest.mark.asyncio
+async def test_completed_current_schedule_does_not_trigger_false_transition_refresh(
+    monkeypatch,
+):
+    completed = {
+        "session_id": "completed:s1",
+        "start_time": "15:00",
+        "end_time": "15:45",
+    }
+    sessions = [
+        completed,
+        {"session_id": "task-a:s1", "start_time": "15:45", "end_time": "16:15"},
+        {"session_id": "task-b:s1", "start_time": "16:20", "end_time": "16:50"},
+    ]
+    day, existing, state = _snapshot_reuse_harness(monkeypatch, [], sessions)
+    state["completions"] = [
+        {"session_id": completed["session_id"], "status": "completed"}
+    ]
 
     result = await adaptive_service.get_or_create_active_snapshot(
         None,

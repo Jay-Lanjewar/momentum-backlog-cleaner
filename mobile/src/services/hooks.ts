@@ -15,6 +15,8 @@ import type {
   DashboardData,
   AdaptivePlanResponse,
   SessionCompletionPayload,
+  FocusSessionLifecyclePayload,
+  FocusSessionLifecycleResponse,
   BacklogItem,
   BacklogItemCreatePayload,
   BacklogItemUpdatePayload,
@@ -114,12 +116,13 @@ export async function fetchDashboard(): Promise<DashboardData> {
 export function useDashboard(options?: {
   refetchOnMount?: boolean | "always";
   staleTime?: number;
+  enabled?: boolean;
 }) {
   const scope = useDashboardScope();
   const query = useQuery({
     queryKey: getDashboardQueryKey(scope),
     queryFn: fetchDashboard,
-    enabled: !!scope.userId,
+    enabled: !!scope.userId && options?.enabled !== false,
     staleTime: options?.staleTime ?? 1000 * 60,
     retry: 1,
     refetchOnMount: options?.refetchOnMount,
@@ -215,6 +218,25 @@ export function useCompleteSession() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["dashboard"] });
       queryClient.invalidateQueries({ queryKey: ["analytics", "progress"] });
+    },
+  });
+}
+
+export function useFocusSessionLifecycle() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (payload: FocusSessionLifecyclePayload) => {
+      const result = await api.post<FocusSessionLifecycleResponse>(
+        "/api/v1/planning/focus-session",
+        payload,
+      );
+      if (result.error) throw new Error(result.error);
+      return result.data;
+    },
+    onSuccess: (_data, payload) => {
+      if (payload.action === "cancel") {
+        queryClient.invalidateQueries({ queryKey: ["dashboard"] });
+      }
     },
   });
 }

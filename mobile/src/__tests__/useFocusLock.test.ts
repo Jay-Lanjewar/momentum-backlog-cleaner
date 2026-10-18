@@ -26,6 +26,26 @@ describe("useFocusLock", () => {
     expect(hookResult.result.current.phase).toBe("focusing");
   });
 
+  it("waits for session identity before starting the focus timer", async () => {
+    let enabled = false;
+    const hookResult = await renderHook(() =>
+      useFocusLock(10 * 60 * 1000, enabled),
+    );
+    expect(hookResult.result.current.phase).toBe("entering");
+    expect(hookResult.result.current.focusedElapsedMs).toBe(0);
+
+    await act(async () => {
+      hookResult.rerender(undefined);
+    });
+    expect(hookResult.result.current.phase).toBe("entering");
+
+    await act(async () => {
+      enabled = true;
+      hookResult.rerender(undefined);
+    });
+    expect(hookResult.result.current.phase).toBe("focusing");
+  });
+
   it("tracks elapsed time based on timestamps", async () => {
     const hookResult = await renderHook(() => useFocusLock(totalMs));
     await act(async () => {});

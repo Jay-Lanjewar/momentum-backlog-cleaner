@@ -1,4 +1,5 @@
 from app.domain.models import (
+    ActiveFocusSession,
     Activity,
     ActivityType,
     ActivityVisibility,
@@ -15,6 +16,7 @@ from app.domain.models import (
 )
 
 __all__ = [
+    "ActiveFocusSession",
     "Activity",
     "ActivityType",
     "ActivityVisibility",

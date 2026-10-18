@@ -231,6 +231,22 @@ class PlanGenerateResponse(BaseModel):
 class SessionCompletionRequest(BaseModel):
     session_id: str = Field(..., min_length=3)
     actual_minutes: int = Field(..., ge=1)
+    focus_generation: str | None = Field(None, min_length=16, max_length=80)
+
+
+class FocusSessionLifecycleRequest(BaseModel):
+    action: str = Field(..., pattern=r"^(start|pause|resume|heartbeat|cancel)$")
+    session_id: str = Field(..., min_length=3, max_length=255)
+    snapshot_id: uuid.UUID
+    generation: str = Field(..., min_length=16, max_length=80)
+
+
+class FocusSessionLifecycleResponse(BaseModel):
+    session_id: str
+    snapshot_id: uuid.UUID
+    generation: str
+    state: str
+    lease_expires_at: datetime
 
 
 class PlanChange(BaseModel):

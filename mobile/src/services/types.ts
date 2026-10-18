@@ -264,6 +264,29 @@ export interface AdaptivePlanResponse {
 export interface SessionCompletionPayload {
   session_id: string;
   actual_minutes: number;
+  focus_generation?: string;
+}
+
+export type FocusSessionAction =
+  | "start"
+  | "pause"
+  | "resume"
+  | "heartbeat"
+  | "cancel";
+
+export interface FocusSessionLifecyclePayload {
+  action: FocusSessionAction;
+  session_id: string;
+  snapshot_id: string;
+  generation: string;
+}
+
+export interface FocusSessionLifecycleResponse {
+  session_id: string;
+  snapshot_id: string;
+  generation: string;
+  state: "running" | "paused" | "cancelled" | "completed";
+  lease_expires_at: string;
 }
 
 // ─── Streaks ───

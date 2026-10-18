@@ -8,15 +8,22 @@ import {
   Alert,
   BackHandler,
   Animated,
+  AppState,
+  type AppStateStatus,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { useLocalSearchParams, useRouter } from "expo-router";
+import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
 import { useKeepAwake } from "expo-keep-awake";
 import Svg, { Circle } from "react-native-svg";
 import * as Haptics from "expo-haptics";
 
 import { useFocusLock } from "@/hooks/useFocusLock";
-import { useCompleteSession, useDashboard } from "@/services/hooks";
+import {
+  useCompleteSession,
+  useDashboard,
+  useFocusSessionLifecycle,
+} from "@/services/hooks";
+import type { AdaptivePlanResponse, FocusSessionAction } from "@/services/types";
 import {
   cancelSessionNotifications,
   showPlanChangedNotification,
@@ -30,7 +37,6 @@ import {
   nextSessionAfter,
   parseTimeToMinutes,
 } from "@/lib/coaching";
-import type { AdaptivePlanResponse } from "@/services/types";
 import {
   AdaptiveTimelineBar,
   computeTimelineBounds,
@@ -59,6 +65,11 @@ function minutesBetween(start: string, end: string): number {
   return parseTimeToMinutes(end) - parseTimeToMinutes(start);
 }
 
+function createFocusGeneration(): string {
+  const random = () => Math.random().toString(36).slice(2).padEnd(12, "0");
+  return `${Date.now().toString(36)}-${random()}-${random()}`.slice(0, 64);
+}
+
 export default function FocusModeScreen() {
   const router = useRouter();
   const params = useLocalSearchParams<{
@@ -74,7 +85,14 @@ export default function FocusModeScreen() {
     userName: string;
   }>();
 
-  const { data: dashboard } = useDashboard();
+  const hasDirectSession = Boolean(
+    params.sessionId && params.startTime && params.endTime && params.reason,
+  );
+  const { data: dashboard, isLoading: dashboardLoading } = useDashboard({
+    enabled: !hasDirectSession || !params.snapshotId,
+    refetchOnMount: "always",
+    staleTime: 0,
+  });
 
   // Resolve session data when opened via notification deep link
   // (notification provides sessionId/backlogItemId but not full params)
@@ -92,21 +110,168 @@ export default function FocusModeScreen() {
   const endTime = params.endTime ?? resolvedSession?.end_time ?? "";
   const reason = params.reason ?? resolvedSession?.reason ?? "";
   const sessionId = params.sessionId ?? resolvedSession?.session_id ?? "";
+  const snapshotId = params.snapshotId || dashboard?.plan.snapshot_id || "";
   const userName = params.userName ?? "";
 
   // Redirect back if we can't identify the session at all
-  const isMissingSession = !sessionId || (!resolvedSession && !params.startTime);
+  const isMissingSession =
+    !sessionId ||
+    (!resolvedSession && !params.startTime) ||
+    (!snapshotId && !dashboardLoading);
 
   const totalDurationMs = parseDurationMs(startTime, endTime);
+  const identityReady = Boolean(
+    sessionId && snapshotId && startTime && endTime && reason,
+  );
   const { phase, focusedElapsedMs, remainingMs, pause, resume, complete } =
-    useFocusLock(totalDurationMs);
+    useFocusLock(totalDurationMs, identityReady);
 
   const completeSession = useCompleteSession();
+  const focusLifecycle = useFocusSessionLifecycle();
+  const mutateFocusLifecycle = focusLifecycle.mutateAsync;
+  const generationRef = useRef<string>(createFocusGeneration());
+  const lifecycleQueueRef = useRef<Promise<unknown>>(Promise.resolve());
+  const leaseStartedRef = useRef(false);
+  const leaseAcceptedRef = useRef(false);
+  const completionSavedRef = useRef(false);
+  const [leaseReady, setLeaseReady] = useState(false);
+  const [focusLeaseError, setFocusLeaseError] = useState<string | null>(null);
+  const [appState, setAppState] = useState<AppStateStatus | null>(AppState.currentState);
   const [adaptiveResult, setAdaptiveResult] =
     useState<AdaptivePlanResponse | null>(null);
   const [completionError, setCompletionError] = useState<string | null>(null);
   const completingRef = useRef(false);
   const [animatedProgress] = useState(() => new Animated.Value(0));
+
+  const sendLifecycle = useCallback(
+    (action: FocusSessionAction) => {
+      const operation = lifecycleQueueRef.current.then(() =>
+        mutateFocusLifecycle({
+          action,
+          session_id: sessionId,
+          snapshot_id: snapshotId,
+          generation: generationRef.current,
+        }),
+      );
+      lifecycleQueueRef.current = operation.catch(() => undefined);
+      return operation;
+    },
+    [mutateFocusLifecycle, sessionId, snapshotId],
+  );
+
+  useEffect(() => {
+    const subscription = AppState.addEventListener(
+      "change",
+      (state: AppStateStatus) => setAppState(state),
+    );
+    return () => subscription.remove();
+  }, []);
+
+  useEffect(() => {
+    if (!identityReady || isMissingSession || focusLeaseError || adaptiveResult) {
+      return;
+    }
+    if (phase === "focusing") {
+      if (leaseReady) return;
+      const action: FocusSessionAction = leaseStartedRef.current ? "resume" : "start";
+      leaseStartedRef.current = true;
+      let cancelled = false;
+      sendLifecycle(action).then(
+        () => {
+          if (!cancelled) {
+            leaseAcceptedRef.current = true;
+            setLeaseReady(true);
+          }
+        },
+        (error: Error) => {
+          if (cancelled) return;
+          leaseAcceptedRef.current = false;
+          setLeaseReady(false);
+          setFocusLeaseError(error?.message || "This session is no longer available.");
+          pause();
+        },
+      );
+      return () => {
+        cancelled = true;
+      };
+    }
+    if (
+      leaseStartedRef.current &&
+      (phase === "paused_by_user" ||
+        phase === "paused_lost_focus" ||
+        phase === "focus_returned")
+    ) {
+      setLeaseReady(false);
+      void sendLifecycle("pause").catch(() => {
+        // The lease expires server-side even if the app is backgrounded offline.
+      });
+    }
+  }, [
+    adaptiveResult,
+    focusLeaseError,
+    identityReady,
+    isMissingSession,
+    leaseReady,
+    pause,
+    phase,
+    sendLifecycle,
+  ]);
+
+  useEffect(() => {
+    if (
+      phase !== "focusing" ||
+      appState !== "active" ||
+      !leaseReady ||
+      focusLeaseError
+    ) {
+      return;
+    }
+    let cancelled = false;
+    let inFlight = false;
+    const interval = setInterval(() => {
+      if (inFlight) return;
+      inFlight = true;
+      void sendLifecycle("heartbeat").then(
+        () => {
+          inFlight = false;
+        },
+        (error: Error) => {
+          inFlight = false;
+          if (cancelled) return;
+          setLeaseReady(false);
+          leaseAcceptedRef.current = false;
+          setFocusLeaseError(error?.message || "This session is no longer available.");
+          pause();
+        },
+      );
+    }, 25_000);
+    return () => {
+      cancelled = true;
+      clearInterval(interval);
+    };
+  }, [appState, focusLeaseError, leaseReady, pause, phase, sendLifecycle]);
+
+  const cancelAndLeave = useCallback(() => {
+    if (leaseStartedRef.current && !completionSavedRef.current) {
+      leaseAcceptedRef.current = false;
+      void sendLifecycle("cancel").catch(() => {
+        // The server-side lease expires if cancellation cannot reach the API.
+      });
+    }
+    router.back();
+  }, [router, sendLifecycle]);
+
+  useFocusEffect(
+    useCallback(
+      () => () => {
+        if (leaseStartedRef.current && !completionSavedRef.current) {
+          leaseAcceptedRef.current = false;
+          void sendLifecycle("cancel").catch(() => undefined);
+        }
+      },
+      [sendLifecycle],
+    ),
+  );
 
   useKeepAwake("focus-session");
 
@@ -118,45 +283,63 @@ export default function FocusModeScreen() {
       1,
       Math.ceil(focusedElapsedMs / 60000),
     );
-    completeSession.mutate(
-      {
-        session_id: sessionId,
-        actual_minutes: actualMinutes,
-      },
-      {
-        onSuccess: (data) => {
-          // Local "complete" only after the API succeeds
-          complete();
-          Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-          setAdaptiveResult(data);
-          cancelSessionNotifications(sessionId);
-          if (data.changes.length > 0) {
-            showPlanChangedNotification(data.changes);
-          }
+    void lifecycleQueueRef.current.then(() => {
+      if (!leaseAcceptedRef.current) {
+        completingRef.current = false;
+        return;
+      }
+      completeSession.mutate(
+        {
+          session_id: sessionId,
+          actual_minutes: actualMinutes,
+          focus_generation: generationRef.current,
         },
-        onError: (error) => {
-          completingRef.current = false;
-          setCompletionError(
-            error?.message ||
-              "Could not save your progress. Please try again.",
-          );
-          pause();
+        {
+          onSuccess: (data) => {
+            completionSavedRef.current = true;
+            leaseAcceptedRef.current = false;
+            setLeaseReady(false);
+            // Local "complete" only after the API succeeds
+            complete();
+            Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+            setAdaptiveResult(data);
+            cancelSessionNotifications(sessionId);
+            if (data.changes.length > 0) {
+              showPlanChangedNotification(data.changes);
+            }
+          },
+          onError: (error) => {
+            completingRef.current = false;
+            setCompletionError(
+              error?.message ||
+                "Could not save your progress. Please try again.",
+            );
+            pause();
+          },
         },
-      },
-    );
+      );
+    });
   }, [complete, pause, focusedElapsedMs, sessionId, completeSession]);
 
   // Auto-complete when timer reaches zero (skip if already saving or failed)
   useEffect(() => {
     if (
       phase === "focusing" &&
+      leaseReady &&
       remainingMs <= 0 &&
       !completionError &&
       !completeSession.isPending
     ) {
       handleComplete();
     }
-  }, [phase, remainingMs, completionError, completeSession.isPending, handleComplete]);
+  }, [
+    phase,
+    remainingMs,
+    completionError,
+    completeSession.isPending,
+    handleComplete,
+    leaseReady,
+  ]);
 
   // Android back button handling
   useEffect(() => {
@@ -170,9 +353,7 @@ export default function FocusModeScreen() {
             {
               text: "Leave",
               style: "destructive",
-              onPress: () => {
-                router.back();
-              },
+              onPress: () => void cancelAndLeave(),
             },
           ],
         );
@@ -181,7 +362,7 @@ export default function FocusModeScreen() {
       return false;
     });
     return () => handler.remove();
-  }, [phase, router]);
+  }, [cancelAndLeave, phase]);
 
   const handleFinishEarly = useCallback(() => {
     Alert.alert("Finish Early?", "Your focused time will be recorded.", [
@@ -201,8 +382,12 @@ export default function FocusModeScreen() {
   }, [resume]);
 
   const handleBackToMission = useCallback(() => {
+    if (leaseStartedRef.current && !completionSavedRef.current) {
+      leaseAcceptedRef.current = false;
+      void sendLifecycle("cancel").catch(() => undefined);
+    }
     router.replace("/(app)");
-  }, [router]);
+  }, [router, sendLifecycle]);
 
   // ─── Derived adaptive values (declared before any early returns) ───
   const changedSessionIds = useMemo(
@@ -251,6 +436,16 @@ export default function FocusModeScreen() {
   });
 
   // ─── Session not found (notification deep link) ───
+  if (!identityReady && dashboardLoading) {
+    return (
+      <SafeAreaView style={styles.container}>
+        <View style={styles.center}>
+          <Text style={styles.loadingText}>Loading your session...</Text>
+        </View>
+      </SafeAreaView>
+    );
+  }
+
   if (isMissingSession) {
     return (
       <SafeAreaView style={styles.container}>
@@ -261,6 +456,23 @@ export default function FocusModeScreen() {
           <TouchableOpacity
             style={styles.primaryButton}
             onPress={() => router.replace("/(app)")}
+          >
+            <Text style={styles.primaryButtonText}>Back to Today</Text>
+          </TouchableOpacity>
+        </View>
+      </SafeAreaView>
+    );
+  }
+
+  if (focusLeaseError) {
+    return (
+      <SafeAreaView style={styles.container}>
+        <View style={styles.center}>
+          <Text style={styles.errorTitle}>This session is no longer available</Text>
+          <Text style={styles.errorBody}>{focusLeaseError}</Text>
+          <TouchableOpacity
+            style={styles.primaryButton}
+            onPress={handleBackToMission}
           >
             <Text style={styles.primaryButtonText}>Back to Today</Text>
           </TouchableOpacity>

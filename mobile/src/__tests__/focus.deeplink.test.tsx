@@ -13,6 +13,7 @@ const mockReplace = jest.fn();
 const mockPush = jest.fn();
 
 jest.mock("expo-router", () => ({
+  useFocusEffect: jest.fn(),
   useLocalSearchParams: jest.fn(),
   useRouter: () => ({
     replace: mockReplace,
@@ -61,12 +62,16 @@ jest.mock("@/hooks/useFocusLock", () => ({
 }));
 
 const mockMutate = jest.fn();
+const mockFocusLifecycleMutateAsync = jest.fn().mockResolvedValue({ state: "running" });
 jest.mock("@/services/hooks", () => ({
   useCompleteSession: () => ({
     mutate: mockMutate,
     isPending: false,
   }),
   useDashboard: jest.fn(),
+  useFocusSessionLifecycle: () => ({
+    mutateAsync: mockFocusLifecycleMutateAsync,
+  }),
 }));
 
 jest.mock("@/services/notifications", () => ({

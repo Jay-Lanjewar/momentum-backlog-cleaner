@@ -756,6 +756,12 @@ class TestStaleSnapshotRegeneration:
             }
 
         monkeypatch.setattr(adaptive_service, "get_active_snapshot", fake_get_active)
+        async def no_focus_lease(db, user_id, snapshot):
+            return False
+
+        monkeypatch.setattr(
+            adaptive_service, "_has_valid_focus_lease", no_focus_lease
+        )
         async def fake_lock_user(db, user_id):
             return None
 
@@ -974,6 +980,12 @@ class TestStaleSnapshotRegeneration:
             return SimpleNamespace(version=2, sessions=plan["sessions"])
 
         monkeypatch.setattr(adaptive_service, "get_active_snapshot", fake_get_active)
+        async def no_focus_lease(db, user_id, snapshot):
+            return False
+
+        monkeypatch.setattr(
+            adaptive_service, "_has_valid_focus_lease", no_focus_lease
+        )
         async def fake_lock_user(db, user_id):
             return None
 

@@ -12,6 +12,7 @@
 
 // ── Must mock before importing the component ──
 jest.mock("expo-router", () => ({
+  useFocusEffect: jest.fn(),
   useLocalSearchParams: () => ({
     sessionId: "sess-1",
     backlogItemId: "bl-1",
@@ -60,6 +61,9 @@ jest.mock("../services/hooks", () => ({
     data: null,
     isLoading: false,
     refetch: jest.fn(),
+  }),
+  useFocusSessionLifecycle: () => ({
+    mutateAsync: jest.fn().mockResolvedValue({ state: "running" }),
   }),
 }));
 

@@ -53,7 +53,7 @@ MOCK_STREAK_RESULT = {
 }
 
 
-def _make_mock_db(snapshot, backlog_item):
+def _make_mock_db(snapshot, backlog_item, lease=None):
     """Build a mock db for the full run_adaptive_completion flow.
 
     db.add is synchronous in real SQLAlchemy (called without await in
@@ -79,6 +79,7 @@ def _make_mock_db(snapshot, backlog_item):
     mock_db.execute.side_effect = [
         MagicMock(),                   # 1. lock user row
         _mock_scalar(snapshot),        # 1. get_active_snapshot
+        _mock_scalar(lease),            # current user's focus lease
         _mock_scalar(backlog_item),    # 2. load BacklogItem
         _mock_scalars([]),             # 3. get_completions_for_snapshot
         MagicMock(),                   # 4. supersede_snapshot (UPDATE)
@@ -225,3 +226,68 @@ class TestStreakUpdateOnCompletion:
             call_args = mock_svc.update_streaks.call_args
             assert call_args[0][0] == USER_ID
             assert call_args[0][1] == [course_id]
+
+    @pytest.mark.asyncio
+    async def test_successful_completion_closes_matching_focus_lease(self):
+        course_id = uuid.uuid4()
+        backlog_item = _make_backlog_item(course_id)
+        item_id_str = str(backlog_item.id)
+        session_id = f"{item_id_str}:s1"
+        snapshot = _make_snapshot([
+            {
+                "session_id": session_id,
+                "backlog_item_id": item_id_str,
+                "start_time": "16:00",
+                "end_time": "16:30",
+                "reason": "Work on Task",
+                "remaining_minutes": 0,
+            },
+        ])
+        lease = MagicMock(
+            plan_snapshot_id=snapshot.id,
+            session_id=session_id,
+            generation="device-generation-0001",
+            state="running",
+            lease_expires_at=datetime(2099, 1, 1, tzinfo=timezone.utc),
+        )
+        mock_db = _make_mock_db(snapshot, backlog_item, lease)
+
+        with patch("app.services.streak_service.StreakService") as MockStreakService:
+            MockStreakService.return_value = AsyncMock()
+            await run_adaptive_completion(
+                db=mock_db,
+                user_id=USER_ID,
+                plan_date=TODAY,
+                session_id=session_id,
+                actual_minutes=30,
+                focus_generation=lease.generation,
+                planning_data={"available_windows": [], "prioritized_backlog": []},
+            )
+
+        assert lease.state == "completed"
+        assert lease.lease_expires_at is not None
+
+    @pytest.mark.asyncio
+    async def test_retry_after_committed_completion_returns_current_plan(self):
+        session_id = f"{uuid.uuid4()}:s1"
+        snapshot = _make_snapshot([])
+        mock_db = AsyncMock()
+        mock_db.execute.side_effect = [
+            MagicMock(),
+            _mock_scalar(snapshot),
+            _mock_scalar(uuid.uuid4()),
+        ]
+
+        response = await run_adaptive_completion(
+            db=mock_db,
+            user_id=USER_ID,
+            plan_date=TODAY,
+            session_id=session_id,
+            actual_minutes=30,
+            planning_data={"available_windows": [], "prioritized_backlog": []},
+        )
+
+        assert response.snapshot_id == snapshot.id
+        assert response.plan.sessions == []
+        assert response.changes == []
+        mock_db.add.assert_not_called()
