@@ -23,6 +23,7 @@ from app.domain import (
     Goal,
     StudentProfile,
     StudyStreak,
+    StudyBuddyRateLimit,
     SubjectStreak,
     User,
     WeeklySchedule,

@@ -249,6 +249,21 @@ class FocusSessionLifecycleResponse(BaseModel):
     lease_expires_at: datetime
 
 
+class StudyBuddyMessage(BaseModel):
+    role: str = Field(..., pattern=r"^(user|assistant)$")
+    content: str = Field(..., min_length=1, max_length=2000)
+
+
+class StudyBuddyChatRequest(BaseModel):
+    session_id: str = Field(..., min_length=3, max_length=255)
+    question: str = Field(..., min_length=1, max_length=2000)
+    history: list[StudyBuddyMessage] = Field(default_factory=list, max_length=12)
+
+
+class StudyBuddyChatResponse(BaseModel):
+    answer: str = Field(..., min_length=1, max_length=4000)
+
+
 class PlanChange(BaseModel):
     session_id: str
     backlog_item_id: str

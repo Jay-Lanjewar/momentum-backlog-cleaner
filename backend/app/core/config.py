@@ -1,4 +1,5 @@
 from pydantic_settings import BaseSettings, SettingsConfigDict
+from pydantic import Field
 
 
 class Settings(BaseSettings):
@@ -28,6 +29,9 @@ class Settings(BaseSettings):
     GEMINI_API_KEY: str | None = None
     GEMINI_MODEL: str = "gemini-3.7-flash"
     AI_PROVIDER: str = "gemini"
+    STUDY_BUDDY_RATE_LIMIT_REQUESTS: int = Field(default=30, ge=1, le=10_000)
+    STUDY_BUDDY_RATE_LIMIT_WINDOW_SECONDS: int = Field(default=3600, ge=1, le=86_400)
+    STUDY_BUDDY_MAX_OUTPUT_TOKENS: int = Field(default=512, ge=1, le=1024)
 
     def model_post_init(self, __context):
         if self.DATABASE_URL.startswith("postgresql://"):
