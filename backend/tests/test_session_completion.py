@@ -344,17 +344,23 @@ class TestAdaptiveReschedulerIntegration:
         item = _item(estimated_minutes=60, priority=1)
         result = generate_deterministic_plan(
             {
-                "available_windows": [_window("16:00", "17:00")],
+                "available_windows": [_window("16:00", "17:05")],
                 "prioritized_backlog": [item],
             },
             target_date=TODAY,
         )
-        assert len(result["sessions"]) >= 2
+        assert len(result["sessions"]) == 2
         session_ids = [s["session_id"] for s in result["sessions"]]
         assert all(sid.endswith(":s1") or sid.endswith(":s2") for sid in session_ids)
         # First session should be :s1, second should be :s2
         assert session_ids[0].endswith(":s1")
         assert session_ids[1].endswith(":s2")
+        assert [(s["start_time"], s["end_time"]) for s in result["sessions"]] == [
+            ("16:00", "16:30"),
+            ("16:35", "17:05"),
+        ]
+        assert [s["remaining_minutes"] for s in result["sessions"]] == [30, 0]
+        assert result["overflow"] == []
 
 
 # ─── Snapshot lifecycle (unit tests, no DB) ───

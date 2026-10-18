@@ -257,6 +257,7 @@ class AdaptiveReschedulerStage(Stage):
 
 
 _TIME_CACHE: dict[str, int] = {}
+SESSION_TRANSITION_MINUTES = 5
 
 
 def _to_minutes(time_str: str) -> int:
@@ -282,23 +283,42 @@ def _find_best_slot(
         w_start = _to_minutes(w["start"])
         w_end = _to_minutes(w["end"])
         cursor = w_start
+        window_blocked = False
         for occ_start, occ_end in occupied:
+            # An existing session needs transition time on either side when
+            # placing another session. The first/last session has no reserved
+            # break at the edge of the available window.
+            if occ_end + SESSION_TRANSITION_MINUTES <= cursor:
+                continue
             if occ_start >= w_end:
+                filler_end = occ_start - SESSION_TRANSITION_MINUTES
+                available = filler_end - cursor
+                if available >= needed_minutes and available >= 5:
+                    return (
+                        w_start,
+                        w_end,
+                        cursor,
+                        cursor + needed_minutes,
+                        needed_minutes,
+                    )
+                window_blocked = True
                 break
-            if occ_end > cursor:
-                filler_end = min(occ_start, w_end)
-                if filler_end > cursor:
-                    avail = filler_end - cursor
-                    if avail >= needed_minutes and avail >= 5:
-                        return (
-                            w_start,
-                            w_end,
-                            cursor,
-                            cursor + needed_minutes,
-                            needed_minutes,
-                        )
-                cursor = max(cursor, occ_end)
-        if cursor < w_end:
+            if occ_start > cursor:
+                filler_end = min(occ_start - SESSION_TRANSITION_MINUTES, w_end)
+                available = filler_end - cursor
+                if available >= needed_minutes and available >= 5:
+                    return (
+                        w_start,
+                        w_end,
+                        cursor,
+                        cursor + needed_minutes,
+                        needed_minutes,
+                    )
+            cursor = max(cursor, occ_end + SESSION_TRANSITION_MINUTES)
+            if cursor >= w_end:
+                window_blocked = True
+                break
+        if not window_blocked and cursor < w_end:
             avail = w_end - cursor
             if avail >= needed_minutes and avail >= 5:
                 return (

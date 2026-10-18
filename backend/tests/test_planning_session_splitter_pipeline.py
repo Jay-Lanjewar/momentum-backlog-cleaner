@@ -21,6 +21,10 @@ def _duration(session):
     return end_m - start_m
 
 
+def _session_times(session):
+    return session["start_time"], session["end_time"]
+
+
 def _item(**overrides):
     base = {
         "id": uuid.uuid4(),
@@ -50,7 +54,46 @@ class TestSessionChunking:
             target_date=TODAY,
         )
         assert [_duration(s) for s in result["sessions"]] == [30, 30]
+        assert [_session_times(s) for s in result["sessions"]] == [
+            ("06:00", "06:30"),
+            ("06:35", "07:05"),
+        ]
         assert {s["backlog_item_id"] for s in result["sessions"]} == {str(item["id"])}
+        assert [s["remaining_minutes"] for s in result["sessions"]] == [30, 0]
+        assert result["overflow"] == []
+
+    def test_distinct_tasks_have_five_minute_transition(self):
+        sst = _item(title="SST", estimated_minutes=40)
+        english = _item(title="English", estimated_minutes=30)
+        result = generate_deterministic_plan(
+            {
+                "available_windows": [_window("20:30", "22:00")],
+                "prioritized_backlog": [sst, english],
+            },
+            target_date=TODAY,
+        )
+
+        assert [_session_times(s) for s in result["sessions"]] == [
+            ("20:30", "21:10"),
+            ("21:15", "21:45"),
+        ]
+        assert [_duration(s) for s in result["sessions"]] == [40, 30]
+
+    def test_transition_does_not_count_as_study_or_remaining_task_time(self):
+        item = _item(estimated_minutes=60)
+        result = generate_deterministic_plan(
+            {
+                "available_windows": [_window("06:00", "07:05")],
+                "prioritized_backlog": [item],
+            },
+            target_date=TODAY,
+        )
+
+        assert [_duration(s) for s in result["sessions"]] == [30, 30]
+        assert [_session_times(s) for s in result["sessions"]] == [
+            ("06:00", "06:30"),
+            ("06:35", "07:05"),
+        ]
         assert [s["remaining_minutes"] for s in result["sessions"]] == [30, 0]
         assert result["overflow"] == []
 
@@ -158,8 +201,54 @@ class TestWholeSessionScheduling:
             daily_capacity_minutes=100000,
             target_date=TODAY,
         )
-        assert [_duration(s) for s in result["sessions"]] == [30, 30]
-        assert str(first["id"]) not in result["overflow"]
+        assert [_duration(s) for s in result["sessions"]] == [30]
+        assert [_session_times(s) for s in result["sessions"]] == [("06:00", "06:30")]
+        assert str(first["id"]) in result["overflow"]
+        assert str(second["id"]) in result["overflow"]
+
+    def test_transition_leaves_second_chunk_overflow_in_exact_hour_window(self):
+        item = _item(estimated_minutes=60)
+        result = generate_deterministic_plan(
+            {
+                "available_windows": [_window("06:00", "07:00")],
+                "prioritized_backlog": [item],
+            },
+            target_date=TODAY,
+        )
+
+        assert [_session_times(s) for s in result["sessions"]] == [("06:00", "06:30")]
+        assert [s["remaining_minutes"] for s in result["sessions"]] == [30]
+        assert str(item["id"]) in result["overflow"]
+
+    def test_window_after_commitment_gap_satisfies_transition_without_extra_delay(self):
+        first = _item(estimated_minutes=40)
+        second = _item(estimated_minutes=20)
+        result = generate_deterministic_plan(
+            {
+                "available_windows": [_window("17:00", "17:55"), _window("20:30", "21:00")],
+                "prioritized_backlog": [first, second],
+            },
+            target_date=TODAY,
+        )
+
+        assert [_session_times(s) for s in result["sessions"]] == [
+            ("17:00", "17:40"),
+            ("20:30", "20:50"),
+        ]
+        assert result["overflow"] == []
+
+    def test_transition_does_not_place_session_past_study_window_end(self):
+        first = _item(estimated_minutes=40)
+        second = _item(estimated_minutes=20)
+        result = generate_deterministic_plan(
+            {
+                "available_windows": [_window("20:30", "21:30")],
+                "prioritized_backlog": [first, second],
+            },
+            target_date=TODAY,
+        )
+
+        assert [_session_times(s) for s in result["sessions"]] == [("20:30", "21:10")]
         assert str(second["id"]) in result["overflow"]
 
     def test_session_needing_bigger_gap_than_available_overflows(self):
@@ -254,7 +343,7 @@ class TestNoDatabaseCalls:
         )
         result = generate_deterministic_plan(
             {
-                "available_windows": [_window("06:00", "07:00")],
+                "available_windows": [_window("06:00", "07:05")],
                 "prioritized_backlog": [_item(estimated_minutes=60)],
             },
             target_date=TODAY,

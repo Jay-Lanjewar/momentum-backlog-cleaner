@@ -252,7 +252,7 @@ class TestPrioritization:
         ]
         result = generate_deterministic_plan(
             {
-                "available_windows": [_window("06:00", "06:30")],
+                "available_windows": [_window("06:00", "06:35")],
                 "prioritized_backlog": [x, y],
             },
             target_date=TODAY,
@@ -263,6 +263,13 @@ class TestPrioritization:
         assert scheduled[0] == str(y["id"])
         assert str(x["id"]) in result["overflow"]
         assert str(y["id"]) not in result["overflow"]
+        y_sessions = [s for s in result["sessions"] if s["backlog_item_id"] == str(y["id"])]
+        assert [_duration(s) for s in y_sessions] == [25, 5]
+        assert [(s["start_time"], s["end_time"]) for s in y_sessions] == [
+            ("06:00", "06:25"),
+            ("06:30", "06:35"),
+        ]
+        assert [s["remaining_minutes"] for s in y_sessions] == [5, 0]
 
 
 class TestDeterminism:
