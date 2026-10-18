@@ -25,6 +25,7 @@ from app.domain.schemas import (
     PlanChange,
     PlanSession,
 )
+from app.planning_pipeline.stage import SESSION_TRANSITION_MINUTES
 from app.core.timezone import now_in_user_tz, today_in_user_tz
 from app.services.activity_service import ActivityService
 from app.services.deterministic_planner import generate_deterministic_plan
@@ -162,12 +163,26 @@ async def get_or_create_active_snapshot(
                     )
             return existing
 
-        if pending_backlog and _is_stale_snapshot(existing, plan_date):
+        transition_violation = _has_upcoming_transition_violation(
+            existing, plan_date
+        )
+        if pending_backlog and (
+            _is_stale_snapshot(existing, plan_date) or transition_violation
+        ):
             plan = generate_deterministic_plan(
                 planning_data,
                 daily_capacity_minutes=daily_capacity_minutes,
                 target_date=plan_date,
             )
+            if transition_violation and not plan.get("sessions"):
+                # Keep the current plan if refreshing it cannot produce any
+                # sessions; repeated dashboard requests must not churn.
+                return existing
+            if plan.get("sessions"):
+                completed_sessions = await _completed_sessions_for_snapshot(
+                    db, existing
+                )
+                plan["sessions"] = completed_sessions + list(plan["sessions"])
             await supersede_snapshot(db, existing.id)
             return await create_snapshot(
                 db,
@@ -211,6 +226,67 @@ def _is_stale_snapshot(snapshot: PlanSnapshot, plan_date: date) -> bool:
     now = now_in_user_tz()
     now_minutes = now.hour * 60 + now.minute
     return all(_time_to_minutes(t) < now_minutes for t in end_times)
+
+
+def _has_upcoming_transition_violation(
+    snapshot: PlanSnapshot, plan_date: date
+) -> bool:
+    """Return whether an upcoming pair violates the current transition rule.
+
+    A running session keeps the current plan stable until it ends. Completed
+    and past sessions are excluded; only future sessions are checked.
+    """
+    if plan_date != today_in_user_tz():
+        return False
+
+    sessions = snapshot.sessions or []
+    if not sessions:
+        return False
+
+    now = now_in_user_tz()
+    now_minutes = now.hour * 60 + now.minute
+    upcoming: list[tuple[int, int]] = []
+    for session in sessions:
+        start_time = session.get("start_time")
+        end_time = session.get("end_time")
+        if not start_time or not end_time:
+            # Be conservative with malformed snapshots.
+            return False
+        try:
+            start = _time_to_minutes(start_time)
+            end = _time_to_minutes(end_time)
+        except (AttributeError, TypeError, ValueError):
+            return False
+        if end <= start:
+            return False
+        if start <= now_minutes < end:
+            # Do not move or replace a session that is currently in progress.
+            return False
+        if start > now_minutes:
+            upcoming.append((start, end))
+
+    upcoming.sort()
+    return any(
+        next_start - previous_end < SESSION_TRANSITION_MINUTES
+        for (_, previous_end), (next_start, _) in zip(upcoming, upcoming[1:])
+    )
+
+
+async def _completed_sessions_for_snapshot(
+    db: AsyncSession, snapshot: PlanSnapshot
+) -> list[dict]:
+    """Keep completed sessions visible when refreshing a legacy plan."""
+    completion_rows = await get_completions_for_snapshot(db, snapshot.id)
+    completed_ids = {
+        completion["session_id"]
+        for completion in completion_rows
+        if completion.get("status") == "completed"
+    }
+    return [
+        session
+        for session in (snapshot.sessions or [])
+        if session.get("session_id") in completed_ids
+    ]
 
 
 # ─── Completion ───

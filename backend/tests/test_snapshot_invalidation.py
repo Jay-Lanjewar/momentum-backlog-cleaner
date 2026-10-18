@@ -1,5 +1,5 @@
 import uuid
-from datetime import date
+from datetime import date, datetime, timezone
 from types import SimpleNamespace
 
 import pytest
@@ -20,10 +20,18 @@ def _snapshot_for_plan(sessions):
     )
 
 
-def _snapshot_reuse_harness(monkeypatch, candidate_sessions):
+def _snapshot_reuse_harness(
+    monkeypatch, candidate_sessions, existing_sessions=None
+):
     day = date(2026, 10, 17)
-    existing = _snapshot_for_plan([])
-    state = {"superseded": [], "created": [], "generated": []}
+    existing = _snapshot_for_plan(existing_sessions or [])
+    state = {
+        "superseded": [],
+        "created": [],
+        "generated": [],
+        "completions": [],
+        "completion_lookups": [],
+    }
 
     async def get_active(db, user_id, requested_date):
         assert requested_date == day
@@ -47,12 +55,22 @@ def _snapshot_reuse_harness(monkeypatch, candidate_sessions):
     async def fake_lock_user(db, user_id):
         return None
 
+    async def get_completions(db, snapshot_id):
+        state["completion_lookups"].append(snapshot_id)
+        return state["completions"]
+
     monkeypatch.setattr(adaptive_service, "today_in_user_tz", lambda: day)
+    monkeypatch.setattr(
+        adaptive_service,
+        "now_in_user_tz",
+        lambda: datetime(2026, 10, 17, 15, 30, tzinfo=timezone.utc),
+    )
     monkeypatch.setattr(adaptive_service, "_lock_user", fake_lock_user)
     monkeypatch.setattr(adaptive_service, "get_active_snapshot", get_active)
     monkeypatch.setattr(adaptive_service, "supersede_snapshot", supersede)
     monkeypatch.setattr(adaptive_service, "create_snapshot", create)
     monkeypatch.setattr(adaptive_service, "generate_deterministic_plan", generate)
+    monkeypatch.setattr(adaptive_service, "get_completions_for_snapshot", get_completions)
 
     return day, existing, state
 
@@ -136,6 +154,165 @@ async def test_non_empty_active_snapshot_is_reused_without_generating_candidate(
 
     assert result is existing
     assert state["generated"] == []
+    assert state["superseded"] == []
+    assert state["created"] == []
+
+
+@pytest.mark.asyncio
+async def test_legacy_back_to_back_plan_is_refreshed_and_completed_sessions_preserved(
+    monkeypatch,
+):
+    completed = {
+        "backlog_item_id": str(uuid.uuid4()),
+        "session_id": "completed-task:s1",
+        "start_time": "14:30",
+        "end_time": "15:00",
+        "reason": "Work on completed task",
+        "remaining_minutes": 0,
+    }
+    old_upcoming = [
+        {
+            "backlog_item_id": str(uuid.uuid4()),
+            "session_id": "english:s1",
+            "start_time": "16:00",
+            "end_time": "16:30",
+            "reason": "Work on English",
+            "remaining_minutes": 30,
+        },
+        {
+            "backlog_item_id": str(uuid.uuid4()),
+            "session_id": "english:s2",
+            "start_time": "16:30",
+            "end_time": "17:00",
+            "reason": "Work on English",
+            "remaining_minutes": 0,
+        },
+    ]
+    candidate_sessions = [
+        {
+            "backlog_item_id": str(uuid.uuid4()),
+            "session_id": "new-task:s1",
+            "start_time": "16:00",
+            "end_time": "16:30",
+            "reason": "Work on new task",
+            "remaining_minutes": 0,
+        }
+    ]
+    day, existing, state = _snapshot_reuse_harness(
+        monkeypatch, candidate_sessions, [completed, *old_upcoming]
+    )
+    state["completions"] = [
+        {"session_id": completed["session_id"], "status": "completed"}
+    ]
+
+    result = await adaptive_service.get_or_create_active_snapshot(
+        None,
+        uuid.uuid4(),
+        day,
+        {"prioritized_backlog": [{"id": "task"}], "available_windows": []},
+    )
+
+    assert result.sessions == [completed, *candidate_sessions]
+    assert state["superseded"] == [existing.id]
+    assert state["created"][0]["sessions"] == [completed, *candidate_sessions]
+    assert state["completion_lookups"] == [existing.id]
+    assert len(state["generated"]) == 1
+
+
+@pytest.mark.asyncio
+async def test_valid_upcoming_transition_plan_is_reused(monkeypatch):
+    sessions = [
+        {
+            "session_id": "task-a:s1",
+            "start_time": "16:00",
+            "end_time": "16:30",
+        },
+        {
+            "session_id": "task-b:s1",
+            "start_time": "16:35",
+            "end_time": "17:05",
+        },
+    ]
+    day, existing, state = _snapshot_reuse_harness(monkeypatch, [], sessions)
+
+    result = await adaptive_service.get_or_create_active_snapshot(
+        None,
+        uuid.uuid4(),
+        day,
+        {"prioritized_backlog": [{"id": "task"}], "available_windows": []},
+    )
+
+    assert result is existing
+    assert state["generated"] == []
+    assert state["superseded"] == []
+    assert state["created"] == []
+
+
+@pytest.mark.asyncio
+async def test_back_to_back_plan_is_not_replaced_during_active_session(monkeypatch):
+    sessions = [
+        {
+            "session_id": "active:s1",
+            "start_time": "15:00",
+            "end_time": "15:45",
+        },
+        {
+            "session_id": "task-a:s1",
+            "start_time": "16:00",
+            "end_time": "16:30",
+        },
+        {
+            "session_id": "task-b:s1",
+            "start_time": "16:30",
+            "end_time": "17:00",
+        },
+    ]
+    day, existing, state = _snapshot_reuse_harness(monkeypatch, [], sessions)
+    monkeypatch.setattr(
+        adaptive_service,
+        "now_in_user_tz",
+        lambda: datetime(2026, 10, 17, 15, 30, tzinfo=timezone.utc),
+    )
+
+    result = await adaptive_service.get_or_create_active_snapshot(
+        None,
+        uuid.uuid4(),
+        day,
+        {"prioritized_backlog": [{"id": "task"}], "available_windows": []},
+    )
+
+    assert result is existing
+    assert state["generated"] == []
+    assert state["superseded"] == []
+    assert state["created"] == []
+
+
+@pytest.mark.asyncio
+async def test_back_to_back_plan_does_not_churn_when_refresh_candidate_is_empty(
+    monkeypatch,
+):
+    sessions = [
+        {"session_id": "task-a:s1", "start_time": "16:00", "end_time": "16:30"},
+        {"session_id": "task-b:s1", "start_time": "16:30", "end_time": "17:00"},
+    ]
+    day, existing, state = _snapshot_reuse_harness(monkeypatch, [], sessions)
+
+    result = await adaptive_service.get_or_create_active_snapshot(
+        None,
+        uuid.uuid4(),
+        day,
+        {"prioritized_backlog": [{"id": "task"}], "available_windows": []},
+    )
+    second_result = await adaptive_service.get_or_create_active_snapshot(
+        None,
+        uuid.uuid4(),
+        day,
+        {"prioritized_backlog": [{"id": "task"}], "available_windows": []},
+    )
+
+    assert result is existing
+    assert second_result is existing
+    assert len(state["generated"]) == 2
     assert state["superseded"] == []
     assert state["created"] == []
 

@@ -760,6 +760,12 @@ class TestStaleSnapshotRegeneration:
             return None
 
         monkeypatch.setattr(adaptive_service, "_lock_user", fake_lock_user)
+        async def fake_completions(db, snapshot_id):
+            return []
+
+        monkeypatch.setattr(
+            adaptive_service, "get_completions_for_snapshot", fake_completions
+        )
         monkeypatch.setattr(adaptive_service, "supersede_snapshot", fake_supersede)
         monkeypatch.setattr(adaptive_service, "create_snapshot", fake_create)
         monkeypatch.setattr(
@@ -811,7 +817,7 @@ class TestStaleSnapshotRegeneration:
     @pytest.mark.asyncio
     async def test_snapshot_all_sessions_future_is_reused(self, harness):
         existing = _snapshot(
-            [_session("19:23", "20:03"), _session("20:03", "20:48")],
+            [_session("19:23", "20:03"), _session("20:08", "20:53")],
             version=1,
         )
         harness["existing"] = existing
@@ -972,6 +978,12 @@ class TestStaleSnapshotRegeneration:
             return None
 
         monkeypatch.setattr(adaptive_service, "_lock_user", fake_lock_user)
+        async def fake_completions(db, snapshot_id):
+            return []
+
+        monkeypatch.setattr(
+            adaptive_service, "get_completions_for_snapshot", fake_completions
+        )
         monkeypatch.setattr(adaptive_service, "supersede_snapshot", fake_supersede)
         monkeypatch.setattr(adaptive_service, "create_snapshot", fake_create)
         # Real generate_deterministic_plan is intentionally NOT patched.
