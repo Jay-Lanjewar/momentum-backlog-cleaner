@@ -3,6 +3,7 @@ from datetime import date
 from app.core.timezone import now_in_user_tz, today_in_user_tz
 
 WEEKDAYS = ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"]
+FIXED_COMMITMENT_TRANSITION_MINUTES = 5
 ENERGY_PEAK_MAP = {
     "morning": {"morning": "high", "afternoon": "medium", "evening": "low", "night": "low"},
     "afternoon": {"morning": "medium", "afternoon": "high", "evening": "medium", "night": "low"},
@@ -91,7 +92,14 @@ def compute_available_windows(
             return []
         # Weekly schedule entries are fixed commitments. Their display type is
         # metadata, so missing, legacy, or differently-cased types still block.
-        busy_intervals.append((start_min, end_min))
+        # Reserve transition time after each commitment; merging below ensures
+        # adjacent or overlapping commitments share the same trailing buffer.
+        busy_intervals.append(
+            (
+                start_min,
+                min(end_min + FIXED_COMMITMENT_TRANSITION_MINUTES, 1440),
+            )
+        )
 
     if sleep_schedule:
         sleep_start = _parse_time(sleep_schedule.get("start", "22:00"))

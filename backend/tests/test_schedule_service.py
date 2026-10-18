@@ -116,8 +116,64 @@ class TestComputeAvailableWindows:
 
         assert [(window["start"], window["end"]) for window in windows] == [
             ("15:00", "17:00"),
-            ("20:00", "22:00"),
+            ("20:05", "22:00"),
         ]
+
+    def test_project_commitment_has_five_minute_transition_before_study(self):
+        windows = compute_available_windows(
+            {
+                "monday": [
+                    {
+                        "type": "project",
+                        "title": "Project Work",
+                        "start": "17:00",
+                        "end": "20:00",
+                    }
+                ]
+            },
+            {"start": "22:00", "end": "06:00"},
+            {"earliest_start": "15:00", "latest_end": "22:00"},
+            target_date=MONDAY,
+        )
+
+        assert [
+            (window["start"], window["end"], window["total_minutes"])
+            for window in windows
+        ] == [
+            ("15:00", "17:00", 120),
+            ("20:05", "22:00", 115),
+        ]
+
+    @pytest.mark.parametrize(
+        "blocks, expected_end",
+        [
+            (
+                [
+                    {"start": "17:00", "end": "18:00"},
+                    {"start": "18:00", "end": "19:00"},
+                ],
+                "19:05",
+            ),
+            (
+                [
+                    {"start": "17:00", "end": "18:30"},
+                    {"start": "18:00", "end": "19:00"},
+                ],
+                "19:05",
+            ),
+        ],
+    )
+    def test_adjacent_or_overlapping_commitments_share_trailing_buffer(
+        self, blocks, expected_end
+    ):
+        windows = compute_available_windows(
+            {"monday": blocks},
+            {"start": "22:00", "end": "06:00"},
+            {"earliest_start": "15:00", "latest_end": "22:00"},
+            target_date=MONDAY,
+        )
+
+        assert windows[-1]["start"] == expected_end
 
     def test_malformed_schedule_block_fails_closed(self):
         windows = compute_available_windows(

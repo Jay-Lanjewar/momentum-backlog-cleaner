@@ -128,6 +128,39 @@ class TestEmptyTask:
 
 
 class TestSchedulesUnchanged:
+    def test_commitment_buffer_does_not_count_as_study_or_task_progress(self):
+        task_id = uuid.uuid4()
+        result = generate_deterministic_plan(
+            {
+                "available_windows": [_window("20:05", "21:45")],
+                "prioritized_backlog": [
+                    {
+                        "id": task_id,
+                        "title": "Project work follow-up",
+                        "priority": 1,
+                        "score": 100,
+                        "estimated_minutes": 60,
+                        "course_name": "A",
+                    }
+                ],
+            }
+        )
+
+        sessions = result["sessions"]
+        assert [
+            (session["start_time"], session["end_time"])
+            for session in sessions
+        ] == [
+            ("20:05", "20:35"),
+            ("20:40", "21:10"),
+        ]
+        assert [
+            (int(session["end_time"][:2]) * 60 + int(session["end_time"][3:]))
+            - (int(session["start_time"][:2]) * 60 + int(session["start_time"][3:]))
+            for session in sessions
+        ] == [30, 30]
+        assert [session["remaining_minutes"] for session in sessions] == [30, 0]
+
     def test_explicit_estimates_produce_identical_output(self):
         first = uuid.uuid4()
         second = uuid.uuid4()

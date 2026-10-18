@@ -354,13 +354,13 @@ class TestScheduleFloorUsesDeviceTime:
                 "energy_rating": "low",
             },
             {
-                "start": "20:30",
+                "start": "20:35",
                 "end": "22:00",
-                "total_minutes": 90,
+                "total_minutes": 85,
                 "energy_rating": "low",
             },
         ]
-        assert sum(window["total_minutes"] for window in windows) == 118
+        assert sum(window["total_minutes"] for window in windows) == 113
 
         task_id = uuid.uuid4()
         plan = generate_deterministic_plan(
@@ -383,8 +383,8 @@ class TestScheduleFloorUsesDeviceTime:
         assert len(plan["sessions"]) == 1
         session = plan["sessions"][0]
         assert session["backlog_item_id"] == str(task_id)
-        assert session["start_time"] == "20:30"
-        assert session["end_time"] == "21:00"
+        assert session["start_time"] == "20:35"
+        assert session["end_time"] == "21:05"
 
 
 # ─── 4. weekday / local-date resolution across the day boundary ───
@@ -452,7 +452,7 @@ class TestLocalDateAcrossDayBoundary:
         assert local_windows[0]["start"] == "16:00"
         assert local_windows[0]["end"] == "22:00"
         # Friday (server): coaching block splits the window.
-        assert utc_windows[0]["start"] == "20:00"
+        assert utc_windows[0]["start"] == "20:05"
 
 
 # ─── 5. dashboard endpoint: no already-past sessions ───
