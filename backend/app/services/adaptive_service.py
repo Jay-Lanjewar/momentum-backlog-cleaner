@@ -171,9 +171,20 @@ async def get_or_create_active_snapshot(
                     )
             return existing
 
-        completed_session_ids: set[str] = set()
         invalidation_now = now_in_user_tz()
-        if _has_current_scheduled_session(existing, plan_date, invalidation_now):
+        completed_session_ids: set[str] = set()
+        available_windows = planning_data.get("available_windows") or []
+        stale_snapshot = _is_stale_snapshot(
+            existing, plan_date, now=invalidation_now
+        )
+        availability_violation = _has_upcoming_availability_violation(
+            existing, plan_date, available_windows, now=invalidation_now
+        )
+        current_scheduled_session = _has_current_scheduled_session(
+            existing, plan_date, invalidation_now
+        )
+        current_completions = None
+        if stale_snapshot or availability_violation or current_scheduled_session:
             current_completions = await get_completions_for_snapshot(
                 db, existing.id
             )
@@ -182,11 +193,24 @@ async def get_or_create_active_snapshot(
                 for row in current_completions
                 if row.get("status") == "completed" and row.get("session_id")
             }
+        stale_snapshot = _is_stale_snapshot(
+            existing,
+            plan_date,
+            completed_session_ids=completed_session_ids,
+            now=invalidation_now,
+        )
+        availability_violation = _has_upcoming_availability_violation(
+            existing,
+            plan_date,
+            available_windows,
+            completed_session_ids=completed_session_ids,
+            now=invalidation_now,
+        )
         transition_violation = _has_upcoming_transition_violation(
             existing, plan_date, completed_session_ids, invalidation_now
         )
-        needs_refresh = _is_stale_snapshot(existing, plan_date) or transition_violation
-        if pending_backlog and needs_refresh:
+        needs_refresh = stale_snapshot or transition_violation or availability_violation
+        if (pending_backlog and needs_refresh) or availability_violation:
             if await _has_valid_focus_lease(db, user_id, existing):
                 return existing
             plan = generate_deterministic_plan(
@@ -194,15 +218,23 @@ async def get_or_create_active_snapshot(
                 daily_capacity_minutes=daily_capacity_minutes,
                 target_date=plan_date,
             )
-            if transition_violation and not plan.get("sessions"):
+            if transition_violation and not availability_violation and not plan.get("sessions"):
                 # Keep the current plan if refreshing it cannot produce any
                 # sessions; repeated dashboard requests must not churn.
                 return existing
-            if plan.get("sessions"):
-                completed_sessions = await _completed_sessions_for_snapshot(
-                    db, existing
-                )
-                plan["sessions"] = completed_sessions + list(plan["sessions"])
+            candidate_sessions = list(plan.get("sessions") or [])
+            if availability_violation or candidate_sessions:
+                if current_completions is None:
+                    completed_sessions = await _completed_sessions_for_snapshot(
+                        db, existing
+                    )
+                else:
+                    completed_sessions = [
+                        session
+                        for session in existing_sessions
+                        if session.get("session_id") in completed_session_ids
+                    ]
+                plan["sessions"] = completed_sessions + candidate_sessions
             await supersede_snapshot(db, existing.id)
             return await create_snapshot(
                 db,
@@ -218,7 +250,12 @@ async def get_or_create_active_snapshot(
     return await create_snapshot(db, user_id, plan_date, plan)
 
 
-def _is_stale_snapshot(snapshot: PlanSnapshot, plan_date: date) -> bool:
+def _is_stale_snapshot(
+    snapshot: PlanSnapshot,
+    plan_date: date,
+    completed_session_ids: set[str] | None = None,
+    now: datetime | None = None,
+) -> bool:
     """True when a stored snapshot can no longer drive the Today screen.
 
     All of the following must hold:
@@ -238,14 +275,79 @@ def _is_stale_snapshot(snapshot: PlanSnapshot, plan_date: date) -> bool:
     if not sessions:
         return False
 
-    end_times = [s.get("end_time") for s in sessions]
+    completed_session_ids = completed_session_ids or set()
+    if any(not isinstance(session, dict) for session in sessions):
+        # Preserve malformed snapshots conservatively; availability validation
+        # will invalidate them when they cannot be proven safe.
+        return False
+    unfinished_sessions = [
+        session
+        for session in sessions
+        if session.get("session_id") not in completed_session_ids
+    ]
+    if not unfinished_sessions:
+        return False
+
+    end_times = [s.get("end_time") for s in unfinished_sessions]
     if not all(end_times):
         # Malformed session (missing end_time): be conservative and reuse.
         return False
 
-    now = now_in_user_tz()
+    now = now or now_in_user_tz()
     now_minutes = now.hour * 60 + now.minute
     return all(_time_to_minutes(t) < now_minutes for t in end_times)
+
+
+def _has_upcoming_availability_violation(
+    snapshot: PlanSnapshot,
+    plan_date: date,
+    available_windows: list[dict],
+    completed_session_ids: set[str] | None = None,
+    now: datetime | None = None,
+) -> bool:
+    """Return whether an unfinished future session is outside all current windows."""
+    if plan_date != today_in_user_tz():
+        return False
+
+    sessions = snapshot.sessions or []
+    if not sessions:
+        return False
+
+    now = now or now_in_user_tz()
+    now_minutes = now.hour * 60 + now.minute
+    completed_session_ids = completed_session_ids or set()
+    parsed_windows: list[tuple[int, int]] = []
+    for window in available_windows:
+        try:
+            start = _time_to_minutes(window["start"])
+            end = _time_to_minutes(window["end"])
+        except (KeyError, AttributeError, TypeError, ValueError):
+            continue
+        if end > start:
+            parsed_windows.append((start, end))
+
+    for session in sessions:
+        if not isinstance(session, dict):
+            return True
+        if session.get("session_id") in completed_session_ids:
+            continue
+        try:
+            end = _time_to_minutes(session["end_time"])
+        except (KeyError, AttributeError, TypeError, ValueError):
+            # An unparseable session cannot be proven to have ended or fit.
+            return True
+        if end <= now_minutes:
+            continue
+        try:
+            start = _time_to_minutes(session["start_time"])
+        except (KeyError, AttributeError, TypeError, ValueError):
+            return True
+        if end <= start or not any(
+            window_start <= start and end <= window_end
+            for window_start, window_end in parsed_windows
+        ):
+            return True
+    return False
 
 
 def _has_upcoming_transition_violation(
@@ -271,6 +373,8 @@ def _has_upcoming_transition_violation(
     completed_session_ids = completed_session_ids or set()
     upcoming: list[tuple[int, int]] = []
     for session in sessions:
+        if not isinstance(session, dict):
+            return False
         if session.get("session_id") in completed_session_ids:
             continue
         start_time = session.get("start_time")
@@ -303,6 +407,8 @@ def _has_current_scheduled_session(
     now = now or now_in_user_tz()
     now_minutes = now.hour * 60 + now.minute
     for session in (snapshot.sessions or []):
+        if not isinstance(session, dict):
+            continue
         start_time = session.get("start_time")
         end_time = session.get("end_time")
         if not start_time or not end_time:

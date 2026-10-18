@@ -95,6 +95,40 @@ class TestComputeAvailableWindows:
         )
         assert len(result) == 3
 
+    @pytest.mark.parametrize(
+        "commitment",
+        [
+            {"type": "project", "title": "Project Work", "start": "17:00", "end": "20:00"},
+            {"type": "PROJECT", "title": "Project Work", "start": "17:00", "end": "20:00"},
+            {"type": "Project Work", "start": "17:00", "end": "20:00"},
+            {"start": "17:00", "end": "20:00"},
+        ],
+    )
+    def test_every_valid_schedule_block_is_unavailable_even_with_noncanonical_type(
+        self, commitment
+    ):
+        windows = compute_available_windows(
+            {"monday": [commitment]},
+            {"start": "22:00", "end": "06:00"},
+            {"earliest_start": "15:00", "latest_end": "22:00"},
+            target_date=MONDAY,
+        )
+
+        assert [(window["start"], window["end"]) for window in windows] == [
+            ("15:00", "17:00"),
+            ("20:00", "22:00"),
+        ]
+
+    def test_malformed_schedule_block_fails_closed(self):
+        windows = compute_available_windows(
+            {"monday": [{"type": "project", "start": "17:00"}]},
+            {"start": "22:00", "end": "06:00"},
+            {"earliest_start": "15:00", "latest_end": "22:00"},
+            target_date=MONDAY,
+        )
+
+        assert windows == []
+
     def test_energy_rating_included(self):
         schedule = {
             "monday": [

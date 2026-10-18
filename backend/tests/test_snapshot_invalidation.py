@@ -5,6 +5,7 @@ from types import SimpleNamespace
 import pytest
 
 from app.services import adaptive_service
+from app.services.deterministic_planner import generate_deterministic_plan
 
 
 def _snapshot_for_plan(sessions):
@@ -26,6 +27,7 @@ def _snapshot_reuse_harness(
     day = date(2026, 10, 17)
     existing = _snapshot_for_plan(existing_sessions or [])
     state = {
+        "active": existing,
         "superseded": [],
         "created": [],
         "generated": [],
@@ -35,14 +37,17 @@ def _snapshot_reuse_harness(
 
     async def get_active(db, user_id, requested_date):
         assert requested_date == day
-        return existing
+        return state["active"]
 
     async def supersede(db, snapshot_id):
         state["superseded"].append(snapshot_id)
+        if state["active"] is not None and state["active"].id == snapshot_id:
+            state["active"] = None
 
     async def create(db, user_id, requested_date, plan, source="deterministic"):
         state["created"].append(plan)
-        return _snapshot_for_plan(plan.get("sessions", []))
+        state["active"] = _snapshot_for_plan(plan.get("sessions", []))
+        return state["active"]
 
     def generate(planning_data, **kwargs):
         state["generated"].append(kwargs)
@@ -101,7 +106,10 @@ async def test_empty_active_snapshot_is_replaced_when_candidate_has_sessions(
         None,
         uuid.uuid4(),
         day,
-        {"prioritized_backlog": [{"id": "task"}], "available_windows": []},
+        {
+            "prioritized_backlog": [{"id": "task"}],
+            "available_windows": [{"start": "14:00", "end": "22:00"}],
+        },
         daily_capacity_minutes=120,
     )
 
@@ -153,7 +161,10 @@ async def test_non_empty_active_snapshot_is_reused_without_generating_candidate(
         None,
         uuid.uuid4(),
         day,
-        {"prioritized_backlog": [{"id": "task"}], "available_windows": []},
+        {
+            "prioritized_backlog": [{"id": "task"}],
+            "available_windows": [{"start": "20:00", "end": "21:30"}],
+        },
     )
 
     assert result is existing
@@ -213,7 +224,10 @@ async def test_legacy_back_to_back_plan_is_refreshed_and_completed_sessions_pres
         None,
         uuid.uuid4(),
         day,
-        {"prioritized_backlog": [{"id": "task"}], "available_windows": []},
+        {
+            "prioritized_backlog": [{"id": "task"}],
+            "available_windows": [{"start": "15:00", "end": "18:00"}],
+        },
     )
 
     assert result.sessions == [completed, *candidate_sessions]
@@ -221,6 +235,133 @@ async def test_legacy_back_to_back_plan_is_refreshed_and_completed_sessions_pres
     assert state["created"][0]["sessions"] == [completed, *candidate_sessions]
     assert state["completion_lookups"] == [existing.id]
     assert len(state["generated"]) == 1
+
+
+@pytest.mark.asyncio
+async def test_commitment_conflict_refreshes_with_sessions_inside_current_windows(
+    monkeypatch,
+):
+    completed = {
+        "backlog_item_id": str(uuid.uuid4()),
+        "session_id": "completed:s1",
+        "start_time": "17:00",
+        "end_time": "17:30",
+        "reason": "Work on completed task",
+        "remaining_minutes": 0,
+    }
+    old_sessions = [
+        {
+            "backlog_item_id": str(uuid.uuid4()),
+            "session_id": "old-a:s1",
+            "start_time": "18:54",
+            "end_time": "19:24",
+            "reason": "Old task",
+            "remaining_minutes": 30,
+        },
+        {
+            "backlog_item_id": str(uuid.uuid4()),
+            "session_id": "old-b:s1",
+            "start_time": "19:29",
+            "end_time": "19:59",
+            "reason": "Old task",
+            "remaining_minutes": 0,
+        },
+    ]
+    day, existing, state = _snapshot_reuse_harness(
+        monkeypatch, [], [completed, *old_sessions]
+    )
+    state["completions"] = [
+        {"session_id": completed["session_id"], "status": "completed"}
+    ]
+    monkeypatch.setattr(
+        adaptive_service,
+        "now_in_user_tz",
+        lambda: datetime(2026, 10, 17, 18, 42, tzinfo=timezone.utc),
+    )
+    monkeypatch.setattr(
+        adaptive_service,
+        "generate_deterministic_plan",
+        generate_deterministic_plan,
+    )
+    task_id = uuid.uuid4()
+    windows = [{"start": "20:00", "end": "21:45", "total_minutes": 105}]
+
+    result = await adaptive_service.get_or_create_active_snapshot(
+        None,
+        uuid.uuid4(),
+        day,
+        {
+            "prioritized_backlog": [{
+                "id": task_id,
+                "title": "Eligible task",
+                "score": 100,
+                "priority": 1,
+                "estimated_minutes": 60,
+                "course_name": "Project",
+            }],
+            "available_windows": windows,
+        },
+        daily_capacity_minutes=120,
+    )
+
+    assert result is not existing
+    assert result.sessions[0] == completed
+    new_sessions = result.sessions[1:]
+    assert [(session["start_time"], session["end_time"]) for session in new_sessions] == [
+        ("20:00", "20:30"),
+        ("20:35", "21:05"),
+    ]
+    for session in new_sessions:
+        assert any(
+            window["start"] <= session["start_time"]
+            and session["end_time"] <= window["end"]
+            for window in windows
+        )
+        assert not (
+            session["start_time"] < "20:00"
+            and session["end_time"] > "17:00"
+        )
+    assert int(new_sessions[1]["start_time"][:2]) * 60 + int(new_sessions[1]["start_time"][3:]) - (
+        int(new_sessions[0]["end_time"][:2]) * 60 + int(new_sessions[0]["end_time"][3:])
+    ) == 5
+    assert state["superseded"] == [existing.id]
+    assert state["created"][0]["sessions"][0] == completed
+
+
+@pytest.mark.asyncio
+async def test_commitment_conflict_with_empty_candidate_does_not_churn_snapshots(
+    monkeypatch,
+):
+    old_sessions = [
+        {"session_id": "old-a:s1", "start_time": "18:54", "end_time": "19:24"},
+        {"session_id": "old-b:s1", "start_time": "19:29", "end_time": "19:59"},
+    ]
+    day, existing, state = _snapshot_reuse_harness(
+        monkeypatch, [], old_sessions
+    )
+    monkeypatch.setattr(
+        adaptive_service,
+        "now_in_user_tz",
+        lambda: datetime(2026, 10, 17, 18, 42, tzinfo=timezone.utc),
+    )
+    planning_data = {
+        "prioritized_backlog": [{"id": "eligible-task"}],
+        "available_windows": [{"start": "20:00", "end": "21:45"}],
+    }
+
+    first = await adaptive_service.get_or_create_active_snapshot(
+        None, uuid.uuid4(), day, planning_data
+    )
+    second = await adaptive_service.get_or_create_active_snapshot(
+        None, uuid.uuid4(), day, planning_data
+    )
+
+    assert first is not existing
+    assert first.sessions == []
+    assert second is first
+    assert len(state["generated"]) == 2
+    assert len(state["created"]) == 1
+    assert state["superseded"] == [existing.id]
 
 
 @pytest.mark.asyncio
@@ -243,7 +384,10 @@ async def test_valid_upcoming_transition_plan_is_reused(monkeypatch):
         None,
         uuid.uuid4(),
         day,
-        {"prioritized_backlog": [{"id": "task"}], "available_windows": []},
+        {
+            "prioritized_backlog": [{"id": "task"}],
+            "available_windows": [{"start": "14:00", "end": "18:00"}],
+        },
     )
 
     assert result is existing
@@ -292,7 +436,10 @@ async def test_scheduled_time_interval_without_focus_lease_does_not_protect_plan
         None,
         uuid.uuid4(),
         day,
-        {"prioritized_backlog": [{"id": "task"}], "available_windows": []},
+        {
+            "prioritized_backlog": [{"id": "task"}],
+            "available_windows": [{"start": "14:00", "end": "18:00"}],
+        },
     )
 
     assert result is not existing
@@ -329,7 +476,10 @@ async def test_valid_focus_lease_protects_invalid_plan(monkeypatch):
         None,
         uuid.uuid4(),
         day,
-        {"prioritized_backlog": [{"id": "task"}], "available_windows": []},
+        {
+            "prioritized_backlog": [{"id": "task"}],
+            "available_windows": [{"start": "20:00", "end": "21:45"}],
+        },
     )
 
     assert result is existing
@@ -361,7 +511,10 @@ async def test_completed_current_schedule_does_not_trigger_false_transition_refr
         None,
         uuid.uuid4(),
         day,
-        {"prioritized_backlog": [{"id": "task"}], "available_windows": []},
+        {
+            "prioritized_backlog": [{"id": "task"}],
+            "available_windows": [{"start": "15:00", "end": "18:00"}],
+        },
     )
 
     assert result is existing
@@ -384,13 +537,19 @@ async def test_back_to_back_plan_does_not_churn_when_refresh_candidate_is_empty(
         None,
         uuid.uuid4(),
         day,
-        {"prioritized_backlog": [{"id": "task"}], "available_windows": []},
+        {
+            "prioritized_backlog": [{"id": "task"}],
+            "available_windows": [{"start": "15:00", "end": "18:00"}],
+        },
     )
     second_result = await adaptive_service.get_or_create_active_snapshot(
         None,
         uuid.uuid4(),
         day,
-        {"prioritized_backlog": [{"id": "task"}], "available_windows": []},
+        {
+            "prioritized_backlog": [{"id": "task"}],
+            "available_windows": [{"start": "15:00", "end": "18:00"}],
+        },
     )
 
     assert result is existing

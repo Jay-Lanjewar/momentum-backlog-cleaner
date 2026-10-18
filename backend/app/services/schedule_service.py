@@ -3,11 +3,6 @@ from datetime import date
 from app.core.timezone import now_in_user_tz, today_in_user_tz
 
 WEEKDAYS = ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"]
-BLOCKED_TYPES = {
-    "school", "coaching", "homework", "self_study", "project",
-    "robotics", "competition", "exercise", "sports", "music",
-    "art", "reading", "travel", "meal", "break", "sleep", "custom",
-}
 ENERGY_PEAK_MAP = {
     "morning": {"morning": "high", "afternoon": "medium", "evening": "low", "night": "low"},
     "afternoon": {"morning": "medium", "afternoon": "high", "evening": "medium", "night": "low"},
@@ -17,8 +12,15 @@ ENERGY_PEAK_MAP = {
 
 
 def _parse_time(time_str: str) -> int:
+    if not isinstance(time_str, str):
+        raise ValueError("Time must be a string in HH:MM format")
     parts = time_str.split(":")
-    return int(parts[0]) * 60 + int(parts[1])
+    if len(parts) != 2 or any(len(part) != 2 or not part.isdigit() for part in parts):
+        raise ValueError("Time must be a string in HH:MM format")
+    hour, minute = (int(part) for part in parts)
+    if not 0 <= hour < 24 or not 0 <= minute < 60:
+        raise ValueError("Time must be a valid 24-hour time")
+    return hour * 60 + minute
 
 
 def _format_time(minutes: int) -> str:
@@ -64,17 +66,32 @@ def compute_available_windows(
         return []
 
     day_name = _get_day_from_date(target_date)
-    day_blocks = weekly_schedule.get(day_name, [])
+    if not isinstance(weekly_schedule, dict):
+        return []
+
+    day_blocks = []
+    for key, blocks in weekly_schedule.items():
+        if isinstance(key, str) and key.strip().lower() == day_name:
+            if not isinstance(blocks, list):
+                return []
+            day_blocks.extend(blocks)
 
     busy_intervals: list[tuple[int, int]] = []
 
     for block in day_blocks:
-        block_type = block.get("type", "")
-        if block_type in BLOCKED_TYPES:
-            start_min = _parse_time(block.get("start", "00:00"))
-            end_min = _parse_time(block.get("end", "00:00"))
-            if end_min > start_min:
-                busy_intervals.append((start_min, end_min))
+        if not isinstance(block, dict):
+            return []
+        try:
+            start_min = _parse_time(block.get("start"))
+            end_min = _parse_time(block.get("end"))
+        except (TypeError, ValueError):
+            # A malformed fixed block must not open time that may be busy.
+            return []
+        if end_min <= start_min:
+            return []
+        # Weekly schedule entries are fixed commitments. Their display type is
+        # metadata, so missing, legacy, or differently-cased types still block.
+        busy_intervals.append((start_min, end_min))
 
     if sleep_schedule:
         sleep_start = _parse_time(sleep_schedule.get("start", "22:00"))

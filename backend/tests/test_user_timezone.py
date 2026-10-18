@@ -805,9 +805,11 @@ class TestStaleSnapshotRegeneration:
         assert harness["plans"]  # a fresh plan was generated
 
     @pytest.mark.asyncio
-    async def test_snapshot_with_future_session_is_reused(self, harness):
+    async def test_snapshot_with_future_session_inside_available_window_is_reused(
+        self, harness
+    ):
         existing = _snapshot(
-            [_session("16:00", "16:40"), _session("19:21", "20:01")],
+            [_session("16:00", "16:40"), _session("19:23", "20:03")],
             version=1,
         )
         harness["existing"] = existing
@@ -907,7 +909,7 @@ class TestStaleSnapshotRegeneration:
         assert harness["superseded"] == []
 
     @pytest.mark.asyncio
-    async def test_malformed_session_without_end_time_is_reused(self, harness):
+    async def test_malformed_session_without_end_time_is_refreshed(self, harness):
         existing = _snapshot(
             [
                 {
@@ -924,8 +926,9 @@ class TestStaleSnapshotRegeneration:
             None, USER_ID, DEVICE_TODAY, harness["planning_data"]
         )
 
-        assert result is existing
-        assert harness["superseded"] == []
+        assert result is not existing
+        assert harness["superseded"] == [existing.id]
+        assert harness["created"][0]["plan"]["sessions"]
 
     @pytest.mark.asyncio
     async def test_missing_snapshot_creates_version_one(self, harness):
