@@ -33,6 +33,8 @@ import type {
   ProfileUpdatePayload,
   StreakAllData,
   BalanceScoreData,
+  StudyBuddyChatPayload,
+  StudyBuddyChatResponse,
 } from "@/services/types";
 
 export const dashboardQueryKey = ["dashboard"] as const;
@@ -237,6 +239,40 @@ export function useFocusSessionLifecycle() {
       if (payload.action === "cancel") {
         queryClient.invalidateQueries({ queryKey: ["dashboard"] });
       }
+    },
+  });
+}
+
+function studyBuddyErrorMessage(error: string, errorCode: string | null): string {
+  if (
+    errorCode === "insufficient_aal" ||
+    /invalid or expired|unauthori[sz]ed|forbidden|authentication required|not authenticated/i.test(error)
+  ) {
+    return "Please sign in again to use Study Buddy.";
+  }
+  if (/active focus session/i.test(error)) {
+    return "This Focus session is no longer active. Return to Today to choose an active session.";
+  }
+  if (/request limit|rate limit|temporarily busy/i.test(error)) {
+    return "Study Buddy is taking a short break. Please try again later.";
+  }
+  if (/network error|failed to fetch/i.test(error)) {
+    return "Couldn't reach Study Buddy. Check your connection, then retry.";
+  }
+  return "Study Buddy couldn't answer just now. Please try again.";
+}
+
+export function useStudyBuddyChat() {
+  return useMutation({
+    mutationFn: async (payload: StudyBuddyChatPayload) => {
+      const result = await api.post<StudyBuddyChatResponse>(
+        "/api/v1/study-buddy/chat",
+        payload,
+      );
+      if (result.error) {
+        throw new Error(studyBuddyErrorMessage(result.error, result.errorCode));
+      }
+      return result.data;
     },
   });
 }

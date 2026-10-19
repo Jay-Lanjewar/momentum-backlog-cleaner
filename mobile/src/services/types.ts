@@ -289,6 +289,23 @@ export interface FocusSessionLifecycleResponse {
   lease_expires_at: string;
 }
 
+export type StudyBuddyRole = "user" | "assistant";
+
+export interface StudyBuddyMessage {
+  role: StudyBuddyRole;
+  content: string;
+}
+
+export interface StudyBuddyChatPayload {
+  session_id: string;
+  question: string;
+  history: StudyBuddyMessage[];
+}
+
+export interface StudyBuddyChatResponse {
+  answer: string;
+}
+
 // ─── Streaks ───
 
 export interface StudyStreakData {

@@ -86,6 +86,7 @@ let mockSetIsPending: (v: boolean) => void = () => {};
 jest.mock("@/services/hooks", () => {
   const ReactModule = require("react");
   return {
+    useStudyBuddyChat: () => ({ mutateAsync: jest.fn().mockResolvedValue({ answer: "" }), isPending: false }),
     useCompleteSession: () => {
       const [isPending, setPending] = ReactModule.useState(false);
       mockSetIsPending = setPending;

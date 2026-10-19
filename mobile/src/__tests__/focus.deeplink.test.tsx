@@ -64,6 +64,7 @@ jest.mock("@/hooks/useFocusLock", () => ({
 const mockMutate = jest.fn();
 const mockFocusLifecycleMutateAsync = jest.fn().mockResolvedValue({ state: "running" });
 jest.mock("@/services/hooks", () => ({
+  useStudyBuddyChat: () => ({ mutateAsync: jest.fn().mockResolvedValue({ answer: "" }), isPending: false }),
   useCompleteSession: () => ({
     mutate: mockMutate,
     isPending: false,

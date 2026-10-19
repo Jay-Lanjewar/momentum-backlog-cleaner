@@ -22,8 +22,13 @@ import {
   useCompleteSession,
   useDashboard,
   useFocusSessionLifecycle,
+  useStudyBuddyChat,
 } from "@/services/hooks";
-import type { AdaptivePlanResponse, FocusSessionAction } from "@/services/types";
+import type {
+  AdaptivePlanResponse,
+  FocusSessionAction,
+  StudyBuddyMessage,
+} from "@/services/types";
 import {
   cancelSessionNotifications,
   showPlanChangedNotification,
@@ -43,6 +48,7 @@ import {
 } from "@/components/adaptive/AdaptiveTimelineBar";
 import { AdaptiveSessionLegend } from "@/components/adaptive/AdaptiveSessionLegend";
 import { AdaptiveChangeGroup } from "@/components/adaptive/AdaptiveChangeGroup";
+import { StudyBuddyPanel } from "@/components/focus/StudyBuddyPanel";
 
 function parseDurationMs(start: string | undefined, end: string | undefined): number {
   if (!start || !end) return 0;
@@ -127,6 +133,7 @@ export default function FocusModeScreen() {
     useFocusLock(totalDurationMs, identityReady);
 
   const completeSession = useCompleteSession();
+  const studyBuddy = useStudyBuddyChat();
   const focusLifecycle = useFocusSessionLifecycle();
   const mutateFocusLifecycle = focusLifecycle.mutateAsync;
   const generationRef = useRef<string>(createFocusGeneration());
@@ -140,6 +147,11 @@ export default function FocusModeScreen() {
   const [adaptiveResult, setAdaptiveResult] =
     useState<AdaptivePlanResponse | null>(null);
   const [completionError, setCompletionError] = useState<string | null>(null);
+  const [studyBuddyOpen, setStudyBuddyOpen] = useState(false);
+  const [studyBuddyMessages, setStudyBuddyMessages] = useState<StudyBuddyMessage[]>([]);
+  const [studyBuddyDraft, setStudyBuddyDraft] = useState("");
+  const [studyBuddyError, setStudyBuddyError] = useState<string | null>(null);
+  const studyBuddySendingRef = useRef(false);
   const completingRef = useRef(false);
   const [animatedProgress] = useState(() => new Animated.Value(0));
 
@@ -261,6 +273,39 @@ export default function FocusModeScreen() {
     router.back();
   }, [router, sendLifecycle]);
 
+  const sendStudyBuddyQuestion = useCallback(async () => {
+    const question = studyBuddyDraft.trim();
+    if (!question || !sessionId || studyBuddySendingRef.current) return;
+
+    studyBuddySendingRef.current = true;
+    setStudyBuddyError(null);
+    const history = studyBuddyMessages.slice(-12).map(({ role, content }) => ({
+      role,
+      content,
+    }));
+    try {
+      const result = await studyBuddy.mutateAsync({
+        session_id: sessionId,
+        question,
+        history,
+      });
+      setStudyBuddyMessages((current) => [
+        ...current,
+        { role: "user", content: question },
+        { role: "assistant", content: result.answer },
+      ]);
+      setStudyBuddyDraft((current) => current.trim() === question ? "" : current);
+    } catch (error) {
+      setStudyBuddyError(
+        error instanceof Error
+          ? error.message
+          : "Study Buddy couldn't answer just now. Please try again.",
+      );
+    } finally {
+      studyBuddySendingRef.current = false;
+    }
+  }, [sessionId, studyBuddy, studyBuddyDraft, studyBuddyMessages]);
+
   useFocusEffect(
     useCallback(
       () => () => {
@@ -344,6 +389,10 @@ export default function FocusModeScreen() {
   // Android back button handling
   useEffect(() => {
     const handler = BackHandler.addEventListener("hardwareBackPress", () => {
+      if (studyBuddyOpen) {
+        setStudyBuddyOpen(false);
+        return true;
+      }
       if (phase === "focusing" || phase === "paused_by_user" || phase === "paused_lost_focus" || phase === "focus_returned") {
         Alert.alert(
           "Leave Focus Session?",
@@ -362,7 +411,7 @@ export default function FocusModeScreen() {
       return false;
     });
     return () => handler.remove();
-  }, [cancelAndLeave, phase]);
+  }, [cancelAndLeave, phase, studyBuddyOpen]);
 
   const handleFinishEarly = useCallback(() => {
     Alert.alert("Finish Early?", "Your focused time will be recorded.", [
@@ -755,9 +804,23 @@ export default function FocusModeScreen() {
         )}
       </View>
 
-      {/* Timer ring — centered in remaining space, no flex grow */}
+      {/* The timer hook and Focus screen stay mounted while this area switches views. */}
       <View style={styles.timerContainer}>
-        <View style={styles.timerRing}>
+        {studyBuddyOpen ? (
+          <StudyBuddyPanel
+            messages={studyBuddyMessages}
+            draft={studyBuddyDraft}
+            busy={studyBuddy.isPending}
+            error={studyBuddyError}
+            countdown={formatCountdown(remainingMs)}
+            onDraftChange={setStudyBuddyDraft}
+            onSend={() => void sendStudyBuddyQuestion()}
+            onRetry={() => void sendStudyBuddyQuestion()}
+            onClose={() => setStudyBuddyOpen(false)}
+            onSuggestion={setStudyBuddyDraft}
+          />
+        ) : (
+          <View style={styles.timerRing}>
           <Svg
             width={RING_SIZE}
             height={RING_SIZE}
@@ -800,8 +863,20 @@ export default function FocusModeScreen() {
                     : ""}
             </Text>
           </View>
-        </View>
+          </View>
+        )}
       </View>
+
+      {!studyBuddyOpen && identityReady && !!sessionId && (
+        <TouchableOpacity
+          accessibilityRole="button"
+          onPress={() => setStudyBuddyOpen(true)}
+          style={styles.studyBuddyEntry}
+          activeOpacity={0.8}
+        >
+          <Text style={styles.studyBuddyEntryText}>Ask Study Buddy</Text>
+        </TouchableOpacity>
+      )}
 
       {/* Focus status messages */}
       {phase === "paused_lost_focus" && (
@@ -1257,6 +1332,17 @@ const styles = StyleSheet.create({
     paddingHorizontal: 32,
     paddingBottom: 40,
     gap: 12,
+  },
+  studyBuddyEntry: {
+    alignSelf: "center",
+    paddingHorizontal: 18,
+    paddingVertical: 8,
+    marginBottom: 4,
+  },
+  studyBuddyEntryText: {
+    color: "#93C5FD",
+    fontSize: 13,
+    fontWeight: "600",
   },
   controlButton: {
     backgroundColor: "#334155",
