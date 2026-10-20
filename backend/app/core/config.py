@@ -29,6 +29,10 @@ class Settings(BaseSettings):
     GEMINI_API_KEY: str | None = None
     GEMINI_MODEL: str = "gemini-3.7-flash"
     AI_PROVIDER: str = "gemini"
+    STUDY_BUDDY_PROVIDER: str | None = None
+    CLOUDFLARE_ACCOUNT_ID: str | None = None
+    CLOUDFLARE_API_TOKEN: str | None = None
+    CLOUDFLARE_MODEL: str = "@cf/meta/llama-3.3-70b-instruct-fp8-fast"
     STUDY_BUDDY_RATE_LIMIT_REQUESTS: int = Field(default=30, ge=1, le=10_000)
     STUDY_BUDDY_RATE_LIMIT_WINDOW_SECONDS: int = Field(default=3600, ge=1, le=86_400)
     STUDY_BUDDY_MAX_OUTPUT_TOKENS: int = Field(default=1024, ge=1, le=1024)

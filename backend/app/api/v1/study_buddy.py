@@ -11,7 +11,12 @@ from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.ai_tutor.service import (
-    GeminiTutor, TutorProviderError, TutorRateLimited, TutorUnavailable,
+    CloudflareTutor,
+    GeminiTutor,
+    TutorProviderError,
+    TutorRateLimited,
+    TutorUnavailable,
+    get_tutor,
 )
 from app.core.config import settings
 from app.core.dependencies import get_current_user, get_db
@@ -107,12 +112,13 @@ async def study_buddy_chat(
             detail="Study Buddy request limit reached. Please try again later.",
             headers={"Retry-After": str(retry_after)},
         )
-    # Persist the consumed slot before calling Gemini. Otherwise a provider
-    # failure raises HTTPException and get_db rolls the request transaction
-    # back, allowing failed requests to avoid the per-user cap.
+    # Persist the consumed slot before calling the tutor provider. Otherwise
+    # a provider failure raises HTTPException and get_db rolls the request
+    # transaction back, allowing failed requests to avoid the per-user cap.
     await db.commit()
+    tutor = get_tutor()
     try:
-        answer = await GeminiTutor().answer(
+        answer = await tutor.answer(
             data.question,
             data.history,
             task_title=context[0],
