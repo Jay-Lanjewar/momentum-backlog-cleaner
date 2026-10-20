@@ -1,4 +1,7 @@
+import { Fragment, useMemo, useRef, type ReactNode } from "react";
 import {
+  KeyboardAvoidingView,
+  Platform,
   ScrollView,
   StyleSheet,
   Text,
@@ -6,6 +9,8 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
+import type { ImageStyle, TextStyle } from "react-native";
+import { Renderer, useMarkdown } from "react-native-marked";
 
 import type { StudyBuddyMessage } from "@/services/types";
 
@@ -24,6 +29,56 @@ interface StudyBuddyPanelProps {
 
 const SUGGESTIONS = ["Explain this concept", "Give me a hint", "Check my attempt"];
 
+class StudyBuddyRenderer extends Renderer {
+  link(children: string | ReactNode[], _href: string, style?: TextStyle): ReactNode {
+    return <Text key={this.getKey()} style={style}>{children}</Text>;
+  }
+
+  image(_uri: string, _alt?: string, _style?: ImageStyle): ReactNode {
+    return null;
+  }
+
+  linkImage(
+    _href: string,
+    _imageUrl: string,
+    _alt?: string,
+    _style?: ImageStyle,
+    _title?: string | null,
+  ): ReactNode {
+    return null;
+  }
+}
+
+function AssistantMarkdown({ content }: { content: string }) {
+  const renderer = useMemo(() => new StudyBuddyRenderer({ selectable: true }), []);
+  const elements = useMarkdown(content, {
+    colorScheme: "dark",
+    renderer,
+    styles: markdownStyles,
+  });
+
+  return (
+    <View style={styles.markdown}>
+      {elements.map((element, index) => (
+        <Fragment key={`markdown-${index}`}>{element}</Fragment>
+      ))}
+    </View>
+  );
+}
+
+const markdownStyles = {
+  text: { color: "#F8FAFC", fontSize: 13, lineHeight: 19 },
+  strong: { color: "#F8FAFC", fontWeight: "700" as const },
+  em: { color: "#E2E8F0", fontStyle: "italic" as const },
+  paragraph: { marginTop: 0, marginBottom: 8 },
+  link: { color: "#93C5FD", textDecorationLine: "underline" as const },
+  h1: { color: "#F8FAFC", fontSize: 18, fontWeight: "700" as const, marginBottom: 8 },
+  h2: { color: "#F8FAFC", fontSize: 16, fontWeight: "700" as const, marginBottom: 6 },
+  h3: { color: "#F8FAFC", fontSize: 14, fontWeight: "700" as const, marginBottom: 4 },
+  list: { marginBottom: 8 },
+  li: { color: "#F8FAFC", fontSize: 13, lineHeight: 19 },
+} satisfies import("react-native-marked").MarkedStyles;
+
 export function StudyBuddyPanel({
   messages,
   draft,
@@ -38,7 +93,14 @@ export function StudyBuddyPanel({
 }: StudyBuddyPanelProps) {
   const canSend = draft.trim().length > 0 && !busy;
 
+  const messagesRef = useRef<ScrollView>(null);
+  const scrollToLatest = () => messagesRef.current?.scrollToEnd({ animated: true });
+
   return (
+    <KeyboardAvoidingView
+      style={styles.keyboardAvoiding}
+      behavior={Platform.OS === "ios" ? "padding" : undefined}
+    >
     <View style={styles.panel}>
       <View style={styles.header}>
         <View style={styles.headerCopy}>
@@ -56,10 +118,13 @@ export function StudyBuddyPanel({
       </View>
 
       <ScrollView
+        ref={messagesRef}
+        accessibilityLabel="Study Buddy conversation"
         style={styles.messages}
         contentContainerStyle={styles.messagesContent}
         keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator
+        onContentSizeChange={scrollToLatest}
       >
         {messages.length === 0 ? (
           <View style={styles.welcome}>
@@ -86,7 +151,11 @@ export function StudyBuddyPanel({
                 message.role === "user" ? styles.userBubble : styles.tutorBubble,
               ]}
             >
-              <Text style={styles.bubbleText}>{message.content}</Text>
+              {message.role === "assistant" ? (
+                <AssistantMarkdown content={message.content} />
+              ) : (
+                <Text style={styles.bubbleText}>{message.content}</Text>
+              )}
             </View>
           ))
         )}
@@ -138,10 +207,12 @@ export function StudyBuddyPanel({
         </TouchableOpacity>
       </View>
     </View>
+    </KeyboardAvoidingView>
   );
 }
 
 const styles = StyleSheet.create({
+  keyboardAvoiding: { flex: 1, width: "100%" },
   panel: {
     flex: 1,
     minHeight: 0,
@@ -181,6 +252,7 @@ const styles = StyleSheet.create({
   userBubble: { alignSelf: "flex-end", backgroundColor: "#1D4ED8" },
   tutorBubble: { alignSelf: "flex-start", backgroundColor: "#1E293B" },
   bubbleText: { color: "#F8FAFC", fontSize: 13, lineHeight: 19 },
+  markdown: { width: "100%" },
   loading: { color: "#93C5FD", fontSize: 12, paddingVertical: 6 },
   errorRow: {
     flexDirection: "row",

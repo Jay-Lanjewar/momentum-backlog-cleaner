@@ -31,7 +31,7 @@ class Settings(BaseSettings):
     AI_PROVIDER: str = "gemini"
     STUDY_BUDDY_RATE_LIMIT_REQUESTS: int = Field(default=30, ge=1, le=10_000)
     STUDY_BUDDY_RATE_LIMIT_WINDOW_SECONDS: int = Field(default=3600, ge=1, le=86_400)
-    STUDY_BUDDY_MAX_OUTPUT_TOKENS: int = Field(default=512, ge=1, le=1024)
+    STUDY_BUDDY_MAX_OUTPUT_TOKENS: int = Field(default=1024, ge=1, le=1024)
 
     def model_post_init(self, __context):
         if self.DATABASE_URL.startswith("postgresql://"):

@@ -54,6 +54,11 @@ class GeminiTutor:
                 "maxOutputTokens": settings.STUDY_BUDDY_MAX_OUTPUT_TOKENS,
             },
         }
+        # Gemini 3.7 Flash supports these documented thinking levels. Keeping
+        # thinking low reserves more of the bounded output budget for the
+        # student's answer. Other configured models retain provider defaults.
+        if self.model in {"gemini-3.7-flash", "gemini-3.8-flash"}:
+            payload["generationConfig"]["thinkingConfig"] = {"thinkingLevel": "low"}
         try:
             async with httpx.AsyncClient(timeout=20) as client:
                 response = await client.post(url, json=payload)
@@ -72,13 +77,49 @@ class GeminiTutor:
             raise TutorProviderError from exc
 
         try:
-            answer = data["candidates"][0]["content"]["parts"][0]["text"].strip()
-        except (KeyError, IndexError, TypeError, AttributeError):
+            candidate = data["candidates"][0]
+        except (KeyError, IndexError, TypeError):
+            logger.warning("Study Buddy provider returned malformed output")
+            raise TutorProviderError
+
+        finish_reason = candidate.get("finishReason") if isinstance(candidate, dict) else None
+        if finish_reason != "STOP":
+            # Only log a small, normalized category. Provider fields and student
+            # content are never included in logs or client errors.
+            category = (
+                "max_tokens" if finish_reason == "MAX_TOKENS"
+                else "blocked" if isinstance(finish_reason, str) and finish_reason in {
+                    "SAFETY", "RECITATION", "BLOCKLIST", "PROHIBITED_CONTENT",
+                    "SPII", "IMAGE_SAFETY",
+                }
+                else "non_success"
+            )
+            logger.warning("Study Buddy generation incomplete (category=%s)", category)
+            raise TutorProviderError
+
+        try:
+            parts = candidate["content"]["parts"]
+            if not isinstance(parts, list):
+                raise TypeError
+            # Gemini may return thought text alongside its user-facing answer.
+            # Exclude thought parts and preserve every ordinary text fragment.
+            text_parts = []
+            for part in parts:
+                if not isinstance(part, dict):
+                    raise TypeError
+                if part.get("thought") is True or "text" not in part:
+                    continue
+                if not isinstance(part["text"], str):
+                    raise TypeError
+                text_parts.append(part["text"])
+            answer = "".join(text_parts).strip()
+        except (KeyError, TypeError, AttributeError):
             logger.warning("Study Buddy provider returned malformed output")
             raise TutorProviderError
         if not answer:
             logger.warning("Study Buddy provider returned empty output")
             raise TutorProviderError
         if len(answer) > 4000:
-            answer = answer[:4000].rsplit(" ", 1)[0].rstrip()
+            logger.warning("Study Buddy provider answer exceeded response limit")
+            raise TutorProviderError
         return answer
