@@ -49,6 +49,22 @@ def test_prompt_instructions_cover_teaching_behavior_and_untrusted_history():
     assert "Explain photosynthesis" in contents[-1]["parts"][0]["text"]
 
 
+def test_prompt_instructions_define_grammar_and_guide_one_question_at_a_time():
+    for requirement in (
+        "a phrase functions as a unit but does not have its own subject–predicate relationship",
+        "though it may contain verb forms",
+        "a clause has a subject–predicate relationship",
+        "An independent clause expresses a complete thought and can stand alone as a sentence",
+        "A dependent clause has a subject–predicate relationship but cannot stand alone as a complete sentence",
+        "explain the essential idea and give clear examples",
+        "one focused comprehension question at a time",
+        "do not stack multiple questions",
+        "check each example against these definitions before labeling it",
+        "never claim that all clauses express complete thoughts",
+    ):
+        assert requirement in SYSTEM_INSTRUCTION
+
+
 @pytest.mark.parametrize("question", [
     "Explain why seasons happen.",
     "Give me a small hint for solving this equation.",
