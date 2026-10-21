@@ -147,7 +147,8 @@ describe("Focus Study Buddy panel", () => {
     await waitFor(() => expect(mockLifecycle).toHaveBeenCalledWith(expect.objectContaining({ action: "start" })));
     const lifecycleCalls = mockLifecycle.mock.calls.length;
     await openBuddy();
-    expect(screen.getByText("Your Focus session continues · 01:20")).toBeTruthy();
+    expect(screen.getByText("Focus session continues ·")).toBeTruthy();
+    expect(screen.getAllByText("01:20")).toHaveLength(2);
     await submit("Explain fractions");
     await waitFor(() => expect(screen.getByText("Answer to Explain fractions")).toBeTruthy());
     await fireEvent.press(screen.getByLabelText("Close Study Buddy"));
@@ -155,7 +156,8 @@ describe("Focus Study Buddy panel", () => {
     await openBuddy();
     expect(screen.getByText("Explain fractions")).toBeTruthy();
     expect(screen.getByText("Answer to Explain fractions")).toBeTruthy();
-    expect(screen.getByText("Your Focus session continues · 01:20")).toBeTruthy();
+    expect(screen.getByText("Focus session continues ·")).toBeTruthy();
+    expect(screen.getAllByText("01:20")).toHaveLength(2);
     expect(mockTimerMounts).toBe(1);
     expect(mockLifecycle).toHaveBeenCalledTimes(lifecycleCalls);
     expect(mockComplete).not.toHaveBeenCalled();

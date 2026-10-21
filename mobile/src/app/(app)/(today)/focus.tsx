@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import {
   View,
   Text,
+  Modal,
   TouchableOpacity,
   ScrollView,
   StyleSheet,
@@ -804,23 +805,9 @@ export default function FocusModeScreen() {
         )}
       </View>
 
-      {/* The timer hook and Focus screen stay mounted while this area switches views. */}
+      {/* Keep the timer mounted beneath the Study Buddy conversation. */}
       <View style={styles.timerContainer}>
-        {studyBuddyOpen ? (
-          <StudyBuddyPanel
-            messages={studyBuddyMessages}
-            draft={studyBuddyDraft}
-            busy={studyBuddy.isPending}
-            error={studyBuddyError}
-            countdown={formatCountdown(remainingMs)}
-            onDraftChange={setStudyBuddyDraft}
-            onSend={() => void sendStudyBuddyQuestion()}
-            onRetry={() => void sendStudyBuddyQuestion()}
-            onClose={() => setStudyBuddyOpen(false)}
-            onSuggestion={setStudyBuddyDraft}
-          />
-        ) : (
-          <View style={styles.timerRing}>
+        <View style={styles.timerRing}>
           <Svg
             width={RING_SIZE}
             height={RING_SIZE}
@@ -863,11 +850,10 @@ export default function FocusModeScreen() {
                     : ""}
             </Text>
           </View>
-          </View>
-        )}
+        </View>
       </View>
 
-      {!studyBuddyOpen && identityReady && !!sessionId && (
+      {identityReady && !!sessionId && (
         <TouchableOpacity
           accessibilityRole="button"
           onPress={() => setStudyBuddyOpen(true)}
@@ -937,6 +923,28 @@ export default function FocusModeScreen() {
           </TouchableOpacity>
         )}
       </View>
+
+      <Modal
+        visible={studyBuddyOpen}
+        animationType="slide"
+        statusBarTranslucent
+        onRequestClose={() => setStudyBuddyOpen(false)}
+      >
+        {studyBuddyOpen && (
+          <StudyBuddyPanel
+            messages={studyBuddyMessages}
+            draft={studyBuddyDraft}
+            busy={studyBuddy.isPending}
+            error={studyBuddyError}
+            countdown={formatCountdown(remainingMs)}
+            onDraftChange={setStudyBuddyDraft}
+            onSend={() => void sendStudyBuddyQuestion()}
+            onRetry={() => void sendStudyBuddyQuestion()}
+            onClose={() => setStudyBuddyOpen(false)}
+            onSuggestion={setStudyBuddyDraft}
+          />
+        )}
+      </Modal>
     </View>
   );
 }
