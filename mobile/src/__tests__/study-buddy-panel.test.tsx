@@ -1,6 +1,6 @@
 import React from "react";
 import { fireEvent, render } from "@testing-library/react-native";
-import { ScrollView } from "react-native";
+import { Platform, ScrollView } from "react-native";
 
 import { StudyBuddyPanel } from "@/components/focus/StudyBuddyPanel";
 
@@ -98,8 +98,39 @@ describe("Study Buddy conversation", () => {
 
     expect(view.getByTestId("study-buddy-composer")).toBeTruthy();
     expect(input.props.submitBehavior).toBe("submit");
+    expect(input.props.textAlignVertical).toBe("top");
+    expect(input.props.scrollEnabled).toBe(true);
     await fireEvent(input, "submitEditing");
     expect(onSend).toHaveBeenCalledTimes(1);
+  });
+
+  it("keeps the keyboard-aware layout and edited multiline draft available on Android", async () => {
+    const originalOS = Platform.OS;
+    Object.assign(Platform, { OS: "android" });
+
+    try {
+      const onDraftChange = jest.fn();
+      const onSend = jest.fn();
+      const view = await render(
+        <StudyBuddyPanel
+          {...panelProps}
+          messages={[]}
+          draft="A question"
+          onDraftChange={onDraftChange}
+          onSend={onSend}
+        />,
+      );
+      const input = view.getByTestId("study-buddy-input");
+
+      expect(view.getByTestId("study-buddy-keyboard-layout")).toBeTruthy();
+      expect(input.props.multiline).toBe(true);
+      await fireEvent.changeText(input, "A longer\nmultiline question");
+      expect(onDraftChange).toHaveBeenCalledWith("A longer\nmultiline question");
+      await fireEvent(input, "submitEditing");
+      expect(onSend).toHaveBeenCalledTimes(1);
+    } finally {
+      Object.assign(Platform, { OS: originalOS });
+    }
   });
 
   it("keeps links non-interactive and does not render remote Markdown images", async () => {

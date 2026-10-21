@@ -132,8 +132,9 @@ export function StudyBuddyPanel({
   return (
     <SafeAreaView style={styles.safeArea} edges={["top", "bottom"]}>
       <KeyboardAvoidingView
+        testID="study-buddy-keyboard-layout"
         style={styles.keyboardAvoiding}
-        behavior={Platform.OS === "ios" ? "padding" : undefined}
+        behavior={Platform.OS === "ios" ? "padding" : "height"}
       >
         <View style={styles.screen}>
           <View style={styles.header}>
@@ -255,6 +256,8 @@ export function StudyBuddyPanel({
                 editable={!busy}
                 returnKeyType="send"
                 submitBehavior="submit"
+                textAlignVertical="top"
+                scrollEnabled
                 onSubmitEditing={handleSend}
                 style={styles.input}
               />
