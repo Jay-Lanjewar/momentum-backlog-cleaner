@@ -439,6 +439,29 @@ async def _get_focus_lease(
     return result.scalar_one_or_none()
 
 
+async def _focus_lease_is_current_and_incomplete(
+    db: AsyncSession, user_id: uuid.UUID, lease: ActiveFocusSession
+) -> bool:
+    """Check whether a running lease still refers to a usable session today."""
+    snapshot = await get_active_snapshot(db, user_id, today_in_user_tz())
+    if snapshot is None or snapshot.id != lease.plan_snapshot_id or not any(
+        session.get("session_id") == lease.session_id
+        for session in (snapshot.sessions or [])
+    ):
+        return False
+
+    completion_result = await db.execute(
+        select(SessionCompletion.id)
+        .where(
+            SessionCompletion.plan_snapshot_id == snapshot.id,
+            SessionCompletion.session_id == lease.session_id,
+            SessionCompletion.status == "completed",
+        )
+        .limit(1)
+    )
+    return completion_result.scalar_one_or_none() is None
+
+
 async def _has_valid_focus_lease(
     db: AsyncSession, user_id: uuid.UUID, snapshot: PlanSnapshot
 ) -> bool:
@@ -526,7 +549,14 @@ async def run_focus_session_lifecycle(
                 or lease.plan_snapshot_id != snapshot.id
             )
         ):
-            raise FocusSessionConflict("Another Focus session is active")
+            if await _focus_lease_is_current_and_incomplete(db, user_id, lease):
+                raise FocusSessionConflict("Another Focus session is active")
+            # Snapshot invalidation, session removal, or completion makes the
+            # old lease unusable. Retire it under the existing user/lease locks
+            # before reusing the user's unique lease row for this start.
+            lease.state = "cancelled"
+            lease.lease_expires_at = now
+            await db.flush()
         if lease is None:
             lease = ActiveFocusSession(
                 user_id=user_id,

@@ -143,6 +143,136 @@ async def test_start_creates_a_fenced_lease_and_retries_idempotently(monkeypatch
         await adaptive_service.run_focus_session_lifecycle(db, USER_ID, request)
 
 
+def _start_request():
+    return FocusSessionLifecycleRequest(
+        action="start",
+        session_id=SESSION_ID,
+        snapshot_id=SNAPSHOT_ID,
+        generation="new-device-generation-0001",
+    )
+
+
+@pytest.mark.asyncio
+async def test_start_recovers_unexpired_lease_for_invalidated_snapshot():
+    old_snapshot_id = uuid.uuid4()
+    old_session_id = f"{uuid.uuid4()}:s1"
+    lease = _lease(snapshot_id=old_snapshot_id, session_id=old_session_id)
+    snapshot = _snapshot()
+    db = AsyncMock()
+    db.add = MagicMock()
+    db.execute.side_effect = [
+        MagicMock(),  # user-row lock
+        _scalar(snapshot),  # requested active snapshot
+        _scalar(lease),  # locked lease row
+        _scalar(None),  # incoming session completion lookup
+        _scalar(snapshot),  # latest active snapshot is the new snapshot
+    ]
+
+    response = await adaptive_service.run_focus_session_lifecycle(
+        db, USER_ID, _start_request()
+    )
+
+    assert response.state == "running"
+    assert lease.state == "running"
+    assert lease.plan_snapshot_id == SNAPSHOT_ID
+    assert lease.session_id == SESSION_ID
+    assert lease.generation == "new-device-generation-0001"
+    assert lease.lease_expires_at == NOW + timedelta(
+        seconds=adaptive_service.FOCUS_SESSION_LEASE_SECONDS
+    )
+    assert db.flush.await_count == 2
+
+
+@pytest.mark.asyncio
+async def test_start_still_conflicts_with_valid_unexpired_lease():
+    old_session_id = f"{uuid.uuid4()}:s1"
+    snapshot = _snapshot()
+    snapshot.sessions = [
+        {"session_id": SESSION_ID},
+        {"session_id": old_session_id},
+    ]
+    lease = _lease(snapshot_id=SNAPSHOT_ID, session_id=old_session_id)
+    db = AsyncMock()
+    db.execute.side_effect = [
+        MagicMock(),
+        _scalar(snapshot),
+        _scalar(lease),
+        _scalar(None),  # incoming session is not completed
+        _scalar(snapshot),  # lease refers to today's latest active snapshot
+        _scalar(None),  # old session has not completed
+    ]
+
+    with pytest.raises(
+        adaptive_service.FocusSessionConflict,
+        match="Another Focus session is active",
+    ):
+        await adaptive_service.run_focus_session_lifecycle(
+            db, USER_ID, _start_request()
+        )
+
+    assert lease.state == "running"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("stale_reason", ["missing_session", "completed_session"])
+async def test_start_recovers_lease_when_session_is_missing_or_completed(
+    stale_reason,
+):
+    old_session_id = f"{uuid.uuid4()}:s1"
+    snapshot = _snapshot()
+    lease = _lease(snapshot_id=SNAPSHOT_ID, session_id=old_session_id)
+    if stale_reason == "missing_session":
+        snapshot.sessions = [{"session_id": SESSION_ID}]
+    else:
+        snapshot.sessions = [
+            {"session_id": SESSION_ID},
+            {"session_id": old_session_id},
+        ]
+    execute_results = [
+        MagicMock(),
+        _scalar(snapshot),
+        _scalar(lease),
+        _scalar(None),  # incoming session is not completed
+        _scalar(snapshot),  # same current snapshot as the incoming request
+    ]
+    if stale_reason == "completed_session":
+        execute_results.append(_scalar(uuid.uuid4()))
+    db = AsyncMock()
+    db.execute.side_effect = execute_results
+
+    response = await adaptive_service.run_focus_session_lifecycle(
+        db, USER_ID, _start_request()
+    )
+
+    assert response.state == "running"
+    assert lease.plan_snapshot_id == SNAPSHOT_ID
+    assert lease.session_id == SESSION_ID
+
+
+@pytest.mark.asyncio
+async def test_start_replaces_expired_mismatched_lease_without_stale_lookup():
+    lease = _lease(
+        snapshot_id=uuid.uuid4(), expiry=NOW - timedelta(seconds=1)
+    )
+    db = AsyncMock()
+    db.execute.side_effect = [
+        MagicMock(),
+        _scalar(_snapshot()),
+        _scalar(lease),
+        _scalar(None),  # incoming session is not completed
+    ]
+
+    response = await adaptive_service.run_focus_session_lifecycle(
+        db, USER_ID, _start_request()
+    )
+
+    assert response.state == "running"
+    assert lease.plan_snapshot_id == SNAPSHOT_ID
+    assert lease.lease_expires_at == NOW + timedelta(
+        seconds=adaptive_service.FOCUS_SESSION_LEASE_SECONDS
+    )
+
+
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
     "action, initial_state, expected_state, expected_expiry",
