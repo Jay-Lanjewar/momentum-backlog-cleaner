@@ -521,7 +521,8 @@ export function useSaveWeeklySchedule() {
       if (result.error) throw new Error(result.error);
       return result.data;
     },
-    onSuccess: () => {
+    onSuccess: (data) => {
+      queryClient.setQueryData(["schedule"], data);
       queryClient.invalidateQueries({ queryKey: ["schedule"] });
       queryClient.invalidateQueries({ queryKey: ["backlog"] });
       queryClient.invalidateQueries({ queryKey: ["dashboard"] });

@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect, useMemo } from "react";
+import { useState, useCallback, useMemo } from "react";
 import {
   View,
   Text,
@@ -63,7 +63,12 @@ function dateToTime(d: Date): string {
 }
 
 export default function ScheduleScreen() {
-  const { data: scheduleData, isLoading } = useWeeklySchedule();
+  const {
+    data: scheduleData,
+    isLoading,
+    isError: isScheduleError,
+    refetch: refetchSchedule,
+  } = useWeeklySchedule();
   const saveSchedule = useSaveWeeklySchedule();
   const {
     data: dashboard,
@@ -72,7 +77,8 @@ export default function ScheduleScreen() {
     isRefetching: isPlanRefetching,
   } = useDashboard();
 
-  const [localSchedule, setLocalSchedule] = useState<ScheduleMap>({});
+  const [localSchedule, setLocalSchedule] = useState<ScheduleMap | null>(null);
+  const [editedDays, setEditedDays] = useState<Set<DayName>>(() => new Set());
   const [selectedDay, setSelectedDay] = useState<DayName>(getCurrentDayName());
   const [hasChanges, setHasChanges] = useState(false);
 
@@ -80,13 +86,24 @@ export default function ScheduleScreen() {
   const [editingIndex, setEditingIndex] = useState<number | null>(null);
   const [deletingIndex, setDeletingIndex] = useState<number | null>(null);
 
-  useEffect(() => {
-    if (scheduleData?.schedule) {
-      setLocalSchedule(scheduleData.schedule);
-    }
-  }, [scheduleData?.schedule]);
+  const scheduleReady = Boolean(scheduleData?.schedule) && !isLoading;
+  const currentSchedule = useMemo(
+    () => {
+      const latest = scheduleData?.schedule ?? {};
+      if (!localSchedule || editedDays.size === 0) return latest;
+      const merged: ScheduleMap = { ...latest };
+      for (const day of editedDays) {
+        merged[day] = localSchedule[day] ?? [];
+      }
+      return merged;
+    },
+    [editedDays, localSchedule, scheduleData?.schedule],
+  );
 
-  const blocks: WeeklyBlock[] = localSchedule[selectedDay] ?? [];
+  const blocks: WeeklyBlock[] = useMemo(
+    () => currentSchedule[selectedDay] ?? [],
+    [currentSchedule, selectedDay],
+  );
 
   // Generated plan (read-only) — dashboard-driven, never written to the schedule.
   const backlogItemMap: BacklogItemMap = useMemo(() => {
@@ -110,23 +127,28 @@ export default function ScheduleScreen() {
 
   const updateBlocks = useCallback(
     (day: DayName, newBlocks: WeeklyBlock[]) => {
-      setLocalSchedule((prev) => ({ ...prev, [day]: newBlocks }));
+      if (!scheduleReady || !scheduleData?.schedule) return;
+      setLocalSchedule((prev) => ({ ...(prev ?? currentSchedule), [day]: newBlocks }));
+      setEditedDays((prev) => new Set(prev).add(day));
       setHasChanges(true);
     },
-    [],
+    [currentSchedule, scheduleData, scheduleReady],
   );
 
   const handleSave = useCallback(async () => {
+    if (!scheduleReady || !scheduleData?.schedule || !localSchedule) return;
     try {
       const payload: WeeklyScheduleUpdatePayload = {
-        schedule: localSchedule,
+        schedule: currentSchedule,
       };
       await saveSchedule.mutateAsync(payload);
+      setLocalSchedule(null);
+      setEditedDays(new Set());
       setHasChanges(false);
     } catch {
       Alert.alert("Error", "Failed to save schedule. Please try again.");
     }
-  }, [localSchedule, saveSchedule]);
+  }, [currentSchedule, localSchedule, saveSchedule, scheduleData, scheduleReady]);
 
   const handleDelete = useCallback(() => {
     if (deletingIndex === null) return;
@@ -161,7 +183,7 @@ export default function ScheduleScreen() {
       {/* Header */}
       <View style={styles.header}>
         <Text style={styles.headerTitle}>Weekly Schedule</Text>
-        {hasChanges && (
+        {hasChanges && scheduleReady && (
           <TouchableOpacity
             style={[styles.saveBtn, saveSchedule.isPending && styles.saveBtnDisabled]}
             onPress={handleSave}
@@ -182,7 +204,7 @@ export default function ScheduleScreen() {
         {DAYS.map((day) => {
           const isToday = day === getCurrentDayName();
           const isSelected = day === selectedDay;
-          const hasBlocks = (localSchedule[day]?.length ?? 0) > 0;
+          const hasBlocks = (currentSchedule[day]?.length ?? 0) > 0;
           return (
             <TouchableOpacity
               key={day}
@@ -218,7 +240,23 @@ export default function ScheduleScreen() {
           Fixed Schedule
         </Text>
 
-        {blocks.length === 0 ? (
+        {!scheduleReady ? (
+          <View style={styles.emptyContainer}>
+            {isScheduleError ? (
+              <>
+                <Text style={styles.emptyText}>Schedule unavailable.</Text>
+                <TouchableOpacity onPress={() => void refetchSchedule()}>
+                  <Text style={styles.emptyHint}>Tap to retry loading your schedule.</Text>
+                </TouchableOpacity>
+              </>
+            ) : (
+              <>
+                <ActivityIndicator size="small" color="#60A5FA" />
+                <Text style={styles.emptyHint}>Loading your schedule…</Text>
+              </>
+            )}
+          </View>
+        ) : blocks.length === 0 ? (
           <View style={styles.emptyContainer}>
             <Text style={styles.emptyText}>No fixed commitments.</Text>
             <Text style={styles.emptyHint}>
@@ -362,6 +400,7 @@ export default function ScheduleScreen() {
       {/* Add Button */}
       <TouchableOpacity
         style={styles.fab}
+        disabled={!scheduleReady}
         onPress={() => {
           setEditingIndex(null);
           setShowForm(true);
@@ -403,6 +442,7 @@ export default function ScheduleScreen() {
 
       {/* Add / Edit Form */}
       <BlockFormModal
+        key={`${showForm}:${selectedDay}:${editingIndex ?? "new"}`}
         visible={showForm}
         initial={editingIndex !== null ? blocks[editingIndex] : null}
         existingBlocks={blocks}
@@ -444,15 +484,6 @@ function BlockFormModal({
 
   const [showStartPicker, setShowStartPicker] = useState(false);
   const [showEndPicker, setShowEndPicker] = useState(false);
-
-  useEffect(() => {
-    if (visible) {
-      setType(initial?.type ?? "school");
-      setTitle(initial?.title ?? "");
-      setStart(initial?.start ?? "08:00");
-      setEnd(initial?.end ?? "09:00");
-    }
-  }, [visible, initial]);
 
   const timeValid = isValidTimeRange(start, end);
   const overlap = hasOverlap(existingBlocks, start, end, excludeIndex);

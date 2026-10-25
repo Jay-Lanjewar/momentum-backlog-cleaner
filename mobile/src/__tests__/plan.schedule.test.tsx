@@ -12,7 +12,7 @@
  */
 
 import React from "react";
-import { render, screen, fireEvent } from "@testing-library/react-native";
+import { render, screen, fireEvent, act } from "@testing-library/react-native";
 
 import {
   DAYS,
@@ -43,6 +43,7 @@ jest.mock("@react-native-community/datetimepicker", () => {
 const mockSave = jest.fn();
 let mockScheduleData: any = null;
 let mockScheduleLoading = false;
+let mockScheduleError = false;
 let mockDashboard: any = null;
 let mockPlanLoading = false;
 const mockRefetch = jest.fn();
@@ -51,6 +52,8 @@ jest.mock("@/services/hooks", () => ({
   useWeeklySchedule: () => ({
     data: mockScheduleData,
     isLoading: mockScheduleLoading,
+    isError: mockScheduleError,
+    refetch: mockRefetch,
   }),
   useSaveWeeklySchedule: () => ({
     mutateAsync: mockSave,
@@ -141,6 +144,7 @@ async function renderPlan(
 beforeEach(() => {
   jest.clearAllMocks();
   mockScheduleLoading = false;
+  mockScheduleError = false;
   mockPlanLoading = false;
 });
 
@@ -170,6 +174,92 @@ describe("Plan tab — fixed Weekly Schedule", () => {
 
     expect(mockSave).toHaveBeenCalledTimes(1);
     expect(mockSave).toHaveBeenCalledWith({ schedule: { [TODAY]: [] } });
+  });
+
+  it("reopens schedule editing from the saved block values", async () => {
+    await renderPlan();
+    await fireEvent.press(screen.getByTestId("schedule-block-0"));
+    expect(screen.getByText("Edit Block")).toBeTruthy();
+    const title = screen.getByPlaceholderText("e.g. AP Physics");
+    expect(title.props.value).toBe("Maths");
+    await fireEvent.changeText(title, "Unsaved title");
+    await fireEvent.press(screen.getByText("Cancel"));
+    await fireEvent.press(screen.getByTestId("schedule-block-0"));
+    expect(screen.getByPlaceholderText("e.g. AP Physics").props.value).toBe("Maths");
+  });
+
+  it("opens a new schedule entry with clean defaults", async () => {
+    await renderPlan();
+    await fireEvent.press(screen.getByText("+"));
+    expect(screen.getByText("Add Block")).toBeTruthy();
+    expect(screen.getByPlaceholderText("e.g. AP Physics").props.value).toBe("");
+  });
+
+  it("does not allow editing or saving before the initial schedule loads", async () => {
+    mockScheduleLoading = true;
+    mockScheduleData = null;
+    const view = await render(<ScheduleScreen />);
+
+    expect(screen.getByText("Loading your schedule…")).toBeTruthy();
+    await fireEvent.press(screen.getByText("+"));
+    expect(screen.queryByText("Add Block")).toBeNull();
+    expect(screen.queryByText("Save")).toBeNull();
+    expect(mockSave).not.toHaveBeenCalled();
+
+    await act(async () => {
+      mockScheduleLoading = false;
+      mockScheduleData = makeSchedule();
+      view.rerender(<ScheduleScreen />);
+    });
+    await fireEvent.press(screen.getByText("+"));
+    expect(screen.getByText("Add Block")).toBeTruthy();
+  });
+
+  it("preserves unsaved edits when the schedule query refetches", async () => {
+    const view = await renderPlan();
+
+    await fireEvent.press(screen.getByTestId("schedule-block-0"));
+    await fireEvent.changeText(screen.getByPlaceholderText("e.g. AP Physics"), "Edited Maths");
+    await fireEvent.press(screen.getByText("Save"));
+
+    await act(async () => {
+      mockScheduleData = {
+        schedule: {
+          [TODAY]: [
+            { type: "school", start: "09:00", end: "10:00", title: "Server Refetch" },
+          ],
+          [DAYS.find((d) => d !== TODAY)!]: [
+            { type: "work", start: "11:00", end: "12:00", title: "Other day" },
+          ],
+        },
+      };
+      view.rerender(<ScheduleScreen />);
+    });
+
+    expect(screen.getByText("Edited Maths")).toBeTruthy();
+    await fireEvent.press(screen.getByText("Save"));
+    expect(mockSave).toHaveBeenCalledWith({
+      schedule: {
+        [TODAY]: [{ type: "school", start: "09:00", end: "10:00", title: "Edited Maths" }],
+        [DAYS.find((d) => d !== TODAY)!]: [
+          { type: "work", start: "11:00", end: "12:00", title: "Other day" },
+        ],
+      },
+    });
+  });
+
+  it("offers a retry and does not enable schedule edits after initial load failure", async () => {
+    mockScheduleData = null;
+    mockScheduleLoading = false;
+    mockScheduleError = true;
+    await render(<ScheduleScreen />);
+
+    expect(screen.getByText("Schedule unavailable.")).toBeTruthy();
+    await fireEvent.press(screen.getByText("Tap to retry loading your schedule."));
+    expect(mockRefetch).toHaveBeenCalled();
+    await fireEvent.press(screen.getByText("+"));
+    expect(screen.queryByText("Add Block")).toBeNull();
+    expect(mockSave).not.toHaveBeenCalled();
   });
 });
 
