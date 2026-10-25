@@ -5,6 +5,10 @@
   },
   "build": {
     "development": {
+      "environment": "development",
+      "env": {
+        "MOMENTUM_BUILD_PROFILE": "development"
+      },
       "developmentClient": true,
       "distribution": "internal",
       "android": {
@@ -13,6 +17,10 @@
       "channel": "development"
     },
     "preview": {
+      "environment": "preview",
+      "env": {
+        "MOMENTUM_BUILD_PROFILE": "preview"
+      },
       "distribution": "internal",
       "android": {
         "buildType": "apk"
@@ -20,6 +28,10 @@
       "channel": "preview"
     },
     "production": {
+      "environment": "production",
+      "env": {
+        "MOMENTUM_BUILD_PROFILE": "production"
+      },
       "autoIncrement": true,
       "android": {
         "buildType": "apk"
