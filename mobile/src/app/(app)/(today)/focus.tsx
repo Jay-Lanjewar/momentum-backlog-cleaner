@@ -147,6 +147,7 @@ export default function FocusModeScreen() {
   const [appState, setAppState] = useState<AppStateStatus | null>(AppState.currentState);
   const [adaptiveResult, setAdaptiveResult] =
     useState<AdaptivePlanResponse | null>(null);
+  const [completedMinutes, setCompletedMinutes] = useState<number | null>(null);
   const [completionError, setCompletionError] = useState<string | null>(null);
   const [studyBuddyOpen, setStudyBuddyOpen] = useState(false);
   const [studyBuddyMessages, setStudyBuddyMessages] = useState<StudyBuddyMessage[]>([]);
@@ -325,9 +326,11 @@ export default function FocusModeScreen() {
     if (completingRef.current || completeSession.isPending) return;
     completingRef.current = true;
     setCompletionError(null);
+    // The backend validates reported minutes against the planned duration.
+    // A delayed JS timer tick must not round an automatic completion above it.
     const actualMinutes = Math.max(
       1,
-      Math.ceil(focusedElapsedMs / 60000),
+      Math.ceil(Math.min(focusedElapsedMs, totalDurationMs) / 60000),
     );
     void lifecycleQueueRef.current.then(() => {
       if (!leaseAcceptedRef.current) {
@@ -345,6 +348,7 @@ export default function FocusModeScreen() {
             completionSavedRef.current = true;
             leaseAcceptedRef.current = false;
             setLeaseReady(false);
+            setCompletedMinutes(actualMinutes);
             // Local "complete" only after the API succeeds
             complete();
             Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
@@ -365,7 +369,7 @@ export default function FocusModeScreen() {
         },
       );
     });
-  }, [complete, pause, focusedElapsedMs, sessionId, completeSession]);
+  }, [complete, pause, focusedElapsedMs, totalDurationMs, sessionId, completeSession]);
 
   // Auto-complete when timer reaches zero (skip if already saving or failed)
   useEffect(() => {
@@ -596,7 +600,8 @@ export default function FocusModeScreen() {
     );
 
     const hasChanges = adaptiveResult.changes.length > 0;
-    const focusedMinutes = Math.max(1, Math.ceil(focusedElapsedMs / 60000));
+    const focusedMinutes =
+      completedMinutes ?? Math.max(1, Math.ceil(focusedElapsedMs / 60000));
 
     const hasTimelines = previousSessions.length > 0 || currentSessions.length > 0;
 

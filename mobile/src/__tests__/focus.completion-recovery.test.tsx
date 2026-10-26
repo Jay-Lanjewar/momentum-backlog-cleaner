@@ -19,6 +19,8 @@ import { Alert, Animated, BackHandler } from "react-native";
 const mockReplace = jest.fn();
 const mockPush = jest.fn();
 const mockBack = jest.fn();
+let mockFocusedElapsedMs = 60_000;
+let mockSetFocusedElapsedMs: (value: number) => void = () => {};
 
 jest.mock("expo-router", () => ({
   useFocusEffect: jest.fn(),
@@ -64,7 +66,10 @@ jest.mock("@/hooks/useFocusLock", () => {
   return {
     useFocusLock: (totalDurationMs: number) => {
       const [phase, setPhase] = ReactModule.useState("focusing");
-      const focusedElapsedMs = 60_000;
+      const [focusedElapsedMs, setFocusedElapsedMs] = ReactModule.useState(
+        mockFocusedElapsedMs,
+      );
+      mockSetFocusedElapsedMs = setFocusedElapsedMs;
       const remainingMs = Math.max(0, totalDurationMs - focusedElapsedMs);
       return {
         phase,
@@ -225,6 +230,8 @@ async function triggerBackHandler() {
 }
 
 beforeEach(() => {
+  mockFocusedElapsedMs = 60_000;
+  mockSetFocusedElapsedMs = () => {};
   alertSpy.mockClear();
   backSpy.mockClear();
   mockReplace.mockClear();
@@ -280,6 +287,24 @@ describe("C1 - Leave is truthful", () => {
 });
 
 describe("C2 - Completion failure is recoverable", () => {
+  it.each([
+    [3_600_000, 60, "exact planned minute"],
+    [3_602_500, 60, "delayed timer tick"],
+  ])("auto-completion reports a valid duration for %s (%s)", async (elapsed, expected) => {
+    mockFocusedElapsedMs = elapsed as number;
+    await renderFocus();
+
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(mockMutate).toHaveBeenCalledWith(
+      expect.objectContaining({ actual_minutes: expected }),
+      expect.any(Object),
+    );
+  });
+
   it("successful Finish calls completeSession exactly once", async () => {
     await renderFocus();
     await pressFinishEarlyAndConfirm();
@@ -287,7 +312,40 @@ describe("C2 - Completion failure is recoverable", () => {
     expect(mockMutate).toHaveBeenCalledTimes(1);
     expect(mockMutate.mock.calls[0][0]).toMatchObject({
       session_id: "sess-1",
+      actual_minutes: 1,
     });
+  });
+
+  it("shows the submitted duration if elapsed time advances while completion is pending", async () => {
+    mockFocusedElapsedMs = 3_602_500;
+    await renderFocus();
+
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(mockMutate.mock.calls[0][0]).toMatchObject({ actual_minutes: 60 });
+
+    await act(async () => {
+      mockSetFocusedElapsedMs(3_660_000);
+    });
+
+    await act(async () => {
+      mockSetIsPending(false);
+      completeCallbacks.onSuccess?.(adaptiveSuccess);
+    });
+
+    expect(screen.getByText(/60 min/)).toBeTruthy();
+    expect(screen.queryByText(/61 min/)).toBeNull();
+  });
+
+  it("reports early completion using the submitted rounded duration", async () => {
+    mockFocusedElapsedMs = 90_000;
+    await renderFocus();
+    await pressFinishEarlyAndConfirm();
+
+    expect(mockMutate.mock.calls[0][0]).toMatchObject({ actual_minutes: 2 });
   });
 
   it("failed completion shows error/retry state (not stuck saving)", async () => {
