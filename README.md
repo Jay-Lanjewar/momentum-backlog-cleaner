@@ -16,7 +16,7 @@ into a practical study plan.
 
 Momentum's primary product experience is the **Android app**.
 
-📱 **[Download the latest Android APK](https://expo.dev/accounts/jay-lanjewar/projects/mobile/builds/be687db4-fb43-4206-9214-712c9b174b8c)**
+📱 **[Download the latest Android APK](https://expo.dev/artifacts/eas/ncyVhQhSa7GYC4ojKC9LU_0Or8fm2fDxKlmsZY6-EPE.apk)**
 
 The Android app is built with **React Native + Expo** and includes the complete student loop:
 
