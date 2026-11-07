@@ -1,18 +1,20 @@
 import { View, Text, StyleSheet } from "react-native";
 import { formatHourMinute } from "@/lib/coaching";
 import type { PlanChange } from "@/services/types";
+import { useTheme } from "@/theme/ThemeProvider";
 
 interface AdaptiveChangeRowProps {
   change: PlanChange;
 }
 
 export function AdaptiveChangeRow({ change }: AdaptiveChangeRowProps) {
+  const { colors } = useTheme();
   const isOverflow = change.change_type === "moved_to_overflow";
   const isRemoved = change.change_type === "removed";
   const isDanger = isOverflow || isRemoved;
 
-  const iconBg = isDanger ? "#78350F" : "#1E3A5F";
-  const iconColor = isDanger ? "#F0B429" : "#60A5FA";
+  const iconBg = isDanger ? colors.accentSoft : `${colors.info}20`;
+  const iconColor = isDanger ? colors.warning : colors.info;
   const iconSymbol = isDanger ? "clock" : "arrow";
 
   return (
@@ -23,12 +25,12 @@ export function AdaptiveChangeRow({ change }: AdaptiveChangeRowProps) {
         </Text>
       </View>
       <View style={styles.content}>
-        <Text style={styles.title} numberOfLines={1}>
+        <Text style={[styles.title, { color: colors.primaryText }]} numberOfLines={1}>
           {change.title}
         </Text>
         <View style={styles.timeRow}>
           {change.previous_start && change.previous_end && (
-            <Text style={styles.timePrevious}>
+            <Text style={[styles.timePrevious, { color: colors.mutedText }]}>
               {formatHourMinute(change.previous_start)} –{" "}
               {formatHourMinute(change.previous_end)}
             </Text>
@@ -36,17 +38,17 @@ export function AdaptiveChangeRow({ change }: AdaptiveChangeRowProps) {
           {change.previous_start &&
             change.previous_end &&
             (change.new_start || isOverflow || isRemoved) && (
-              <Text style={styles.timeArrow}>{" \u2192 "}</Text>
+              <Text style={[styles.timeArrow, { color: colors.mutedText }]}>{" \u2192 "}</Text>
             )}
           {change.new_start && change.new_end ? (
-            <Text style={styles.timeNew}>
+            <Text style={[styles.timeNew, { color: colors.primaryText }]}>
               {formatHourMinute(change.new_start)} –{" "}
               {formatHourMinute(change.new_end)}
             </Text>
           ) : isOverflow ? (
-            <Text style={styles.timeOverflow}>Next available day</Text>
+            <Text style={[styles.timeOverflow, { color: colors.warning }]}>Next available day</Text>
           ) : isRemoved ? (
-            <Text style={styles.timeRemoved}>Completed</Text>
+            <Text style={[styles.timeRemoved, { color: colors.mutedText }]}>Completed</Text>
           ) : null}
         </View>
       </View>

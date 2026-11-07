@@ -16,8 +16,10 @@ import { TodaySummaryCard } from "@/components/progress/TodaySummaryCard";
 import { WeeklyOverviewCard } from "@/components/progress/WeeklyOverviewCard";
 import { SubjectBreakdownCard } from "@/components/progress/SubjectBreakdownCard";
 import { ProgressStreakCard } from "@/components/progress/ProgressStreakCard";
+import { useTheme } from "@/theme/ThemeProvider";
 
 export default function ProgressScreen() {
+  const { colors } = useTheme();
   const { data, isLoading, refetch, isRefetching } = useAnalyticsProgress();
   const { data: dashboard } = useDashboard();
   const [retrying, setRetrying] = useState(false);
@@ -39,9 +41,9 @@ export default function ProgressScreen() {
 
   if (isLoading || (retrying && !data)) {
     return (
-      <SafeAreaView style={styles.container}>
+      <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
         <View style={styles.center}>
-          <ActivityIndicator size="large" color="#2563EB" />
+          <ActivityIndicator size="large" color={colors.accent} />
         </View>
       </SafeAreaView>
     );
@@ -49,16 +51,16 @@ export default function ProgressScreen() {
 
   if (!data) {
     return (
-      <SafeAreaView style={styles.container}>
+      <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
         <View style={styles.center}>
-          <Text style={styles.emptyText}>Could not load progress data.</Text>
+          <Text style={[styles.emptyText, { color: colors.secondaryText }]}>Could not load progress data.</Text>
           <TouchableOpacity
             onPress={handleRetry}
             disabled={retrying}
-            style={styles.retryButton}
+            style={[styles.retryButton, { backgroundColor: colors.accent }]}
             activeOpacity={0.8}
           >
-            <Text style={styles.retryText}>Retry</Text>
+            <Text style={[styles.retryText, { color: colors.accentForeground }]}>Retry</Text>
           </TouchableOpacity>
         </View>
       </SafeAreaView>
@@ -66,14 +68,14 @@ export default function ProgressScreen() {
   }
 
   return (
-    <SafeAreaView style={styles.container} edges={["bottom"]}>
+    <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]} edges={["bottom"]}>
       <ScrollView
         contentContainerStyle={styles.scrollContent}
         refreshControl={
-          <RefreshControl refreshing={isRefetching} onRefresh={refetch} />
+          <RefreshControl refreshing={isRefetching} onRefresh={refetch} tintColor={colors.accent} colors={[colors.accent]} />
         }
       >
-        <Text style={styles.header}>Progress</Text>
+        <Text style={[styles.header, { color: colors.primaryText }]}>Progress</Text>
 
         <TodaySummaryCard today={data.today} dailyTarget={dailyTarget} />
         <WeeklyOverviewCard week={data.week} />

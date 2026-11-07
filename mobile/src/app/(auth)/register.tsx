@@ -19,12 +19,14 @@ import { loadAuthMe } from "@/hooks/useAuth";
 import { useAuthStore } from "@/store/useAuthStore";
 import { isValidEmail, passwordStrength } from "@/lib/onboarding";
 import type { AuthResponse } from "@/services/types";
+import { useTheme } from "@/theme/ThemeProvider";
 
 /** Deep link the verification email returns to. */
 const emailRedirectTo = "momentum://confirm";
 
 export default function RegisterScreen() {
   const router = useRouter();
+  const { colors } = useTheme();
   const meError = useAuthStore((s) => s.meError);
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
@@ -124,7 +126,7 @@ export default function RegisterScreen() {
   }
 
   return (
-    <SafeAreaView style={styles.container}>
+    <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
       <KeyboardAvoidingView
         behavior={Platform.OS === "ios" ? "padding" : "height"}
         style={styles.flex}
@@ -134,26 +136,26 @@ export default function RegisterScreen() {
           keyboardShouldPersistTaps="handled"
         >
           <View style={styles.header}>
-            <Text style={styles.title}>Create Account</Text>
-            <Text style={styles.subtitle}>Start building your momentum.</Text>
+            <Text style={[styles.title, { color: colors.primaryText }]}>Create Account</Text>
+            <Text style={[styles.subtitle, { color: colors.secondaryText }]}>Start building your momentum.</Text>
           </View>
 
           {accountExists && !error ? (
-            <View style={styles.errorBox} testID="register-account-exists">
-              <Text style={styles.noticeTitle}>You already have an account</Text>
-              <Text style={styles.errorText}>
+            <View style={[styles.errorBox, { backgroundColor: colors.accentSoft, borderColor: colors.border }]} testID="register-account-exists">
+              <Text style={[styles.noticeTitle, { color: colors.error }]}>You already have an account</Text>
+              <Text style={[styles.errorText, { color: colors.error }]}>
                 An account with {trimmedEmail} already exists. Sign in to
                 continue, or reset your password if you&apos;ve forgotten it.
               </Text>
               <TouchableOpacity
-                style={styles.retryButton}
+                style={[styles.retryButton, { backgroundColor: colors.inputBackground, borderColor: colors.border }]}
                 onPress={() => router.replace("/(auth)/login")}
                 accessibilityRole="button"
                 accessibilityLabel="Sign in to your existing account"
                 testID="register-account-exists-signin"
                 activeOpacity={0.8}
               >
-                <Text style={styles.retryButtonText}>Sign in</Text>
+                <Text style={[styles.retryButtonText, { color: colors.accentText }]}>Sign in</Text>
               </TouchableOpacity>
               <TouchableOpacity
                 style={styles.noticeLink}
@@ -163,20 +165,20 @@ export default function RegisterScreen() {
                 testID="register-account-exists-reset"
                 activeOpacity={0.8}
               >
-                <Text style={styles.noticeLinkText}>Forgot password?</Text>
+                <Text style={[styles.noticeLinkText, { color: colors.accentText }]}>Forgot password?</Text>
               </TouchableOpacity>
             </View>
           ) : null}
 
           {error ? (
-            <View style={styles.errorBox} testID="register-error">
-              <Text style={styles.errorText}>{error}</Text>
+            <View style={[styles.errorBox, { backgroundColor: `${colors.error}15`, borderColor: `${colors.error}55` }]} testID="register-error">
+              <Text style={[styles.errorText, { color: colors.error }]}>{error}</Text>
             </View>
           ) : null}
 
           {meError && !error && !accountExists ? (
-            <View style={styles.errorBox} testID="register-me-error">
-              <Text style={styles.errorText}>{meError}</Text>
+            <View style={[styles.errorBox, { backgroundColor: `${colors.error}15`, borderColor: `${colors.error}55` }]} testID="register-me-error">
+              <Text style={[styles.errorText, { color: colors.error }]}>{meError}</Text>
               <TouchableOpacity
                 style={styles.retryButton}
                 onPress={handleRetryMe}
@@ -184,45 +186,45 @@ export default function RegisterScreen() {
                 activeOpacity={0.8}
               >
                 {retrying ? (
-                  <ActivityIndicator color="#2563EB" size="small" />
+                  <ActivityIndicator color={colors.accent} size="small" />
                 ) : (
-                  <Text style={styles.retryButtonText}>Retry</Text>
+                  <Text style={[styles.retryButtonText, { color: colors.accentText }]}>Retry</Text>
                 )}
               </TouchableOpacity>
             </View>
           ) : null}
 
           <View style={styles.form}>
-            <Text style={styles.label}>Full Name</Text>
+            <Text style={[styles.label, { color: colors.secondaryText }]}>Full Name</Text>
             <TextInput
-              style={styles.input}
+              style={[styles.input, { backgroundColor: colors.inputBackground, borderColor: colors.border, color: colors.primaryText }]}
               value={name}
               onChangeText={setName}
               placeholder="Your name"
-              placeholderTextColor="#999"
+              placeholderTextColor={colors.placeholder}
               autoComplete="name"
               maxLength={25}
             />
 
-            <Text style={styles.label}>Email</Text>
+            <Text style={[styles.label, { color: colors.secondaryText }]}>Email</Text>
             <TextInput
-              style={styles.input}
+              style={[styles.input, { backgroundColor: colors.inputBackground, borderColor: colors.border, color: colors.primaryText }]}
               value={email}
               onChangeText={setEmail}
               placeholder="you@example.com"
-              placeholderTextColor="#999"
+              placeholderTextColor={colors.placeholder}
               autoCapitalize="none"
               keyboardType="email-address"
               autoComplete="email"
             />
 
-            <Text style={styles.label}>Password</Text>
+            <Text style={[styles.label, { color: colors.secondaryText }]}>Password</Text>
             <TextInput
-              style={styles.input}
+              style={[styles.input, { backgroundColor: colors.inputBackground, borderColor: colors.border, color: colors.primaryText }]}
               value={password}
               onChangeText={setPassword}
               placeholder="Min 8 characters"
-              placeholderTextColor="#999"
+              placeholderTextColor={colors.placeholder}
               secureTextEntry
               autoComplete="new-password"
             />
@@ -232,30 +234,30 @@ export default function RegisterScreen() {
               </Text>
             ) : null}
 
-            <Text style={styles.label}>Confirm Password</Text>
+            <Text style={[styles.label, { color: colors.secondaryText }]}>Confirm Password</Text>
             <TextInput
-              style={styles.input}
+              style={[styles.input, { backgroundColor: colors.inputBackground, borderColor: colors.border, color: colors.primaryText }]}
               value={confirm}
               onChangeText={setConfirm}
               placeholder="Re-enter password"
-              placeholderTextColor="#999"
+              placeholderTextColor={colors.placeholder}
               secureTextEntry
               autoComplete="new-password"
             />
             {confirm.length > 0 && password !== confirm ? (
-              <Text style={styles.errorSmall}>Passwords do not match</Text>
+              <Text style={[styles.errorSmall, { color: colors.error }]}>Passwords do not match</Text>
             ) : null}
 
             <TouchableOpacity
-              style={[styles.button, !canSubmit && styles.buttonDisabled]}
+              style={[styles.button, { backgroundColor: colors.accent }, !canSubmit && styles.buttonDisabled]}
               onPress={handleRegister}
               disabled={!canSubmit}
               activeOpacity={0.8}
             >
               {loading ? (
-                <ActivityIndicator color="#fff" />
+                <ActivityIndicator color={colors.accentForeground} />
               ) : (
-                <Text style={styles.buttonText}>Create Account</Text>
+                <Text style={[styles.buttonText, { color: colors.accentForeground }]}>Create Account</Text>
               )}
             </TouchableOpacity>
           </View>
@@ -264,8 +266,8 @@ export default function RegisterScreen() {
             style={styles.linkRow}
             onPress={() => router.replace("/(auth)/login")}
           >
-            <Text style={styles.linkText}>
-              Already have an account? <Text style={styles.linkBold}>Sign in</Text>
+            <Text style={[styles.linkText, { color: colors.secondaryText }]}>
+              Already have an account? <Text style={[styles.linkBold, { color: colors.accentText }]}>Sign in</Text>
             </Text>
           </TouchableOpacity>
         </ScrollView>

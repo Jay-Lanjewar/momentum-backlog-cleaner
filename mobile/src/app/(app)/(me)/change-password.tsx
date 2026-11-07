@@ -17,6 +17,7 @@ import { MeHeader } from "@/components/MeHeader";
 import { supabase } from "@/lib/supabase";
 import { passwordStrength } from "@/lib/onboarding";
 import { friendlyMfaError } from "@/lib/mfa";
+import { useTheme } from "@/theme/ThemeProvider";
 
 function errorCodeOf(error: unknown): string | null {
   if (typeof error === "object" && error !== null && "code" in error) {
@@ -42,6 +43,7 @@ function friendlyUpdateError(error: unknown): string {
 }
 
 export default function ChangePasswordScreen() {
+  const { colors } = useTheme();
   const router = useRouter();
   const [password, setPassword] = useState("");
   const [confirm, setConfirm] = useState("");
@@ -87,7 +89,7 @@ export default function ChangePasswordScreen() {
   }
 
   return (
-    <SafeAreaView style={styles.container} edges={["bottom"]}>
+    <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]} edges={["bottom"]}>
       <KeyboardAvoidingView
         behavior={Platform.OS === "ios" ? "padding" : "height"}
         style={styles.flex}
@@ -98,18 +100,18 @@ export default function ChangePasswordScreen() {
         >
           <MeHeader screen="change-password" title="Change Password" />
 
-          <Text style={styles.intro}>
+          <Text style={[styles.intro, { color: colors.secondaryText }]}>
             Choose a new password for your account.
           </Text>
 
-          <Text style={styles.label}>New Password</Text>
-          <View style={styles.inputRow}>
+          <Text style={[styles.label, { color: colors.secondaryText }]}>New Password</Text>
+          <View style={[styles.inputRow, { backgroundColor: colors.inputBackground, borderColor: colors.border }]}>
             <TextInput
-              style={styles.input}
+              style={[styles.input, { color: colors.primaryText }]}
               value={password}
               onChangeText={setPassword}
               placeholder="Min 8 characters"
-              placeholderTextColor="#64748B"
+              placeholderTextColor={colors.placeholder}
               secureTextEntry={!showPassword}
               autoComplete="new-password"
               autoCapitalize="none"
@@ -124,7 +126,7 @@ export default function ChangePasswordScreen() {
               }
               testID="change-password-toggle-new"
             >
-              <Text style={styles.toggleText}>
+              <Text style={[styles.toggleText, { color: colors.accentText }]}>
                 {showPassword ? "Hide" : "Show"}
               </Text>
             </TouchableOpacity>
@@ -138,19 +140,19 @@ export default function ChangePasswordScreen() {
             </Text>
           ) : null}
           {password.length > 0 && password.length < 8 ? (
-            <Text style={styles.hintError} testID="change-password-short">
+            <Text style={[styles.hintError, { color: colors.error }]} testID="change-password-short">
               Password must be at least 8 characters
             </Text>
           ) : null}
 
-          <Text style={styles.label}>Confirm New Password</Text>
-          <View style={styles.inputRow}>
+          <Text style={[styles.label, { color: colors.secondaryText }]}>Confirm New Password</Text>
+          <View style={[styles.inputRow, { backgroundColor: colors.inputBackground, borderColor: colors.border }]}>
             <TextInput
-              style={styles.input}
+              style={[styles.input, { color: colors.primaryText }]}
               value={confirm}
               onChangeText={setConfirm}
               placeholder="Re-enter password"
-              placeholderTextColor="#64748B"
+              placeholderTextColor={colors.placeholder}
               secureTextEntry={!showConfirm}
               autoComplete="new-password"
               autoCapitalize="none"
@@ -165,31 +167,31 @@ export default function ChangePasswordScreen() {
               }
               testID="change-password-toggle-confirm"
             >
-              <Text style={styles.toggleText}>
+              <Text style={[styles.toggleText, { color: colors.accentText }]}>
                 {showConfirm ? "Hide" : "Show"}
               </Text>
             </TouchableOpacity>
           </View>
           {password.length > 0 && password !== confirm ? (
-            <Text style={styles.hintError} testID="change-password-mismatch">
+            <Text style={[styles.hintError, { color: colors.error }]} testID="change-password-mismatch">
               Passwords do not match
             </Text>
           ) : null}
 
           {error ? (
-            <Text style={styles.errorText} testID="change-password-error">
+            <Text style={[styles.errorText, { color: colors.error }]} testID="change-password-error">
               {error}
             </Text>
           ) : null}
 
           {success ? (
-            <View style={styles.successBox} testID="change-password-success">
-              <Text style={styles.successText}>Password updated</Text>
+            <View style={[styles.successBox, { backgroundColor: `${colors.success}20`, borderColor: colors.success }]} testID="change-password-success">
+              <Text style={[styles.successText, { color: colors.success }]}>Password updated</Text>
             </View>
           ) : null}
 
           <TouchableOpacity
-            style={[styles.button, !canSubmit && styles.buttonDisabled]}
+            style={[styles.button, { backgroundColor: colors.accent }, !canSubmit && styles.buttonDisabled]}
             onPress={handleSubmit}
             disabled={!canSubmit}
             activeOpacity={0.8}
@@ -199,9 +201,9 @@ export default function ChangePasswordScreen() {
             testID="change-password-submit"
           >
             {loading ? (
-              <ActivityIndicator color="#FFF" />
+              <ActivityIndicator color={colors.accentForeground} />
             ) : (
-              <Text style={styles.buttonText}>Update password</Text>
+              <Text style={[styles.buttonText, { color: colors.accentForeground }]}>Update password</Text>
             )}
           </TouchableOpacity>
         </ScrollView>

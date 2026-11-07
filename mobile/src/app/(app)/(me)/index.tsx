@@ -4,8 +4,10 @@ import { SafeAreaView } from "react-native-safe-area-context";
 
 import { useAuthStore } from "@/store/useAuthStore";
 import { useProfile, useStreaks, useBalanceScore } from "@/services/hooks";
+import { useTheme } from "@/theme/ThemeProvider";
 
 export default function ProfileScreen() {
+  const { colors } = useTheme();
   const router = useRouter();
   const { user } = useAuthStore();
   const { data: profile } = useProfile();
@@ -21,78 +23,78 @@ export default function ProfileScreen() {
   const balanceScore = balance?.score ?? null;
 
   return (
-    <SafeAreaView style={styles.container} edges={["bottom"]}>
+    <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]} edges={["bottom"]}>
       <ScrollView contentContainerStyle={styles.scroll}>
-        <Text style={styles.header}>Me</Text>
+        <Text style={[styles.header, { color: colors.primaryText }]}>Me</Text>
 
-        <View style={styles.profileCard}>
-          <View style={styles.avatar}>
-            <Text style={styles.avatarText}>{initials}</Text>
+        <View style={[styles.profileCard, { backgroundColor: colors.card }]}>
+          <View style={[styles.avatar, { backgroundColor: colors.accent }]}>
+            <Text style={[styles.avatarText, { color: colors.accentForeground }]}>{initials}</Text>
           </View>
-          <Text style={styles.name}>{displayName}</Text>
+          <Text style={[styles.name, { color: colors.primaryText }]}>{displayName}</Text>
           {(className || board) && (
-            <Text style={styles.subtitle}>
+            <Text style={[styles.subtitle, { color: colors.mutedText }]}>
               {[className, board].filter(Boolean).join(" \u00B7 ")}
             </Text>
           )}
         </View>
 
         <View style={styles.summaryRow}>
-          <View style={styles.summaryCard}>
-            <Text style={styles.summaryValue}>{currentStreak}</Text>
-            <Text style={styles.summaryLabel}>Day Streak</Text>
+          <View style={[styles.summaryCard, { backgroundColor: colors.card }]}>
+            <Text style={[styles.summaryValue, { color: colors.primaryText }]}>{currentStreak}</Text>
+            <Text style={[styles.summaryLabel, { color: colors.mutedText }]}>Day Streak</Text>
           </View>
-          <View style={styles.summaryCard}>
-            <Text style={styles.summaryValue}>
+          <View style={[styles.summaryCard, { backgroundColor: colors.card }]}>
+            <Text style={[styles.summaryValue, { color: colors.primaryText }]}>
               {balanceScore != null ? `${balanceScore}%` : "--"}
             </Text>
-            <Text style={styles.summaryLabel}>Balance</Text>
+            <Text style={[styles.summaryLabel, { color: colors.mutedText }]}>Balance</Text>
           </View>
-          <View style={styles.summaryCard}>
-            <Text style={styles.summaryValue}>
+          <View style={[styles.summaryCard, { backgroundColor: colors.card }]}>
+            <Text style={[styles.summaryValue, { color: colors.primaryText }]}>
               {streaks?.momentum?.total_study_days ?? 0}
             </Text>
-            <Text style={styles.summaryLabel}>Total Days</Text>
+            <Text style={[styles.summaryLabel, { color: colors.mutedText }]}>Total Days</Text>
           </View>
         </View>
 
         <View style={styles.section}>
-          <Text style={styles.sectionHeader}>Account</Text>
+          <Text style={[styles.sectionHeader, { color: colors.mutedText }]}>Account</Text>
           <TouchableOpacity
-            style={styles.row}
+            style={[styles.row, { backgroundColor: colors.card }]}
             activeOpacity={0.6}
             onPress={() => router.push("/(me)/profile")}
           >
-            <Text style={styles.rowText}>Profile</Text>
-            <Text style={styles.arrow}>{"\u2192"}</Text>
+            <Text style={[styles.rowText, { color: colors.primaryText }]}>Profile</Text>
+            <Text style={[styles.arrow, { color: colors.mutedText }]}>{"\u2192"}</Text>
           </TouchableOpacity>
           <TouchableOpacity
-            style={styles.row}
+            style={[styles.row, { backgroundColor: colors.card }]}
             activeOpacity={0.6}
             onPress={() => router.push("/(me)/settings")}
           >
-            <Text style={styles.rowText}>Settings</Text>
-            <Text style={styles.arrow}>{"\u2192"}</Text>
+            <Text style={[styles.rowText, { color: colors.primaryText }]}>Settings</Text>
+            <Text style={[styles.arrow, { color: colors.mutedText }]}>{"\u2192"}</Text>
           </TouchableOpacity>
         </View>
 
         <View style={styles.section}>
-          <Text style={styles.sectionHeader}>Progress & Health</Text>
+          <Text style={[styles.sectionHeader, { color: colors.mutedText }]}>Progress & Health</Text>
           <TouchableOpacity
-            style={styles.row}
+            style={[styles.row, { backgroundColor: colors.card }]}
             activeOpacity={0.6}
             onPress={() => router.push("/(me)/streaks")}
           >
-            <Text style={styles.rowText}>Streaks</Text>
-            <Text style={styles.arrow}>{"\u2192"}</Text>
+            <Text style={[styles.rowText, { color: colors.primaryText }]}>Streaks</Text>
+            <Text style={[styles.arrow, { color: colors.mutedText }]}>{"\u2192"}</Text>
           </TouchableOpacity>
           <TouchableOpacity
-            style={styles.row}
+            style={[styles.row, { backgroundColor: colors.card }]}
             activeOpacity={0.6}
             onPress={() => router.push("/(me)/health")}
           >
-            <Text style={styles.rowText}>Health</Text>
-            <Text style={styles.arrow}>{"\u2192"}</Text>
+            <Text style={[styles.rowText, { color: colors.primaryText }]}>Health</Text>
+            <Text style={[styles.arrow, { color: colors.mutedText }]}>{"\u2192"}</Text>
           </TouchableOpacity>
         </View>
       </ScrollView>

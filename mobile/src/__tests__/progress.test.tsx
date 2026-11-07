@@ -11,7 +11,9 @@
  * 7. ProgressStreakCard milestone chips reflect achieved state
  */
 
-import { render, screen } from "@testing-library/react-native";
+import { act, render, screen } from "@testing-library/react-native";
+import { StyleSheet } from "react-native";
+import { usePreferencesStore } from "@/store/usePreferencesStore";
 
 import { TodaySummaryCard } from "@/components/progress/TodaySummaryCard";
 import { WeeklyOverviewCard } from "@/components/progress/WeeklyOverviewCard";
@@ -22,6 +24,23 @@ jest.mock("react-native-safe-area-context", () => ({
   SafeAreaView: ({ children, ...props }: any) =>
     require("react").createElement("SafeAreaView", props, children),
 }));
+
+jest.mock("@/services/hooks", () => ({
+  useAnalyticsProgress: () => ({
+    data: {
+      today: { study_minutes: 60, sessions_completed: 2, estimated_minutes: 60 },
+      week: { daily: [], total_study_minutes: 60, total_sessions: 2, total_estimated_minutes: 60 },
+      subjects: [],
+      streaks: { current: 2, best: 2, total_study_days: 2, milestones: [] },
+    },
+    isLoading: false,
+    isRefetching: false,
+    refetch: jest.fn(),
+  }),
+  useDashboard: () => ({ data: { profile: { daily_target_minutes: 60 } } }),
+}));
+
+const ProgressScreen = require("@/app/(app)/(progress)/index").default;
 
 // ─── TodaySummaryCard ───
 
@@ -39,9 +58,34 @@ describe("TodaySummaryCard", () => {
     expect(screen.getByText("75%")).toBeTruthy();
   });
 
+  describe("Progress screen theme", () => {
+    it("renders the screen background and heading from the active light accent theme", async () => {
+      usePreferencesStore.setState({
+        appearance: "light",
+        accent: "rose",
+        hydrationStatus: "ready",
+      });
+      const view = await render(<ProgressScreen />);
+
+      expect(StyleSheet.flatten(view.getByText("Progress").props.style)).toEqual(
+        expect.objectContaining({ color: "#0F172A" }),
+      );
+      await act(async () => {
+        usePreferencesStore.setState({
+          appearance: "dark",
+          accent: "blue",
+          hydrationStatus: "ready",
+        });
+      });
+    });
+  });
+
   it("renders target progress bar when dailyTarget provided", async () => {
-    await render(<TodaySummaryCard today={mockToday} dailyTarget={180} />);
+    const view = await render(<TodaySummaryCard today={mockToday} dailyTarget={180} />);
     expect(screen.getByText("1h 30m / 3h target")).toBeTruthy();
+    expect(view.getByTestId("today-target-fill").props.style).toEqual(
+      expect.arrayContaining([expect.objectContaining({ backgroundColor: "#2563EB" })]),
+    );
   });
 
   it("hides target bar when dailyTarget is null", async () => {

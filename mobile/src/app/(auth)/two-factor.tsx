@@ -17,6 +17,7 @@ import { supabase } from "@/lib/supabase";
 import { useAuthStore } from "@/store/useAuthStore";
 import { loadAuthMe } from "@/hooks/useAuth";
 import { challengeErrorCopy, isValidTotpCode } from "@/lib/mfa";
+import { useTheme } from "@/theme/ThemeProvider";
 
 /**
  * Login-time 2-step verification. Reached only via the AuthGate when the
@@ -26,6 +27,7 @@ import { challengeErrorCopy, isValidTotpCode } from "@/lib/mfa";
  */
 export default function TwoFactorScreen() {
   const router = useRouter();
+  const { colors } = useTheme();
   const factorId = useAuthStore((s) => s.mfaFactorId);
   const meError = useAuthStore((s) => s.meError);
   const setMeError = useAuthStore((s) => s.setMeError);
@@ -103,7 +105,7 @@ export default function TwoFactorScreen() {
   const canVerify = isValidTotpCode(code) && !!factorId && !busy;
 
   return (
-    <SafeAreaView style={styles.container}>
+    <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
       <KeyboardAvoidingView
         behavior={Platform.OS === "ios" ? "padding" : "height"}
         style={styles.flex}
@@ -113,24 +115,24 @@ export default function TwoFactorScreen() {
           keyboardShouldPersistTaps="handled"
         >
           <View style={styles.header}>
-            <Text style={styles.title}>Two-step verification</Text>
-            <Text style={styles.subtitle}>
+            <Text style={[styles.title, { color: colors.primaryText }]}>Two-step verification</Text>
+            <Text style={[styles.subtitle, { color: colors.secondaryText }]}>
               Open your authenticator app and enter the 6-digit code for
               Momentum.
             </Text>
           </View>
 
           {error ? (
-            <View style={styles.errorBox} testID="two-factor-error">
-              <Text style={styles.errorText}>{error}</Text>
+            <View style={[styles.errorBox, { backgroundColor: `${colors.error}15`, borderColor: `${colors.error}55` }]} testID="two-factor-error">
+              <Text style={[styles.errorText, { color: colors.error }]}>{error}</Text>
             </View>
           ) : null}
 
           {meError ? (
-            <View style={styles.meErrorBox} testID="two-factor-me-error">
-              <Text style={styles.meErrorText}>{meError}</Text>
+            <View style={[styles.meErrorBox, { backgroundColor: `${colors.error}15`, borderColor: `${colors.error}55` }]} testID="two-factor-me-error">
+              <Text style={[styles.meErrorText, { color: colors.error }]}>{meError}</Text>
               <TouchableOpacity
-                style={styles.retryButton}
+                style={[styles.retryButton, { backgroundColor: colors.accentSoft, borderColor: colors.border }]}
                 onPress={() => void handleMeRetry()}
                 disabled={retrying}
                 activeOpacity={0.8}
@@ -139,22 +141,22 @@ export default function TwoFactorScreen() {
                 testID="two-factor-me-retry"
               >
                 {retrying ? (
-                  <ActivityIndicator color="#2563EB" size="small" />
+                  <ActivityIndicator color={colors.accent} size="small" />
                 ) : (
-                  <Text style={styles.retryButtonText}>Retry</Text>
+                  <Text style={[styles.retryButtonText, { color: colors.accentText }]}>Retry</Text>
                 )}
               </TouchableOpacity>
             </View>
           ) : null}
 
           <View style={styles.form}>
-            <Text style={styles.label}>6-digit code</Text>
+            <Text style={[styles.label, { color: colors.secondaryText }]}>6-digit code</Text>
             <TextInput
-              style={styles.codeInput}
+              style={[styles.codeInput, { backgroundColor: colors.inputBackground, borderColor: colors.border, color: colors.primaryText }]}
               value={code}
               onChangeText={setCode}
               placeholder="123456"
-              placeholderTextColor="#999"
+              placeholderTextColor={colors.placeholder}
               keyboardType="number-pad"
               maxLength={6}
               editable={!busy}
@@ -163,7 +165,7 @@ export default function TwoFactorScreen() {
             />
 
             <TouchableOpacity
-              style={[styles.button, !canVerify && styles.buttonDisabled]}
+              style={[styles.button, { backgroundColor: colors.accent }, !canVerify && styles.buttonDisabled]}
               onPress={() => void handleVerify()}
               disabled={!canVerify}
               activeOpacity={0.8}
@@ -172,9 +174,9 @@ export default function TwoFactorScreen() {
               testID="two-factor-verify"
             >
               {busy ? (
-                <ActivityIndicator color="#fff" />
+                <ActivityIndicator color={colors.accentForeground} />
               ) : (
-                <Text style={styles.buttonText}>Verify</Text>
+                <Text style={[styles.buttonText, { color: colors.accentForeground }]}>Verify</Text>
               )}
             </TouchableOpacity>
 
@@ -186,7 +188,7 @@ export default function TwoFactorScreen() {
               accessibilityLabel="Back to sign in"
               testID="two-factor-back"
             >
-              <Text style={styles.backText}>Back to sign in</Text>
+              <Text style={[styles.backText, { color: colors.accentText }]}>Back to sign in</Text>
             </TouchableOpacity>
           </View>
         </ScrollView>

@@ -6,7 +6,6 @@ import {
   TouchableOpacity,
   StyleSheet,
   RefreshControl,
-  ActivityIndicator,
   Modal,
   KeyboardAvoidingView,
   Platform,
@@ -27,6 +26,7 @@ import {
 } from "@/services/notifications";
 import type { BacklogItem, PlanChange, PlanSession } from "@/services/types";
 import { BacklogForm } from "@/components/BacklogForm";
+import { useTheme } from "@/theme/ThemeProvider";
 import {
   difficultyFromPriority,
   courseMapFromList,
@@ -87,6 +87,7 @@ function BacklogCard({
   onToggleComplete: (item: BacklogItem) => void;
   onPress: (item: BacklogItem) => void;
 }) {
+  const { colors } = useTheme();
   const isCompleted = item.status === "completed";
   const diff = difficultyFromPriority(item.priority);
   const overdue = !isCompleted && isOverdue(item.due_date);
@@ -95,7 +96,11 @@ function BacklogCard({
 
   return (
     <TouchableOpacity
-      style={[styles.card, isCompleted && styles.cardCompleted]}
+      style={[
+        styles.card,
+        { backgroundColor: colors.card, borderColor: colors.border },
+        isCompleted && styles.cardCompleted,
+      ]}
       onPress={() => onPress(item)}
       activeOpacity={0.7}
     >
@@ -106,17 +111,22 @@ function BacklogCard({
         testID={`completion-toggle-${item.id}`}
       >
         {isCompleted ? (
-          <View style={styles.circleFilled}>
-            <Text style={styles.checkmark}>{"\u2713"}</Text>
+          <View style={[styles.circleFilled, { backgroundColor: colors.success }]}>
+          <Text style={[styles.checkmark, { color: colors.accentForeground }]}>{"\u2713"}</Text>
           </View>
         ) : (
-          <View style={styles.circleEmpty} />
+          <View style={[styles.circleEmpty, { borderColor: colors.border }]} />
         )}
       </TouchableOpacity>
 
       <View style={styles.cardContent}>
         <Text
-          style={[styles.cardTitle, isCompleted && styles.cardTitleCompleted]}
+          style={[
+            styles.cardTitle,
+            { color: colors.primaryText },
+            isCompleted && { color: colors.mutedText },
+            isCompleted && styles.cardTitleCompleted,
+          ]}
           numberOfLines={2}
         >
           {item.title}
@@ -137,12 +147,12 @@ function BacklogCard({
 
         <View style={styles.cardBottom}>
           {item.due_date ? (
-            <Text style={[styles.dueText, overdue && styles.dueOverdue]}>
+            <Text style={[styles.dueText, { color: colors.mutedText }, overdue && styles.dueOverdue]}>
               {overdue ? "Overdue" : `Due ${formatDueDate(item.due_date)}`}
             </Text>
           ) : null}
           {item.estimated_minutes ? (
-            <Text style={styles.estText}>
+            <Text style={[styles.estText, { color: colors.mutedText }]}>
               {"\u23F1"} {formatMinutes(item.estimated_minutes)}
             </Text>
           ) : null}
@@ -170,6 +180,7 @@ function planChangeForCompletedSession(
 }
 
 export default function BacklogScreen() {
+  const { colors } = useTheme();
   const router = useRouter();
   const [activeTab, setActiveTab] = useState<TabValue>("all");
   const [showCreate, setShowCreate] = useState(false);
@@ -255,21 +266,21 @@ export default function BacklogScreen() {
   const empty = EMPTY_MESSAGES[activeTab];
 
   return (
-    <SafeAreaView style={styles.container} edges={["top"]}>
+    <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]} edges={["top"]}>
       {/* Header */}
       <View style={styles.header}>
         <View style={styles.headerLeft}>
-          <Text style={styles.headerTitle}>Work</Text>
-          <Text style={styles.headerSubtitle}>
+          <Text style={[styles.headerTitle, { color: colors.primaryText }]}>Work</Text>
+          <Text style={[styles.headerSubtitle, { color: colors.mutedText }]}>
             Momentum turns these into study sessions automatically.
           </Text>
         </View>
         <TouchableOpacity
-          style={styles.addButton}
+          style={[styles.addButton, { backgroundColor: colors.accent }]}
           onPress={() => setShowCreate(true)}
           activeOpacity={0.8}
         >
-          <Text style={styles.addButtonText}>+ Add Work</Text>
+          <Text style={[styles.addButtonText, { color: colors.accentForeground }]}>+ Add Work</Text>
         </TouchableOpacity>
       </View>
 
@@ -278,9 +289,14 @@ export default function BacklogScreen() {
         {SECTION_TABS.map((tab) => (
           <TouchableOpacity
             key={tab.value}
+            testID={`work-section-tab-${tab.value}`}
             style={[
               styles.sectionTab,
-              tab.value === "backlog" && styles.sectionTabActive,
+              { backgroundColor: colors.tabBar },
+              tab.value === "backlog" && {
+                backgroundColor: colors.accentSoft,
+                borderColor: colors.accent,
+              },
             ]}
             onPress={() => {
               if (tab.value === "courses") router.push("/(app)/(work)/courses");
@@ -291,7 +307,11 @@ export default function BacklogScreen() {
             <Text
               style={[
                 styles.sectionTabText,
-                tab.value === "backlog" && styles.sectionTabTextActive,
+                { color: colors.mutedText },
+                tab.value === "backlog" && {
+                  color: colors.accentSoftForeground,
+                  fontWeight: "600",
+                },
               ]}
             >
               {tab.label}
@@ -301,18 +321,32 @@ export default function BacklogScreen() {
       </View>
 
       {/* Tabs */}
-      <View style={styles.tabBar}>
+      <View
+        testID="work-filter-bar"
+        style={[
+          styles.tabBar,
+          { backgroundColor: colors.tabBar, borderColor: colors.tabBarBorder },
+        ]}
+      >
         {TABS.map((tab) => (
           <TouchableOpacity
             key={tab.value}
-            style={[styles.tab, activeTab === tab.value && styles.tabActive]}
+            testID={`work-filter-${tab.value}`}
+            style={[
+              styles.tab,
+              { backgroundColor: colors.tabBar },
+              activeTab === tab.value && {
+                backgroundColor: colors.accentSoft,
+              },
+            ]}
             onPress={() => setActiveTab(tab.value)}
             activeOpacity={0.7}
           >
             <Text
               style={[
                 styles.tabText,
-                activeTab === tab.value && styles.tabTextActive,
+                { color: colors.mutedText },
+                activeTab === tab.value && { color: colors.accentSoftForeground },
               ]}
             >
               {tab.label}
@@ -325,26 +359,26 @@ export default function BacklogScreen() {
       {isLoading ? (
         <View style={styles.loadingContainer}>
           {[1, 2, 3].map((n) => (
-            <View key={n} style={styles.skeletonCard}>
-              <View style={styles.skeletonCircle} />
+            <View key={n} style={[styles.skeletonCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
+              <View style={[styles.skeletonCircle, { backgroundColor: colors.pressed }]} />
               <View style={styles.skeletonContent}>
-                <View style={styles.skeletonLine} />
-                <View style={[styles.skeletonLine, { width: "60%" }]} />
+                <View style={[styles.skeletonLine, { backgroundColor: colors.pressed }]} />
+                <View style={[styles.skeletonLine, { width: "60%", backgroundColor: colors.pressed }]} />
               </View>
             </View>
           ))}
         </View>
       ) : items.length === 0 ? (
         <View style={styles.emptyContainer}>
-          <Text style={styles.emptyTitle}>{empty.title}</Text>
-          <Text style={styles.emptyBody}>{empty.body}</Text>
+          <Text style={[styles.emptyTitle, { color: colors.primaryText }]}>{empty.title}</Text>
+          <Text style={[styles.emptyBody, { color: colors.mutedText }]}>{empty.body}</Text>
           {activeTab !== "completed" && (
             <TouchableOpacity
-              style={styles.emptyButton}
+              style={[styles.emptyButton, { backgroundColor: colors.accent }]}
               onPress={() => setShowCreate(true)}
               activeOpacity={0.8}
             >
-              <Text style={styles.emptyButtonText}>+ Add Work</Text>
+              <Text style={[styles.emptyButtonText, { color: colors.accentForeground }]}>+ Add Work</Text>
             </TouchableOpacity>
           )}
         </View>
@@ -358,8 +392,8 @@ export default function BacklogScreen() {
             <RefreshControl
               refreshing={isRefetching}
               onRefresh={refetch}
-              tintColor="#64748B"
-              colors={["#3B82F6"]}
+              tintColor={colors.mutedText}
+              colors={[colors.accent]}
             />
           }
           ItemSeparatorComponent={() => <View style={styles.separator} />}
@@ -374,12 +408,12 @@ export default function BacklogScreen() {
         presentationStyle="pageSheet"
         onRequestClose={() => setShowCreate(false)}
       >
-        <SafeAreaView style={styles.modalContainer}>
-          <View style={styles.modalHeader}>
+        <SafeAreaView style={[styles.modalContainer, { backgroundColor: colors.background }]}>
+          <View style={[styles.modalHeader, { borderBottomColor: colors.divider }]}>
             <TouchableOpacity onPress={() => setShowCreate(false)}>
-              <Text style={styles.modalCancel}>Cancel</Text>
+              <Text style={[styles.modalCancel, { color: colors.accentText }]}>Cancel</Text>
             </TouchableOpacity>
-            <Text style={styles.modalTitle}>New Task</Text>
+            <Text style={[styles.modalTitle, { color: colors.primaryText }]}>New Task</Text>
             <View style={{ width: 60 }} />
           </View>
           <KeyboardAvoidingView
@@ -431,6 +465,8 @@ const styles = StyleSheet.create({
     paddingVertical: 6,
     borderRadius: 8,
     backgroundColor: "#1E293B",
+    borderWidth: 1,
+    borderColor: "transparent",
   },
   sectionTabActive: { backgroundColor: "#334155" },
   sectionTabText: { fontSize: 13, color: "#64748B" },
@@ -442,6 +478,8 @@ const styles = StyleSheet.create({
     marginHorizontal: 20,
     marginBottom: 10,
     backgroundColor: "#1E293B",
+    borderWidth: 1,
+    borderColor: "#334155",
     borderRadius: 10,
     padding: 3,
   },

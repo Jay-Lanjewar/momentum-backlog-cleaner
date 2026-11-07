@@ -14,9 +14,11 @@ import { useRouter } from "expo-router";
 
 import { supabase } from "@/lib/supabase";
 import { isValidEmail } from "@/lib/onboarding";
+import { useTheme } from "@/theme/ThemeProvider";
 
 export default function ForgotPasswordScreen() {
   const router = useRouter();
+  const { colors } = useTheme();
   const [email, setEmail] = useState("");
   const [loading, setLoading] = useState(false);
   const [sent, setSent] = useState(false);
@@ -51,33 +53,33 @@ export default function ForgotPasswordScreen() {
   }
 
   return (
-    <SafeAreaView style={styles.container}>
+    <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
       <KeyboardAvoidingView
         behavior={Platform.OS === "ios" ? "padding" : "height"}
         style={styles.flex}
       >
         <View style={styles.content}>
-          <Text style={styles.title}>Reset Password</Text>
-          <Text style={styles.subtitle}>
+          <Text style={[styles.title, { color: colors.primaryText }]}>Reset Password</Text>
+          <Text style={[styles.subtitle, { color: colors.secondaryText }]}>
             Enter your email and we&apos;ll send you a reset link.
           </Text>
 
           {sent ? (
-            <View style={styles.successBox}>
-              <Text style={styles.successText}>
+            <View style={[styles.successBox, { backgroundColor: `${colors.success}15`, borderColor: `${colors.success}55` }]}>
+              <Text style={[styles.successText, { color: colors.success }]}>
                 If an account exists for {trimmedEmail}, you&apos;ll receive a
                 password reset link shortly.
               </Text>
             </View>
           ) : (
             <>
-              <Text style={styles.label}>Email</Text>
+              <Text style={[styles.label, { color: colors.secondaryText }]}>Email</Text>
               <TextInput
-                style={styles.input}
+                style={[styles.input, { backgroundColor: colors.inputBackground, borderColor: colors.border, color: colors.primaryText }]}
                 value={email}
                 onChangeText={setEmail}
                 placeholder="you@example.com"
-                placeholderTextColor="#999"
+                placeholderTextColor={colors.placeholder}
                 autoCapitalize="none"
                 keyboardType="email-address"
                 autoComplete="email"
@@ -85,28 +87,28 @@ export default function ForgotPasswordScreen() {
             </>
           )}
 
-          {error ? <Text style={styles.errorText}>{error}</Text> : null}
+          {error ? <Text style={[styles.errorText, { color: colors.error }]}>{error}</Text> : null}
 
           {!sent ? (
             <TouchableOpacity
-              style={[styles.button, !canSubmit && styles.buttonDisabled]}
+              style={[styles.button, { backgroundColor: colors.accent }, !canSubmit && styles.buttonDisabled]}
               onPress={handleSubmit}
               disabled={!canSubmit}
               activeOpacity={0.8}
             >
               {loading ? (
-                <ActivityIndicator color="#fff" />
+                <ActivityIndicator color={colors.accentForeground} />
               ) : (
-                <Text style={styles.buttonText}>Send Reset Link</Text>
+                <Text style={[styles.buttonText, { color: colors.accentForeground }]}>Send Reset Link</Text>
               )}
             </TouchableOpacity>
           ) : (
             <TouchableOpacity
-              style={styles.button}
+              style={[styles.button, { backgroundColor: colors.accent }]}
               onPress={() => router.replace("/(auth)/login")}
               activeOpacity={0.8}
             >
-              <Text style={styles.buttonText}>Back to Sign In</Text>
+              <Text style={[styles.buttonText, { color: colors.accentForeground }]}>Back to Sign In</Text>
             </TouchableOpacity>
           )}
 
@@ -114,7 +116,7 @@ export default function ForgotPasswordScreen() {
             style={styles.linkRow}
             onPress={() => router.replace("/(auth)/login")}
           >
-            <Text style={styles.linkText}>Back to Sign In</Text>
+            <Text style={[styles.linkText, { color: colors.accentText }]}>Back to Sign In</Text>
           </TouchableOpacity>
         </View>
       </KeyboardAvoidingView>

@@ -2,26 +2,28 @@ import { View, Text, StyleSheet } from "react-native";
 
 import type { SubjectMetrics } from "@/services/types";
 import { formatMinutes } from "@/lib/coaching";
+import { useTheme } from "@/theme/ThemeProvider";
 
 interface Props {
   subjects: SubjectMetrics[];
 }
 
 export function SubjectBreakdownCard({ subjects }: Props) {
+  const { colors } = useTheme();
   const totalMinutes = subjects.reduce((s, sub) => s + sub.study_minutes, 0);
 
   if (subjects.length === 0) {
     return (
-      <View style={styles.card}>
-        <Text style={styles.title}>Subject Progress</Text>
-        <Text style={styles.empty}>No subject data yet.</Text>
+      <View style={[styles.card, { backgroundColor: colors.card }]}>
+        <Text style={[styles.title, { color: colors.primaryText }]}>Subject Progress</Text>
+        <Text style={[styles.empty, { color: colors.mutedText }]}>No subject data yet.</Text>
       </View>
     );
   }
 
   return (
-    <View style={styles.card}>
-      <Text style={styles.title}>Subject Progress</Text>
+    <View style={[styles.card, { backgroundColor: colors.card }]}>
+      <Text style={[styles.title, { color: colors.primaryText }]}>Subject Progress</Text>
 
       {subjects.map((sub) => {
         const pct = totalMinutes > 0 ? (sub.study_minutes / totalMinutes) * 100 : 0;
@@ -30,14 +32,14 @@ export function SubjectBreakdownCard({ subjects }: Props) {
             <View style={[styles.dot, { backgroundColor: sub.course_color }]} />
             <View style={styles.info}>
               <View style={styles.nameRow}>
-                <Text style={styles.name} numberOfLines={1}>
+                <Text style={[styles.name, { color: colors.primaryText }]} numberOfLines={1}>
                   {sub.course_name}
                 </Text>
-                <Text style={styles.minutes}>
+                <Text style={[styles.minutes, { color: colors.mutedText }]}>
                   {formatMinutes(sub.study_minutes)}
                 </Text>
               </View>
-              <View style={styles.barTrack}>
+              <View style={[styles.barTrack, { backgroundColor: colors.border }]}>
                 <View
                   style={[
                     styles.barFill,

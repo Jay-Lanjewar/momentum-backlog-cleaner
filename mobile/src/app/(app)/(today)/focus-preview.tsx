@@ -29,6 +29,7 @@ import {
   formatHourMinute,
   focusCoachMessage,
 } from "@/lib/coaching";
+import { useTheme } from "@/theme/ThemeProvider";
 
 const AnimatedCircle = Animated.createAnimatedComponent(Circle);
 
@@ -55,6 +56,7 @@ function addMinutes(time: string, minutes: number): string {
 }
 
 export default function FocusPreviewScreen() {
+  const { colors } = useTheme();
   const router = useRouter();
   const { user } = useAuth();
   const userName = user?.name ?? "";
@@ -141,9 +143,9 @@ export default function FocusPreviewScreen() {
   // Guard: only render preview in dev mode
   if (!__DEV__) {
     return (
-      <SafeAreaView style={styles.container}>
+      <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
         <View style={styles.center}>
-          <Text style={styles.timerLabel}>Preview only available in dev mode</Text>
+          <Text style={[styles.timerLabel, { color: colors.mutedText }]}>Preview only available in dev mode</Text>
         </View>
       </SafeAreaView>
     );
@@ -153,13 +155,13 @@ export default function FocusPreviewScreen() {
   if (previewComplete || phase === "complete") {
     const focusedMinutes = Math.max(1, Math.ceil(focusedElapsedMs / 60000));
     return (
-      <SafeAreaView style={styles.container} edges={["bottom"]}>
+      <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]} edges={["bottom"]}>
         <View style={styles.previewCompleteContainer}>
           <View style={styles.checkCircle}>
             <Text style={styles.checkIcon}>{"\u2713"}</Text>
           </View>
-          <Text style={styles.celebrationTitle}>Preview Complete</Text>
-          <Text style={styles.celebrationSubtitle}>
+          <Text style={[styles.celebrationTitle, { color: colors.primaryText }]}>Preview Complete</Text>
+          <Text style={[styles.celebrationSubtitle, { color: colors.mutedText }]}>
             You focused for {focusedMinutes} min. No data was saved.
           </Text>
 
@@ -168,11 +170,11 @@ export default function FocusPreviewScreen() {
           </View>
 
           <TouchableOpacity
-            style={styles.primaryButton}
+            style={[styles.primaryButton, { backgroundColor: colors.accent }]}
             onPress={() => router.back()}
             activeOpacity={0.8}
           >
-            <Text style={styles.primaryButtonText}>Back to Today</Text>
+            <Text style={[styles.primaryButtonText, { color: colors.accentForeground }]}>Back to Today</Text>
           </TouchableOpacity>
         </View>
       </SafeAreaView>
@@ -181,7 +183,7 @@ export default function FocusPreviewScreen() {
 
   // ─── Focus timer screen ───
   return (
-    <View style={styles.container}>
+    <View style={[styles.container, { backgroundColor: colors.background }]}>
       {/* Dev mode banner */}
       <View style={styles.devBanner}>
         <Text style={styles.devBannerText}>FOCUS UI PREVIEW</Text>
@@ -189,14 +191,14 @@ export default function FocusPreviewScreen() {
 
       {/* Session info */}
       <View style={styles.sessionInfo}>
-        <Text style={styles.sessionReason} numberOfLines={2}>
+        <Text style={[styles.sessionReason, { color: colors.primaryText }]} numberOfLines={2}>
           Work on Physics Ch. 5
         </Text>
-        <Text style={styles.sessionTime}>
+        <Text style={[styles.sessionTime, { color: colors.mutedText }]}>
           {formatHourMinute(startTime)} – {formatHourMinute(endTime)}
         </Text>
         {userName && (phase === "focusing" || phase === "entering") && (
-          <Text style={styles.sessionGreeting}>
+          <Text style={[styles.sessionGreeting, { color: colors.mutedText }]}>
             Let&apos;s finish this one, {userName}.
           </Text>
         )}
@@ -215,7 +217,7 @@ export default function FocusPreviewScreen() {
               cx={RING_SIZE / 2}
               cy={RING_SIZE / 2}
               r={RING_RADIUS}
-              stroke="#1E293B"
+              stroke={colors.border}
               strokeWidth={RING_STROKE}
               fill="none"
             />
@@ -223,7 +225,7 @@ export default function FocusPreviewScreen() {
               cx={RING_SIZE / 2}
               cy={RING_SIZE / 2}
               r={RING_RADIUS}
-              stroke="#3B82F6"
+              stroke={colors.accent}
               strokeWidth={RING_STROKE}
               fill="none"
               strokeLinecap="round"
@@ -232,10 +234,10 @@ export default function FocusPreviewScreen() {
             />
           </Svg>
           <View style={styles.timerInner}>
-            <Text style={styles.timerText}>
+            <Text style={[styles.timerText, { color: colors.primaryText }]}>
               {formatCountdown(remainingMs)}
             </Text>
-            <Text style={styles.timerLabel}>
+            <Text style={[styles.timerLabel, { color: colors.mutedText }]}>
               {phase === "focusing"
                 ? "Focusing"
                 : phase === "paused_by_user"
@@ -250,28 +252,28 @@ export default function FocusPreviewScreen() {
 
       {/* Status messages */}
       {phase === "paused_lost_focus" && (
-        <View style={styles.statusBanner}>
-          <Text style={styles.statusText}>
+        <View style={[styles.statusBanner, { backgroundColor: colors.pressed }]}>
+          <Text style={[styles.statusText, { color: colors.secondaryText }]}>
             You left the app. Timer is paused.
           </Text>
-          <Text style={styles.statusFocused}>
+          <Text style={[styles.statusFocused, { color: colors.mutedText }]}>
             {formatCountdown(focusedElapsedMs)} focused
           </Text>
         </View>
       )}
       {phase === "focus_returned" && (
-        <View style={[styles.statusBanner, styles.statusReturned]}>
-          <Text style={styles.statusText}>
+        <View style={[styles.statusBanner, styles.statusReturned, { backgroundColor: colors.accentSoft }]}>
+          <Text style={[styles.statusText, { color: colors.secondaryText }]}>
             Welcome back! Tap Resume to continue.
           </Text>
-          <Text style={styles.statusFocused}>
+          <Text style={[styles.statusFocused, { color: colors.mutedText }]}>
             {formatCountdown(focusedElapsedMs)} focused
           </Text>
         </View>
       )}
 
       {/* Coaching message */}
-      <Text style={styles.coachMessage}>
+      <Text style={[styles.coachMessage, { color: colors.mutedText }]}>
         {focusCoachMessage(focusedElapsedMs, totalDurationMs)}
       </Text>
 
@@ -279,19 +281,19 @@ export default function FocusPreviewScreen() {
       <View style={styles.controls}>
         {phase === "focusing" ? (
           <TouchableOpacity
-            style={styles.controlButton}
+            style={[styles.controlButton, { backgroundColor: colors.pressed }]}
             onPress={handlePause}
             activeOpacity={0.7}
           >
-            <Text style={styles.controlButtonText}>Pause</Text>
+            <Text style={[styles.controlButtonText, { color: colors.primaryText }]}>Pause</Text>
           </TouchableOpacity>
         ) : phase === "paused_by_user" || phase === "focus_returned" ? (
           <TouchableOpacity
-            style={[styles.controlButton, styles.controlButtonPrimary]}
+            style={[styles.controlButton, { backgroundColor: colors.accent }]}
             onPress={handleResume}
             activeOpacity={0.7}
           >
-            <Text style={[styles.controlButtonText, styles.controlButtonTextPrimary]}>
+            <Text style={[styles.controlButtonText, { color: colors.accentForeground }]}>
               Resume
             </Text>
           </TouchableOpacity>
@@ -303,7 +305,7 @@ export default function FocusPreviewScreen() {
             onPress={handleFinishEarly}
             activeOpacity={0.7}
           >
-            <Text style={styles.finishButtonText}>Finish Early</Text>
+            <Text style={[styles.finishButtonText, { color: colors.mutedText }]}>Finish Early</Text>
           </TouchableOpacity>
         )}
       </View>

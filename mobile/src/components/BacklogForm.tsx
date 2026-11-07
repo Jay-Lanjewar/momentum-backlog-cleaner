@@ -27,6 +27,7 @@ import {
   type DueChip,
 } from "@/lib/coaching";
 import { COURSE_COLORS } from "@/lib/onboarding";
+import { useTheme } from "@/theme/ThemeProvider";
 
 interface BacklogFormProps {
   initial?: BacklogItem;
@@ -48,6 +49,7 @@ export function BacklogForm({
   submitLabel,
   onSubmit,
 }: BacklogFormProps) {
+  const { colors, mode } = useTheme();
   const { data: courses = [], isLoading: coursesLoading } = useCourses();
   const createCourse = useCreateCourse();
 
@@ -111,6 +113,28 @@ export function BacklogForm({
 
   const selectedCourse = courses.find((c) => c.id === courseId);
 
+  function difficultyColors(value: Difficulty) {
+    const backgroundColor =
+      value === "easy"
+        ? colors.success
+        : value === "hard"
+          ? colors.error
+          : colors.warning;
+    const foregroundColor =
+      mode === "dark"
+        ? value === "easy"
+          ? "#001B0D"
+          : value === "hard"
+            ? "#4C0519"
+            : "#451A03"
+        : "#FFFFFF";
+    return {
+      backgroundColor,
+      borderColor: backgroundColor,
+      foregroundColor,
+    };
+  }
+
   async function handleCreateCourse() {
     if (!newCourseName.trim() || createCourse.isPending) return;
     try {
@@ -130,54 +154,54 @@ export function BacklogForm({
 
   return (
     <ScrollView
-      style={styles.container}
+      style={[styles.container, { backgroundColor: colors.background }]}
       contentContainerStyle={styles.content}
       keyboardShouldPersistTaps="handled"
     >
       {/* Title */}
-      <Text style={styles.label}>Task name</Text>
+      <Text style={[styles.label, { color: colors.secondaryText }]}>Task name</Text>
       <TextInput
-        style={styles.input}
+        style={[styles.input, { backgroundColor: colors.inputBackground, borderColor: colors.border, color: colors.primaryText }]}
         value={title}
         onChangeText={setTitle}
         placeholder="What do you need to do?"
-        placeholderTextColor="#64748B"
+        placeholderTextColor={colors.placeholder}
         maxLength={255}
         autoFocus={!initial}
       />
 
       {/* Course selector */}
-      <Text style={styles.label}>Subject</Text>
+      <Text style={[styles.label, { color: colors.secondaryText }]}>Subject</Text>
       <TouchableOpacity
-        style={styles.pickerButton}
+        style={[styles.pickerButton, { backgroundColor: colors.inputBackground, borderColor: colors.border }]}
         onPress={() => setShowCoursePicker(!showCoursePicker)}
         activeOpacity={0.7}
       >
         {coursesLoading ? (
-          <ActivityIndicator size="small" color="#94A3B8" />
+          <ActivityIndicator size="small" color={colors.mutedText} />
         ) : selectedCourse ? (
           <View style={styles.pickerRow}>
             <View
               style={[styles.courseDot, { backgroundColor: selectedCourse.color }]}
             />
-            <Text style={styles.pickerText}>{selectedCourse.name}</Text>
+            <Text style={[styles.pickerText, { color: colors.primaryText }]}>{selectedCourse.name}</Text>
           </View>
         ) : (
-          <Text style={styles.pickerPlaceholder}>Select a subject</Text>
+          <Text style={[styles.pickerPlaceholder, { color: colors.placeholder }]}>Select a subject</Text>
         )}
-        <Text style={styles.chevron}>{showCoursePicker ? "\u25B2" : "\u25BC"}</Text>
+        <Text style={[styles.chevron, { color: colors.mutedText }]}>{showCoursePicker ? "\u25B2" : "\u25BC"}</Text>
       </TouchableOpacity>
 
       {showCoursePicker && (
-        <View style={styles.courseList}>
+        <View style={[styles.courseList, { backgroundColor: colors.surface, borderColor: colors.border }]}>
           {creatingCourse ? (
             <View style={styles.createCourseForm}>
               <TextInput
-                style={styles.input}
+                style={[styles.input, { backgroundColor: colors.inputBackground, borderColor: colors.border, color: colors.primaryText }]}
                 value={newCourseName}
                 onChangeText={setNewCourseName}
                 placeholder="Subject name"
-                placeholderTextColor="#64748B"
+                placeholderTextColor={colors.placeholder}
                 autoFocus
                 maxLength={255}
               />
@@ -205,11 +229,12 @@ export function BacklogForm({
                   }}
                   activeOpacity={0.7}
                 >
-                  <Text style={styles.createCancelText}>Cancel</Text>
+                  <Text style={[styles.createCancelText, { color: colors.secondaryText }]}>Cancel</Text>
                 </TouchableOpacity>
                 <TouchableOpacity
                   style={[
                     styles.createSubmitBtn,
+                    { backgroundColor: colors.accent },
                     (!newCourseName.trim() || createCourse.isPending) &&
                       styles.createSubmitDisabled,
                   ]}
@@ -218,9 +243,13 @@ export function BacklogForm({
                   activeOpacity={0.8}
                 >
                   {createCourse.isPending ? (
-                    <ActivityIndicator size="small" color="#FFF" />
+                    <ActivityIndicator
+                      size="small"
+                      color={colors.accentForeground}
+                      testID="backlog-create-course-spinner"
+                    />
                   ) : (
-                    <Text style={styles.createSubmitText}>Create</Text>
+                    <Text style={[styles.createSubmitText, { color: colors.accentForeground }]}>Create</Text>
                   )}
                 </TouchableOpacity>
               </View>
@@ -228,14 +257,15 @@ export function BacklogForm({
           ) : (
             <>
               {courses.length === 0 && (
-                <Text style={styles.emptyCourseText}>No subjects yet.</Text>
+                <Text style={[styles.emptyCourseText, { color: colors.mutedText }]}>No subjects yet.</Text>
               )}
               {courses.map((c) => (
                 <TouchableOpacity
                   key={c.id}
                   style={[
                     styles.courseOption,
-                    c.id === courseId && styles.courseOptionSelected,
+                    { borderBottomColor: colors.border },
+                    c.id === courseId && { backgroundColor: colors.selected },
                   ]}
                   onPress={() => {
                     setCourseId(c.id);
@@ -247,6 +277,7 @@ export function BacklogForm({
                   <Text
                     style={[
                       styles.courseOptionText,
+                      { color: c.id === courseId ? colors.primaryText : colors.secondaryText },
                       c.id === courseId && styles.courseOptionTextSelected,
                     ]}
                   >
@@ -255,11 +286,11 @@ export function BacklogForm({
                 </TouchableOpacity>
               ))}
               <TouchableOpacity
-                style={styles.addSubjectButton}
+                style={[styles.addSubjectButton, { borderTopColor: colors.border }]}
                 onPress={() => setCreatingCourse(true)}
                 activeOpacity={0.7}
               >
-                <Text style={styles.addSubjectText}>+ Add Subject</Text>
+                <Text style={[styles.addSubjectText, { color: colors.accentText }]}>+ Add Subject</Text>
               </TouchableOpacity>
             </>
           )}
@@ -267,20 +298,16 @@ export function BacklogForm({
       )}
 
       {/* Difficulty */}
-      <Text style={styles.label}>Difficulty</Text>
+      <Text style={[styles.label, { color: colors.secondaryText }]}>Difficulty</Text>
       <View style={styles.segmentedRow}>
         {DIFFICULTIES.map((d) => (
           <TouchableOpacity
             key={d.value}
+            testID={`backlog-difficulty-${d.value}`}
             style={[
               styles.segmentedButton,
-              difficulty === d.value && styles.segmentedButtonActive,
-              difficulty === d.value &&
-                (d.value === "hard"
-                  ? styles.segmentedHard
-                  : d.value === "easy"
-                    ? styles.segmentedEasy
-                    : styles.segmentedMedium),
+              { backgroundColor: colors.inputBackground, borderColor: colors.border },
+              difficulty === d.value && difficultyColors(d.value),
             ]}
             onPress={() => setDifficulty(d.value)}
             activeOpacity={0.7}
@@ -288,6 +315,15 @@ export function BacklogForm({
             <Text
               style={[
                 styles.segmentedText,
+                {
+                  color: difficulty === d.value
+                    ? difficultyColors(d.value).foregroundColor
+                    : d.value === "easy"
+                      ? colors.success
+                      : d.value === "hard"
+                        ? colors.error
+                        : colors.warning,
+                },
                 difficulty === d.value && styles.segmentedTextActive,
               ]}
             >
@@ -298,14 +334,15 @@ export function BacklogForm({
       </View>
 
       {/* Due date chips */}
-      <Text style={styles.label}>Due</Text>
+      <Text style={[styles.label, { color: colors.secondaryText }]}>Due</Text>
       <View style={styles.chipRow}>
         {DUE_CHIPS.map((chip) => (
           <TouchableOpacity
             key={chip.value}
             style={[
               styles.chip,
-              dueChip === chip.value && styles.chipActive,
+              { backgroundColor: colors.inputBackground, borderColor: colors.border },
+              dueChip === chip.value && { backgroundColor: colors.accent, borderColor: colors.accent },
             ]}
             onPress={() => {
               if (chip.value === "custom") {
@@ -319,6 +356,7 @@ export function BacklogForm({
             <Text
               style={[
                 styles.chipText,
+                { color: dueChip === chip.value ? colors.accentForeground : colors.mutedText },
                 dueChip === chip.value && styles.chipTextActive,
               ]}
             >
@@ -329,7 +367,7 @@ export function BacklogForm({
       </View>
 
       {dueChip === "custom" && customDate && (
-        <Text style={styles.datePreview}>{formatDueDate(customDate.toISOString())}</Text>
+        <Text style={[styles.datePreview, { color: colors.accentText }]}>{formatDueDate(customDate.toISOString())}</Text>
       )}
 
       {showDatePicker && (
@@ -344,24 +382,24 @@ export function BacklogForm({
 
       {/* Advanced section */}
       <View style={styles.advancedSection}>
-        <Text style={styles.label}>Est. minutes (optional)</Text>
+        <Text style={[styles.label, { color: colors.secondaryText }]}>Est. minutes (optional)</Text>
         <TextInput
-          style={styles.input}
+          style={[styles.input, { backgroundColor: colors.inputBackground, borderColor: colors.border, color: colors.primaryText }]}
           value={estMinutes}
           onChangeText={setEstMinutes}
           placeholder="Leave blank to auto-estimate"
-          placeholderTextColor="#64748B"
+          placeholderTextColor={colors.placeholder}
           keyboardType="numeric"
           maxLength={4}
         />
 
-        <Text style={styles.label}>Notes or workload details (optional)</Text>
+        <Text style={[styles.label, { color: colors.secondaryText }]}>Notes or workload details (optional)</Text>
         <TextInput
-          style={[styles.input, styles.textArea]}
+          style={[styles.input, styles.textArea, { backgroundColor: colors.inputBackground, borderColor: colors.border, color: colors.primaryText }]}
           value={description}
           onChangeText={setDescription}
           placeholder="e.g. 20 questions, 3 chapters, or instructions from your teacher"
-          placeholderTextColor="#64748B"
+          placeholderTextColor={colors.placeholder}
           multiline
           numberOfLines={3}
           textAlignVertical="top"
@@ -370,15 +408,15 @@ export function BacklogForm({
 
       {/* Submit */}
       <TouchableOpacity
-        style={[styles.submitButton, (!valid || saving) && styles.submitDisabled]}
+        style={[styles.submitButton, { backgroundColor: colors.accent }, (!valid || saving) && styles.submitDisabled]}
         onPress={handleSubmit}
         disabled={!valid || saving}
         activeOpacity={0.8}
       >
         {saving ? (
-          <ActivityIndicator color="#fff" />
+          <ActivityIndicator color={colors.accentForeground} testID="backlog-submit-spinner" />
         ) : (
-          <Text style={styles.submitText}>{submitLabel}</Text>
+          <Text style={[styles.submitText, { color: colors.accentForeground }]}>{submitLabel}</Text>
         )}
       </TouchableOpacity>
     </ScrollView>
@@ -494,7 +532,6 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     borderRadius: 8,
     alignItems: "center",
-    backgroundColor: "#3B82F6",
   },
   createSubmitDisabled: { opacity: 0.5 },
   createSubmitText: { fontSize: 14, color: "#FFF", fontWeight: "600" },
@@ -516,7 +553,7 @@ const styles = StyleSheet.create({
   segmentedMedium: { borderColor: "#F59E0B", backgroundColor: "rgba(245,158,11,0.1)" },
   segmentedEasy: { borderColor: "#22C55E", backgroundColor: "rgba(34,197,94,0.1)" },
   segmentedText: { fontSize: 14, color: "#94A3B8" },
-  segmentedTextActive: { color: "#F8FAFC", fontWeight: "600" },
+  segmentedTextActive: { fontWeight: "600" },
   chipRow: {
     flexDirection: "row",
     gap: 8,

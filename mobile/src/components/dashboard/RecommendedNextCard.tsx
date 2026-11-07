@@ -9,6 +9,7 @@ import {
   buildRecommendationReason,
   topicFromSession,
 } from "@/lib/coaching";
+import { useTheme } from "@/theme/ThemeProvider";
 
 interface RecommendedNextCardProps {
   session: PlanSession;
@@ -34,6 +35,7 @@ export function RecommendedNextCard({
   disabled = false,
   accessibilityState,
 }: RecommendedNextCardProps) {
+  const { colors } = useTheme();
   const courseColor = backlogItem?.course_color ?? "#6B7280";
   const subject = backlogItem?.course_name ?? "Unknown Subject";
   const overdue = backlogItem?.overdue ?? false;
@@ -59,7 +61,7 @@ export function RecommendedNextCard({
         : "";
 
   return (
-    <View style={styles.card}>
+    <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border }]}>
       {/* Accent bar */}
       <View
         style={[styles.accentBar, { backgroundColor: courseColor }]}
@@ -69,7 +71,7 @@ export function RecommendedNextCard({
       <View style={styles.content}>
         {/* Eyebrow */}
         <View style={styles.eyebrowRow}>
-          <Text style={styles.eyebrow}>
+          <Text style={[styles.eyebrow, { color: colors.accentText }]}>
             {isCurrent ? "NOW" : "NEXT UP"}
           </Text>
           {overdue && (
@@ -85,14 +87,14 @@ export function RecommendedNextCard({
             style={[styles.subjectDot, { backgroundColor: courseColor }]}
             accessible={false}
           />
-          <Text style={styles.subjectText} numberOfLines={1}>
+          <Text style={[styles.subjectText, { color: colors.mutedText }]} numberOfLines={1}>
             {subject}
           </Text>
         </View>
 
         {/* Title — concrete topic from backend reason string */}
         <Text
-          style={styles.title}
+          style={[styles.title, { color: colors.primaryText }]}
           numberOfLines={2}
           accessibilityRole="header"
         >
@@ -101,12 +103,12 @@ export function RecommendedNextCard({
 
         {/* Time + Duration */}
         <View style={styles.metaRow}>
-          <Text style={styles.timeText}>
+          <Text style={[styles.timeText, { color: colors.mutedText }]}>
             {formatTimeRange(session.start_time, session.end_time)}
           </Text>
           {durationLabel ? (
             <Text
-              style={styles.durationText}
+              style={[styles.durationText, { color: colors.mutedText }]}
               accessibilityLabel={
                 isCurrent && remainingMinutes > 0
                   ? `${formatMinutes(remainingMinutes)} left in this session`
@@ -119,7 +121,7 @@ export function RecommendedNextCard({
         </View>
 
         {/* Reason */}
-        <Text style={styles.reasonText} numberOfLines={3}>
+        <Text style={[styles.reasonText, { color: colors.secondaryText }]} numberOfLines={3}>
           {reason}
         </Text>
 
@@ -127,7 +129,7 @@ export function RecommendedNextCard({
         <TouchableOpacity
           style={[
             styles.startButton,
-            { backgroundColor: courseColor },
+            { backgroundColor: colors.accent },
             disabled && styles.disabledButton,
           ]}
           onPress={onStart}
@@ -138,7 +140,7 @@ export function RecommendedNextCard({
           accessibilityState={accessibilityState}
           testID="recommended-next-start"
         >
-          <Text style={styles.startButtonText}>
+          <Text style={[styles.startButtonText, { color: colors.accentForeground }]}>
             {isCurrent ? "Start Focus Session" : "Start Next Session"}
           </Text>
         </TouchableOpacity>

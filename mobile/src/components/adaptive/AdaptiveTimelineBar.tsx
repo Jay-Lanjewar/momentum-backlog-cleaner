@@ -1,5 +1,6 @@
 import { View, Text, StyleSheet } from "react-native";
 import type { PlanSession } from "@/services/types";
+import { useTheme } from "@/theme/ThemeProvider";
 
 interface AdaptiveTimelineBarProps {
   sessions: PlanSession[];
@@ -20,11 +21,12 @@ export function AdaptiveTimelineBar({
   span,
   overflowIds,
 }: AdaptiveTimelineBarProps) {
+  const { colors } = useTheme();
   if (sessions.length === 0 || span <= 0) return null;
 
   return (
     <View style={styles.container}>
-      <View style={styles.track} />
+      <View style={[styles.track, { backgroundColor: colors.surface }]} />
       {sessions.map((session) => {
         const [sh, sm] = session.start_time.split(":").map(Number);
         const [eh, em] = session.end_time.split(":").map(Number);
@@ -42,10 +44,10 @@ export function AdaptiveTimelineBar({
               {
                 left: `${leftPct}%`,
                 width: `${widthPct}%`,
-                backgroundColor: isChanged ? "#2563EB" : "#64748B",
+                backgroundColor: isChanged ? colors.info : colors.mutedText,
                 opacity: isChanged ? 0.9 : 0.5,
               },
-              isChanged && styles.segmentChanged,
+              isChanged && { borderColor: `${colors.info}80` },
             ]}
             accessibilityLabel={`${topicFromSession(session)}, ${session.start_time} to ${session.end_time}`}
           />
@@ -53,7 +55,7 @@ export function AdaptiveTimelineBar({
       })}
       {overflowIds && overflowIds.size > 0 && (
         <View style={styles.overflowBadge}>
-          <Text style={styles.overflowText}>+{overflowIds.size} tomorrow</Text>
+          <Text style={[styles.overflowText, { color: colors.warning }]}>+{overflowIds.size} tomorrow</Text>
         </View>
       )}
     </View>
@@ -102,7 +104,6 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     bottom: 0,
-    backgroundColor: "#1E293B",
     borderRadius: 10,
   },
   segment: {

@@ -1,8 +1,9 @@
 import React from "react";
-import { fireEvent, render } from "@testing-library/react-native";
-import { Platform, ScrollView } from "react-native";
+import { act, fireEvent, render } from "@testing-library/react-native";
+import { Platform, ScrollView, StyleSheet } from "react-native";
 
 import { StudyBuddyPanel } from "@/components/focus/StudyBuddyPanel";
+import { DEFAULT_PREFERENCES, usePreferencesStore } from "@/store/usePreferencesStore";
 
 const panelProps = {
   messages: [] as { role: "user" | "assistant"; content: string }[],
@@ -22,6 +23,33 @@ async function renderPanel(messages = panelProps.messages, draft = "") {
 }
 
 describe("Study Buddy conversation", () => {
+  afterEach(async () => {
+    await act(async () => {
+      usePreferencesStore.setState({
+        ...DEFAULT_PREFERENCES,
+        hydrationStatus: "idle",
+      });
+    });
+  });
+
+  it("uses the selected light accent for the composer and message bubbles", async () => {
+    await act(async () => {
+      usePreferencesStore.setState({
+        appearance: "light",
+        accent: "emerald",
+        hydrationStatus: "ready",
+      });
+    });
+    const view = await renderPanel([{ role: "user", content: "Question" }], "Question");
+
+    expect(StyleSheet.flatten(view.getByTestId("study-buddy-input").props.style)).toEqual(
+      expect.objectContaining({ backgroundColor: "#FFFFFF", color: "#0F172A" }),
+    );
+    expect(StyleSheet.flatten(view.getByText("Question").parent?.props.style)).toEqual(
+      expect.objectContaining({ backgroundColor: "#059669" }),
+    );
+  });
+
   it("renders headings, paragraphs, emphasis, and ordered and unordered lists as selectable Markdown", async () => {
     const view = await renderPanel([{
       role: "assistant",

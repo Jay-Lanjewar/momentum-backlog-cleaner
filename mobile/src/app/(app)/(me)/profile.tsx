@@ -20,12 +20,14 @@ import { MeHeader } from "@/components/MeHeader";
 import { useProfile, useSaveProfile } from "@/services/hooks";
 import type { ProfileUpdatePayload, SleepTime, StudyWindow } from "@/services/types";
 import { dateToTime, formatTime12h, timeToDate } from "@/lib/schedule";
+import { useTheme } from "@/theme/ThemeProvider";
 
 const ENERGY_OPTIONS = ["morning", "afternoon", "evening", "night"];
 
 type PickerKey = "sleep-start" | "sleep-end" | "study-start" | "study-end";
 
 export default function ProfileEditScreen() {
+  const { colors } = useTheme();
   const { data: profile, isLoading } = useProfile();
   const saveProfile = useSaveProfile();
 
@@ -122,13 +124,13 @@ export default function ProfileEditScreen() {
     if (Platform.OS === "web") {
       return (
         <View style={styles.timeField}>
-          <Text style={styles.timeLabel}>{label}</Text>
+          <Text style={[styles.timeLabel, { color: colors.mutedText }]}>{label}</Text>
           <TextInput
-            style={styles.timeInput}
+            style={[styles.timeInput, { backgroundColor: colors.inputBackground, borderColor: colors.border, color: colors.primaryText }]}
             value={value}
             onChangeText={timeSetters[key]}
             placeholder={placeholder}
-            placeholderTextColor="#64748B"
+            placeholderTextColor={colors.placeholder}
             testID={testID}
           />
         </View>
@@ -137,9 +139,9 @@ export default function ProfileEditScreen() {
 
     return (
       <View style={styles.timeField}>
-        <Text style={styles.timeLabel}>{label}</Text>
+        <Text style={[styles.timeLabel, { color: colors.mutedText }]}>{label}</Text>
         <TouchableOpacity
-          style={styles.timeBtn}
+          style={[styles.timeBtn, { backgroundColor: colors.inputBackground }]}
           onPress={() => setPicker(picker === key ? null : key)}
           activeOpacity={0.7}
           accessibilityRole="button"
@@ -147,8 +149,8 @@ export default function ProfileEditScreen() {
           accessibilityValue={{ text: display }}
           testID={testID}
         >
-          <Text style={styles.timeBtnText}>{display}</Text>
-          <Text style={styles.timeBtnArrow}>{"\u2192"}</Text>
+          <Text style={[styles.timeBtnText, { color: colors.primaryText }]}>{display}</Text>
+          <Text style={[styles.timeBtnArrow, { color: colors.mutedText }]}>{"\u2192"}</Text>
         </TouchableOpacity>
         {picker === key && (
           <DateTimePicker
@@ -166,16 +168,16 @@ export default function ProfileEditScreen() {
 
   if (isLoading) {
     return (
-      <SafeAreaView style={styles.container} edges={["bottom"]}>
+      <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]} edges={["bottom"]}>
         <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color="#2563EB" />
+          <ActivityIndicator size="large" color={colors.accent} />
         </View>
       </SafeAreaView>
     );
   }
 
   return (
-    <SafeAreaView style={styles.container} edges={["bottom"]}>
+    <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]} edges={["bottom"]}>
       <KeyboardAvoidingView
         style={styles.flex}
         behavior={Platform.OS === "ios" ? "padding" : "height"}
@@ -187,61 +189,62 @@ export default function ProfileEditScreen() {
           <MeHeader screen="profile" title="Profile" />
 
           <View style={styles.section}>
-            <Text style={styles.sectionHeader}>Personal Info</Text>
+            <Text style={[styles.sectionHeader, { color: colors.mutedText }]}>Personal Info</Text>
             <View style={styles.field}>
-              <Text style={styles.label}>Name</Text>
+              <Text style={[styles.label, { color: colors.secondaryText }]}>Name</Text>
               <TextInput
-                style={styles.input}
+                style={[styles.input, { backgroundColor: colors.inputBackground, borderColor: colors.border, color: colors.primaryText }]}
                 value={name}
                 onChangeText={setName}
                 placeholder="Your name"
-                placeholderTextColor="#64748B"
+                placeholderTextColor={colors.placeholder}
               />
             </View>
             <View style={styles.field}>
-              <Text style={styles.label}>Class</Text>
+              <Text style={[styles.label, { color: colors.secondaryText }]}>Class</Text>
               <TextInput
-                style={styles.input}
+                style={[styles.input, { backgroundColor: colors.inputBackground, borderColor: colors.border, color: colors.primaryText }]}
                 value={className}
                 onChangeText={setClassName}
                 placeholder="e.g. 12th"
-                placeholderTextColor="#64748B"
+                placeholderTextColor={colors.placeholder}
               />
             </View>
             <View style={styles.field}>
-              <Text style={styles.label}>Board</Text>
+              <Text style={[styles.label, { color: colors.secondaryText }]}>Board</Text>
               <TextInput
-                style={styles.input}
+                style={[styles.input, { backgroundColor: colors.inputBackground, borderColor: colors.border, color: colors.primaryText }]}
                 value={board}
                 onChangeText={setBoard}
                 placeholder="e.g. CBSE"
-                placeholderTextColor="#64748B"
+                placeholderTextColor={colors.placeholder}
               />
             </View>
           </View>
 
           <View style={styles.section}>
-            <Text style={styles.sectionHeader}>Study Preferences</Text>
+            <Text style={[styles.sectionHeader, { color: colors.mutedText }]}>Study Preferences</Text>
             <View style={styles.field}>
-              <Text style={styles.label}>Daily Target (minutes)</Text>
+              <Text style={[styles.label, { color: colors.secondaryText }]}>Daily Target (minutes)</Text>
               <TextInput
-                style={styles.input}
+                style={[styles.input, { backgroundColor: colors.inputBackground, borderColor: colors.border, color: colors.primaryText }]}
                 value={dailyTarget}
                 onChangeText={setDailyTarget}
                 placeholder="180"
-                placeholderTextColor="#64748B"
+                placeholderTextColor={colors.placeholder}
                 keyboardType="numeric"
               />
             </View>
             <View style={styles.field}>
-              <Text style={styles.label}>Energy Peak</Text>
+              <Text style={[styles.label, { color: colors.secondaryText }]}>Energy Peak</Text>
               <View style={styles.optionRow}>
                 {ENERGY_OPTIONS.map((opt) => (
                   <TouchableOpacity
                     key={opt}
                     style={[
                       styles.optionChip,
-                      energyPeak === opt && styles.optionChipActive,
+                      { backgroundColor: colors.inputBackground, borderColor: colors.border },
+                      energyPeak === opt && { backgroundColor: colors.accentSoft, borderColor: colors.accent },
                     ]}
                     onPress={() => setEnergyPeak(energyPeak === opt ? null : opt)}
                     activeOpacity={0.6}
@@ -249,7 +252,7 @@ export default function ProfileEditScreen() {
                     <Text
                       style={[
                         styles.optionText,
-                        energyPeak === opt && styles.optionTextActive,
+                        { color: energyPeak === opt ? colors.accentSoftForeground : colors.mutedText },
                       ]}
                     >
                       {opt.charAt(0).toUpperCase() + opt.slice(1)}
@@ -261,16 +264,16 @@ export default function ProfileEditScreen() {
           </View>
 
           <View style={styles.section}>
-            <Text style={styles.sectionHeader}>Schedule</Text>
+            <Text style={[styles.sectionHeader, { color: colors.mutedText }]}>Schedule</Text>
             <View style={styles.field}>
-              <Text style={styles.label}>Sleep Schedule</Text>
+              <Text style={[styles.label, { color: colors.secondaryText }]}>Sleep Schedule</Text>
               <View style={styles.timeRow}>
                 {renderTimeField("Start", "sleep-start", "22:00", "Sleep start time")}
                 {renderTimeField("End", "sleep-end", "06:00", "Sleep end time")}
               </View>
             </View>
             <View style={styles.field}>
-              <Text style={styles.label}>Preferred Study Window</Text>
+              <Text style={[styles.label, { color: colors.secondaryText }]}>Preferred Study Window</Text>
               <View style={styles.timeRow}>
                 {renderTimeField(
                   "Earliest Start",
@@ -289,12 +292,12 @@ export default function ProfileEditScreen() {
           </View>
 
           <TouchableOpacity
-            style={styles.saveButtonFull}
+            style={[styles.saveButtonFull, { backgroundColor: colors.accent }]}
             onPress={handleSave}
             activeOpacity={0.8}
             disabled={saveProfile.isPending}
           >
-            <Text style={styles.saveButtonText}>
+            <Text style={[styles.saveButtonText, { color: colors.accentForeground }]}>
               {saveProfile.isPending ? "Saving..." : "Save Changes"}
             </Text>
           </TouchableOpacity>

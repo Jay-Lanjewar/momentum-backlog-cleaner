@@ -441,25 +441,24 @@ describe("SettingsScreen", () => {
     expect(screen.getByText("Theme")).toBeTruthy();
   });
 
-  it("Theme row is not pressable", async () => {
-    mockPush.mockClear();
-    mockBack.mockClear();
+  it("Theme row opens the customization controls", async () => {
     await act(async () => {
       render(<SettingsScreen />);
     });
     await act(async () => {
       fireEvent.press(screen.getByTestId("settings-theme-row"));
     });
-    expect(mockPush).not.toHaveBeenCalled();
-    expect(mockBack).not.toHaveBeenCalled();
+    expect(screen.getByText("Theme customization")).toBeTruthy();
+    expect(screen.getByTestId("appearance-dark")).toBeTruthy();
+    expect(screen.getByTestId("accent-blue")).toBeTruthy();
   });
 
-  it("Theme row has no button accessibility role", async () => {
+  it("Theme row exposes button accessibility", async () => {
     await act(async () => {
       render(<SettingsScreen />);
     });
     const row = screen.getByTestId("settings-theme-row");
-    expect(row.props.accessibilityRole).toBeUndefined();
+    expect(row.props.accessibilityRole).toBe("button");
   });
 
   it("Theme row shows the current value Dark", async () => {
@@ -469,14 +468,12 @@ describe("SettingsScreen", () => {
     expect(screen.getByText("Dark")).toBeTruthy();
   });
 
-  it("Theme row shows an informational hint", async () => {
+  it("Theme row shows an actionable hint", async () => {
     await act(async () => {
       render(<SettingsScreen />);
     });
     expect(screen.getByTestId("settings-theme-hint")).toBeTruthy();
-    expect(
-      screen.getByText("Theme customization coming later."),
-    ).toBeTruthy();
+    expect(screen.getByText("Appearance and accent colour")).toBeTruthy();
     expect(screen.queryByText("Coming soon")).toBeNull();
   });
 

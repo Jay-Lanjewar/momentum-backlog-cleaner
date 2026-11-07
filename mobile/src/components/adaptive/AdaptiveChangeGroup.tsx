@@ -2,6 +2,7 @@ import { useState } from "react";
 import { View, Text, TouchableOpacity, StyleSheet } from "react-native";
 import { AdaptiveChangeRow } from "./AdaptiveChangeRow";
 import type { PlanChange } from "@/services/types";
+import { useTheme } from "@/theme/ThemeProvider";
 
 interface AdaptiveChangeGroupProps {
   changes: PlanChange[];
@@ -27,6 +28,7 @@ function groupChanges(changes: PlanChange[]): Map<string, PlanChange[]> {
 }
 
 export function AdaptiveChangeGroup({ changes }: AdaptiveChangeGroupProps) {
+  const { colors } = useTheme();
   const [expanded, setExpanded] = useState(false);
 
   if (changes.length === 0) return null;
@@ -41,10 +43,10 @@ export function AdaptiveChangeGroup({ changes }: AdaptiveChangeGroupProps) {
     <View style={styles.container}>
       {Array.from(groups.entries()).map(([type, typeChanges]) => (
         <View key={type} style={styles.group}>
-          <Text style={styles.groupLabel}>
+          <Text style={[styles.groupLabel, { color: colors.mutedText }]}>
             {GROUP_LABELS[type] ?? type.replace(/_/g, " ")}
           </Text>
-          <View style={styles.divider} />
+          <View style={[styles.divider, { backgroundColor: colors.divider }]} />
           {typeChanges.map((change) => (
             <AdaptiveChangeRow key={change.session_id} change={change} />
           ))}
@@ -53,11 +55,11 @@ export function AdaptiveChangeGroup({ changes }: AdaptiveChangeGroupProps) {
 
       {hiddenCount > 0 && (
         <TouchableOpacity
-          style={styles.expandButton}
+          style={[styles.expandButton, { backgroundColor: colors.pressed }]}
           onPress={() => setExpanded(true)}
           activeOpacity={0.7}
         >
-          <Text style={styles.expandText}>
+          <Text style={[styles.expandText, { color: colors.secondaryText }]}>
             Show {hiddenCount} more change{hiddenCount > 1 ? "s" : ""}
           </Text>
         </TouchableOpacity>
@@ -65,11 +67,11 @@ export function AdaptiveChangeGroup({ changes }: AdaptiveChangeGroupProps) {
 
       {expanded && changes.length > MAX_VISIBLE && (
         <TouchableOpacity
-          style={styles.expandButton}
+          style={[styles.expandButton, { backgroundColor: colors.pressed }]}
           onPress={() => setExpanded(false)}
           activeOpacity={0.7}
         >
-          <Text style={styles.expandText}>Show less</Text>
+          <Text style={[styles.expandText, { color: colors.secondaryText }]}>Show less</Text>
         </TouchableOpacity>
       )}
     </View>

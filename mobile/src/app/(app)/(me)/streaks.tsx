@@ -3,10 +3,12 @@ import { SafeAreaView } from "react-native-safe-area-context";
 
 import { MeHeader } from "@/components/MeHeader";
 import { useStreaks } from "@/services/hooks";
+import { useTheme } from "@/theme/ThemeProvider";
 
 const MILESTONES = [3, 7, 14, 30, 100, 365];
 
 export default function StreaksScreen() {
+  const { colors } = useTheme();
   const { data: streaks } = useStreaks();
 
   const momentum = streaks?.momentum;
@@ -19,39 +21,39 @@ export default function StreaksScreen() {
   const tokensUsed = momentum?.recovery_tokens_used ?? 0;
 
   return (
-    <SafeAreaView style={styles.container} edges={["bottom"]}>
+    <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]} edges={["bottom"]}>
       <ScrollView contentContainerStyle={styles.scroll}>
         <MeHeader screen="streaks" title="Streaks" />
 
         <View style={styles.statsRow}>
-          <View style={styles.statCard}>
+          <View style={[styles.statCard, { backgroundColor: colors.card }]}>
             <Text style={styles.statEmoji}>{"\uD83D\uDD25"}</Text>
-            <Text style={styles.statValue}>{current}</Text>
-            <Text style={styles.statLabel}>Current</Text>
+            <Text style={[styles.statValue, { color: colors.primaryText }]}>{current}</Text>
+            <Text style={[styles.statLabel, { color: colors.mutedText }]}>Current</Text>
           </View>
-          <View style={styles.statCard}>
+          <View style={[styles.statCard, { backgroundColor: colors.card }]}>
             <Text style={styles.statEmoji}>{"\uD83C\uDFC6"}</Text>
-            <Text style={styles.statValue}>{best}</Text>
-            <Text style={styles.statLabel}>Best</Text>
+            <Text style={[styles.statValue, { color: colors.primaryText }]}>{best}</Text>
+            <Text style={[styles.statLabel, { color: colors.mutedText }]}>Best</Text>
           </View>
-          <View style={styles.statCard}>
+          <View style={[styles.statCard, { backgroundColor: colors.card }]}>
             <Text style={styles.statEmoji}>{"\uD83D\uDCC5"}</Text>
-            <Text style={styles.statValue}>{totalDays}</Text>
-            <Text style={styles.statLabel}>Total Days</Text>
+            <Text style={[styles.statValue, { color: colors.primaryText }]}>{totalDays}</Text>
+            <Text style={[styles.statLabel, { color: colors.mutedText }]}>Total Days</Text>
           </View>
         </View>
 
-        <View style={styles.card}>
-          <Text style={styles.cardTitle}>Milestone Progress</Text>
+        <View style={[styles.card, { backgroundColor: colors.card }]}>
+          <Text style={[styles.cardTitle, { color: colors.primaryText }]}>Milestone Progress</Text>
           <View style={styles.milestoneRow}>
             {MILESTONES.map((days) => {
               const achieved = current >= days;
               return (
                 <View
                   key={days}
-                  style={[styles.milestoneChip, achieved && styles.milestoneChipAchieved]}
+                  style={[styles.milestoneChip, { backgroundColor: achieved ? colors.accentSoft : colors.pressed }]}
                 >
-                  <Text style={[styles.milestoneText, achieved && styles.milestoneTextAchieved]}>
+                  <Text style={[styles.milestoneText, { color: achieved ? colors.accentText : colors.mutedText }]}>
                     {days}d
                   </Text>
                 </View>
@@ -60,35 +62,35 @@ export default function StreaksScreen() {
           </View>
         </View>
 
-        <View style={styles.card}>
-          <Text style={styles.cardTitle}>Recovery Tokens</Text>
+        <View style={[styles.card, { backgroundColor: colors.card }]}>
+          <Text style={[styles.cardTitle, { color: colors.primaryText }]}>Recovery Tokens</Text>
           <View style={styles.tokenRow}>
             <View style={styles.tokenStat}>
-              <Text style={styles.tokenValue}>{tokensCurrent}</Text>
-              <Text style={styles.tokenLabel}>Available</Text>
+              <Text style={[styles.tokenValue, { color: colors.primaryText }]}>{tokensCurrent}</Text>
+              <Text style={[styles.tokenLabel, { color: colors.mutedText }]}>Available</Text>
             </View>
             <View style={styles.tokenStat}>
-              <Text style={styles.tokenValue}>{tokensEarned}</Text>
-              <Text style={styles.tokenLabel}>Earned</Text>
+              <Text style={[styles.tokenValue, { color: colors.primaryText }]}>{tokensEarned}</Text>
+              <Text style={[styles.tokenLabel, { color: colors.mutedText }]}>Earned</Text>
             </View>
             <View style={styles.tokenStat}>
-              <Text style={styles.tokenValue}>{tokensUsed}</Text>
-              <Text style={styles.tokenLabel}>Used</Text>
+              <Text style={[styles.tokenValue, { color: colors.primaryText }]}>{tokensUsed}</Text>
+              <Text style={[styles.tokenLabel, { color: colors.mutedText }]}>Used</Text>
             </View>
           </View>
         </View>
 
         {subjects.length > 0 && (
-          <View style={styles.card}>
-            <Text style={styles.cardTitle}>Subject Streaks</Text>
+          <View style={[styles.card, { backgroundColor: colors.card }]}>
+            <Text style={[styles.cardTitle, { color: colors.primaryText }]}>Subject Streaks</Text>
             {subjects.map((sub) => (
               <View key={sub.id} style={styles.subjectRow}>
                 <View style={[styles.subjectDot, { backgroundColor: sub.course_color }]} />
                 <View style={styles.subjectInfo}>
-                  <Text style={styles.subjectName} numberOfLines={1}>
+                  <Text style={[styles.subjectName, { color: colors.primaryText }]} numberOfLines={1}>
                     {sub.course_name}
                   </Text>
-                  <Text style={styles.subjectMeta}>
+                  <Text style={[styles.subjectMeta, { color: colors.mutedText }]}>
                     {sub.current_streak}d current · {sub.longest_streak}d best
                   </Text>
                 </View>

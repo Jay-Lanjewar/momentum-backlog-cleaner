@@ -15,9 +15,11 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
 
 import { useAuth } from "@/hooks/useAuth";
+import { useTheme } from "@/theme/ThemeProvider";
 
 export default function LoginScreen() {
   const router = useRouter();
+  const { colors } = useTheme();
   const { login, meError, retryMe } = useAuth();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -56,7 +58,7 @@ export default function LoginScreen() {
   }
 
   return (
-    <SafeAreaView style={styles.container}>
+    <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
       <KeyboardAvoidingView
         behavior={Platform.OS === "ios" ? "padding" : "height"}
         style={styles.flex}
@@ -66,69 +68,95 @@ export default function LoginScreen() {
           keyboardShouldPersistTaps="handled"
         >
           <View style={styles.header}>
-            <Text style={styles.title}>Momentum</Text>
-            <Text style={styles.subtitle}>Pick up where you left off.</Text>
+            <Text style={[styles.title, { color: colors.primaryText }]}>
+              Momentum
+            </Text>
+            <Text style={[styles.subtitle, { color: colors.secondaryText }]}>
+              Pick up where you left off.
+            </Text>
           </View>
 
           {meError ? (
             <View style={styles.meErrorBox} testID="me-error">
-              <Text style={styles.meErrorText}>{meError}</Text>
+              <Text style={[styles.meErrorText, { color: colors.error }]}>{meError}</Text>
               <TouchableOpacity
-                style={styles.retryButton}
+                style={[styles.retryButton, { backgroundColor: colors.accentSoft, borderColor: colors.border }]}
                 onPress={handleRetryMe}
                 disabled={retrying}
                 activeOpacity={0.8}
               >
                 {retrying ? (
-                  <ActivityIndicator color="#2563EB" size="small" />
+                  <ActivityIndicator color={colors.accent} size="small" />
                 ) : (
-                  <Text style={styles.retryButtonText}>Retry</Text>
+                  <Text style={[styles.retryButtonText, { color: colors.accentText }]}>Retry</Text>
                 )}
               </TouchableOpacity>
             </View>
           ) : null}
 
           <View style={styles.form}>
-            <Text style={styles.label}>Email</Text>
+            <Text style={[styles.label, { color: colors.secondaryText }]}>Email</Text>
             <TextInput
-              style={styles.input}
+              style={[
+                styles.input,
+                {
+                  backgroundColor: colors.inputBackground,
+                  borderColor: colors.border,
+                  color: colors.primaryText,
+                },
+              ]}
               value={email}
               onChangeText={setEmail}
               placeholder="you@example.com"
-              placeholderTextColor="#999"
+              placeholderTextColor={colors.placeholder}
               autoCapitalize="none"
               keyboardType="email-address"
               autoComplete="email"
             />
 
-            <Text style={styles.label}>Password</Text>
+            <Text style={[styles.label, { color: colors.secondaryText }]}>
+              Password
+            </Text>
             <TextInput
-              style={styles.input}
+              style={[
+                styles.input,
+                {
+                  backgroundColor: colors.inputBackground,
+                  borderColor: colors.border,
+                  color: colors.primaryText,
+                },
+              ]}
               value={password}
               onChangeText={setPassword}
               placeholder="Your password"
-              placeholderTextColor="#999"
+              placeholderTextColor={colors.placeholder}
               secureTextEntry
               autoComplete="password"
             />
 
             <TouchableOpacity
-              style={[styles.button, loading && styles.buttonDisabled]}
+              style={[
+                styles.button,
+                { backgroundColor: colors.accent },
+                loading && styles.buttonDisabled,
+              ]}
               onPress={handleLogin}
               disabled={loading}
               activeOpacity={0.8}
             >
               {loading ? (
-                <ActivityIndicator color="#fff" />
+                <ActivityIndicator color={colors.accentForeground} />
               ) : (
-                <Text style={styles.buttonText}>Sign In</Text>
+                <Text style={[styles.buttonText, { color: colors.accentForeground }]}>Sign In</Text>
               )}
             </TouchableOpacity>
 
             <TouchableOpacity
               onPress={() => router.push("/(auth)/forgot-password")}
             >
-              <Text style={styles.forgotText}>Forgot password?</Text>
+              <Text style={[styles.forgotText, { color: colors.accentText }]}>
+                Forgot password?
+              </Text>
             </TouchableOpacity>
           </View>
 
@@ -136,9 +164,11 @@ export default function LoginScreen() {
             style={styles.linkRow}
             onPress={() => router.push("/(auth)/register")}
           >
-            <Text style={styles.linkText}>
+            <Text style={[styles.linkText, { color: colors.secondaryText }]}>
               Don&apos;t have an account?{" "}
-              <Text style={styles.linkBold}>Create one</Text>
+              <Text style={[styles.linkBold, { color: colors.accentText }]}>
+                Create one
+              </Text>
             </Text>
           </TouchableOpacity>
         </ScrollView>

@@ -1,28 +1,24 @@
 import { Tabs } from "expo-router";
 import { TabIcon } from "@/components/TabIcon";
+import { useTheme } from "@/theme/ThemeProvider";
 
 export const unstable_settings = {
   initialRouteName: "(today)",
 };
 
-const COLORS = {
-  active: "#2563EB",
-  inactive: "#64748B",
-  background: "#0F172A",
-  tabBar: "#1E293B",
-};
-
 export default function AppLayout() {
+  const { colors } = useTheme();
+
   return (
     <Tabs
       initialRouteName="(today)"
       screenOptions={{
         headerShown: false,
-        tabBarActiveTintColor: COLORS.active,
-        tabBarInactiveTintColor: COLORS.inactive,
+        tabBarActiveTintColor: colors.accent,
+        tabBarInactiveTintColor: colors.mutedText,
         tabBarStyle: {
-          backgroundColor: COLORS.tabBar,
-          borderTopColor: "#334155",
+          backgroundColor: colors.tabBar,
+          borderTopColor: colors.tabBarBorder,
         },
         tabBarLabelStyle: {
           fontSize: 11,

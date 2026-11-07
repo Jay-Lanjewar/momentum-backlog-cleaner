@@ -5,6 +5,7 @@ import {
   getPermissionState,
   requestNotificationPermission,
 } from "@/services/notifications";
+import { useTheme } from "@/theme/ThemeProvider";
 
 const DISMISS_STORAGE_KEY = "momentum:notifications-priming-dismissed";
 
@@ -44,6 +45,7 @@ function persistPrimingDismissed(): void {
  * the rest of Today.
  */
 export function NotificationPrimingCard() {
+  const { colors } = useTheme();
   const [visible, setVisible] = useState(false);
 
   useEffect(() => {
@@ -85,23 +87,23 @@ export function NotificationPrimingCard() {
   };
 
   return (
-    <View style={styles.card} testID="notification-priming-card">
-      <Text style={styles.heading} accessibilityRole="header">
+    <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border }]} testID="notification-priming-card">
+      <Text style={[styles.heading, { color: colors.primaryText }]} accessibilityRole="header">
         Stay on track
       </Text>
-      <Text style={styles.body}>
+      <Text style={[styles.body, { color: colors.secondaryText }]}>
         Momentum will remind you 10 minutes before each session, alert you when
         one starts, and tell you if one was missed.
       </Text>
       <TouchableOpacity
-        style={styles.enableButton}
+        style={[styles.enableButton, { backgroundColor: colors.accent }]}
         onPress={handleEnable}
         accessibilityRole="button"
         accessibilityLabel="Enable notifications"
         testID="notification-priming-enable"
         activeOpacity={0.8}
       >
-        <Text style={styles.enableText}>Enable notifications</Text>
+        <Text style={[styles.enableText, { color: colors.accentForeground }]}>Enable notifications</Text>
       </TouchableOpacity>
       <TouchableOpacity
         style={styles.dismissButton}
@@ -111,7 +113,7 @@ export function NotificationPrimingCard() {
         testID="notification-priming-dismiss"
         activeOpacity={0.6}
       >
-        <Text style={styles.dismissText}>Not now</Text>
+        <Text style={[styles.dismissText, { color: colors.mutedText }]}>Not now</Text>
       </TouchableOpacity>
     </View>
   );

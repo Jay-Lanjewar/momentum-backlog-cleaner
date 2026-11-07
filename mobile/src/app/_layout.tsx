@@ -30,6 +30,7 @@ import {
   clearDashboardSessionData,
   registerDashboardQueryClient,
 } from "@/services/hooks";
+import { ThemeProvider, useTheme } from "@/theme/ThemeProvider";
 
 setNotificationHandler();
 SplashScreen.preventAutoHideAsync();
@@ -62,20 +63,23 @@ function AuthGate() {
   }, [clearAuth, queryClient]);
 
   useEffect(() => {
+    const routeSegments = segments as unknown as string[];
     if (logoutInProgress) {
-      if (segments[0] !== "(auth)" || segments[1] !== "login") {
+      if (routeSegments[0] !== "(auth)" || routeSegments[1] !== "login") {
         router.replace("/(auth)/login");
       }
       return;
     }
     if (isLoading || confirming) return;
 
-    const inAuthGroup = segments[0] === "(auth)";
-    const inOnboardingGroup = segments[0] === "(onboarding)";
-    const inAppGroup = segments[0] === "(app)";
-    const inConfirmRoute = (segments[0] as string) === "confirm";
+    const inAuthGroup = routeSegments[0] === "(auth)";
+    const inOnboardingGroup = routeSegments[0] === "(onboarding)";
+    const inAppGroup = routeSegments[0] === "(app)";
+    // The confirm deep-link remains outside the auth redirect flow.
+    // (segments[0] as string) === "confirm"
+    const inConfirmRoute = routeSegments[0] === "confirm";
     const inResetRoute =
-      segments[0] === "(auth)" && (segments[1] as string) === "reset-password";
+      routeSegments[0] === "(auth)" && routeSegments[1] === "reset-password";
 
     if (inConfirmRoute) return;
     if (inResetRoute) return;
@@ -84,7 +88,7 @@ function AuthGate() {
     // proven (login and restore both stop short of loading a profile).
     if (mfaRequired) {
       const inTwoFactorRoute =
-        segments[0] === "(auth)" && (segments[1] as string) === "two-factor";
+        routeSegments[0] === "(auth)" && routeSegments[1] === "two-factor";
       if (!inTwoFactorRoute) {
         router.replace("/(auth)/two-factor");
       }
@@ -129,21 +133,24 @@ function AuthGate() {
 }
 
 function StartupLoadingScreen() {
+  const { colors } = useTheme();
+
   useEffect(() => {
     performanceMark("startup.branded_loading.ready");
-    performanceMark("startup.splash_hide.requested");
-    void SplashScreen.hideAsync();
   }, []);
 
   return (
-    <View style={styles.startupLoading} testID="startup-loading">
+    <View
+      style={[styles.startupLoading, { backgroundColor: colors.background }]}
+      testID="startup-loading"
+    >
       <Image
         source={require("../../assets/branding/momentum-logo.png")}
         style={styles.startupLogo}
         resizeMode="contain"
         accessibilityLabel="Momentum"
       />
-      <ActivityIndicator size="large" color="#2563EB" />
+      <ActivityIndicator size="large" color={colors.accent} />
     </View>
   );
 }
@@ -220,29 +227,23 @@ export default function RootLayout() {
   }, []);
 
   return (
-    <QueryClientProvider client={queryClient}>
-      <AuthGate />
-      {isSafeRouteForAuthState(segments as string[], {
-        isLoading,
-        confirming,
-        mfaRequired,
-        logoutInProgress,
-        isAuthenticated,
-        hasProfile: !!user?.profile,
-      }) ? (
-        <Slot />
-      ) : (
-        <StartupLoadingScreen />
-      )}
-      <StatusBar style="auto" />
-    </QueryClientProvider>
+    <ThemeProvider fallback={<StartupLoadingScreen />}>
+      <RootContent
+        segments={segments as string[]}
+        isLoading={isLoading}
+        confirming={confirming}
+        mfaRequired={mfaRequired}
+        logoutInProgress={logoutInProgress}
+        isAuthenticated={isAuthenticated}
+        hasProfile={!!user?.profile}
+      />
+    </ThemeProvider>
   );
 }
 
 const styles = StyleSheet.create({
   startupLoading: {
     alignItems: "center",
-    backgroundColor: "#FFFFFF",
     flex: 1,
     justifyContent: "center",
     gap: 24,
@@ -252,3 +253,42 @@ const styles = StyleSheet.create({
     width: 148,
   },
 });
+
+function RootContent({
+  segments,
+  isLoading,
+  confirming,
+  mfaRequired,
+  logoutInProgress,
+  isAuthenticated,
+  hasProfile,
+}: {
+  segments: string[];
+  isLoading: boolean;
+  confirming: boolean;
+  mfaRequired: boolean;
+  logoutInProgress: boolean;
+  isAuthenticated: boolean;
+  hasProfile: boolean;
+}) {
+  const { mode } = useTheme();
+
+  return (
+    <QueryClientProvider client={queryClient}>
+      <AuthGate />
+      {isSafeRouteForAuthState(segments, {
+        isLoading,
+        confirming,
+        mfaRequired,
+        logoutInProgress,
+        isAuthenticated,
+        hasProfile,
+      }) ? (
+        <Slot />
+      ) : (
+        <StartupLoadingScreen />
+      )}
+      <StatusBar style={mode === "dark" ? "light" : "dark"} />
+    </QueryClientProvider>
+  );
+}
