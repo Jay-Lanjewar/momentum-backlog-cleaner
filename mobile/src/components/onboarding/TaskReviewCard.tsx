@@ -12,6 +12,7 @@ import {
   priorityFromDifficulty,
 } from "@/lib/coaching";
 import { DEFAULT_SUBJECT, type TaskDraft } from "@/lib/backlogInterpret";
+import { useTheme } from "@/theme/ThemeProvider";
 
 const ESTIMATE_CHIPS = [15, 30, 45, 60, 90];
 type SimpleDueChip = "today" | "tomorrow" | "week";
@@ -46,6 +47,7 @@ export function TaskReviewCard({
   onMove,
   onDelete,
 }: TaskReviewCardProps) {
+  const { colors } = useTheme();
   const [detailsOpen, setDetailsOpen] = useState(false);
   const ownName = subject.trim() || DEFAULT_SUBJECT;
   const otherCourses = courseNames.filter(
@@ -74,19 +76,20 @@ export function TaskReviewCard({
   const summary = summaryParts.join(" · ");
 
   return (
-    <View style={styles.card} testID={`review-card-${index}`}>
+    <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border }]} testID={`review-card-${index}`}>
       <View style={styles.chipRow}>
         {isGroupHead ? (
           <>
             <TextInput
               style={[
                 styles.subjectInput,
+                { backgroundColor: colors.accentSoft, borderColor: colors.accent, color: colors.accentSoftForeground },
                 subjectUncertain && styles.subjectPlaceholder,
               ]}
               value={subject}
               onChangeText={onSubjectChange}
               placeholder="Add a subject"
-              placeholderTextColor="#94A3B8"
+              placeholderTextColor={colors.placeholder}
               maxLength={60}
               accessibilityLabel={label("Subject")}
               accessibilityHint="Renames the subject shared by these tasks"
@@ -95,14 +98,14 @@ export function TaskReviewCard({
             {otherCourses.map((name) => (
               <TouchableOpacity
                 key={name}
-                style={styles.chip}
+                style={[styles.chip, { backgroundColor: colors.inputBackground, borderColor: colors.border }]}
                 onPress={() => onMove(name)}
                 activeOpacity={0.7}
                 accessibilityRole="button"
                 accessibilityLabel={label(`Move to ${name}`)}
                 testID={`task-move-${index}-${name}`}
               >
-                <Text style={styles.chipText} numberOfLines={1}>
+                <Text style={[styles.chipText, { color: colors.secondaryText }]} numberOfLines={1}>
                   {name}
                 </Text>
               </TouchableOpacity>
@@ -110,7 +113,7 @@ export function TaskReviewCard({
           </>
         ) : (
           <Text
-            style={styles.subjectBadge}
+            style={[styles.subjectBadge, { backgroundColor: colors.pressed, borderColor: colors.border, color: colors.mutedText }]}
             accessibilityRole="text"
             accessibilityLabel={`${ownName}, subject for task ${index + 1}`}
             testID={`task-subject-badge-${index}`}
@@ -121,11 +124,11 @@ export function TaskReviewCard({
       </View>
 
       <TextInput
-        style={styles.titleInput}
+        style={[styles.titleInput, { backgroundColor: colors.inputBackground, borderColor: colors.border, color: colors.primaryText }]}
         value={task.title}
         onChangeText={(value) => onUpdate({ title: value })}
         placeholder="What needs doing?"
-        placeholderTextColor="#94A3B8"
+        placeholderTextColor={colors.placeholder}
         maxLength={200}
         accessibilityLabel={label("Task title")}
         testID={`task-title-${index}`}
@@ -135,7 +138,7 @@ export function TaskReviewCard({
         {DUE_CHIP_VALUES.map((chip) => (
           <TouchableOpacity
             key={chip.value}
-            style={[styles.chip, dueChip === chip.value && styles.chipActive]}
+            style={[styles.chip, { backgroundColor: colors.inputBackground, borderColor: colors.border }, dueChip === chip.value && { backgroundColor: colors.accentSoft, borderColor: colors.accent }]}
             onPress={() =>
               onUpdate({ due_date: dueDateForChip(chip.value, new Date()) })
             }
@@ -146,14 +149,14 @@ export function TaskReviewCard({
             testID={`task-due-${index}-${chip.value}`}
           >
             <Text
-              style={[styles.chipText, dueChip === chip.value && styles.chipTextActive]}
+              style={[styles.chipText, { color: dueChip === chip.value ? colors.accentSoftForeground : colors.secondaryText }, dueChip === chip.value && styles.chipTextActive]}
             >
               {chip.label}
             </Text>
           </TouchableOpacity>
         ))}
         <TouchableOpacity
-          style={[styles.chip, !task.due_date && styles.chipActive]}
+          style={[styles.chip, { backgroundColor: colors.inputBackground, borderColor: colors.border }, !task.due_date && { backgroundColor: colors.accentSoft, borderColor: colors.accent }]}
           onPress={() => onUpdate({ due_date: null })}
           activeOpacity={0.7}
           accessibilityRole="button"
@@ -161,18 +164,18 @@ export function TaskReviewCard({
           accessibilityState={{ selected: !task.due_date }}
           testID={`task-due-${index}-none`}
         >
-          <Text style={[styles.chipText, !task.due_date && styles.chipTextActive]}>
+          <Text style={[styles.chipText, { color: !task.due_date ? colors.accentSoftForeground : colors.secondaryText }, !task.due_date && styles.chipTextActive]}>
             None
           </Text>
         </TouchableOpacity>
         {task.due_date && dueChip === "custom" ? (
-          <Text style={styles.dueCustomLabel}>{formatDueDate(task.due_date)}</Text>
+          <Text style={[styles.dueCustomLabel, { color: colors.mutedText }]}>{formatDueDate(task.due_date)}</Text>
         ) : null}
       </View>
 
       {detailsOpen ? null : (
         <Text
-          style={styles.detailsSummary}
+          style={[styles.detailsSummary, { color: colors.mutedText }]}
           testID={`task-details-summary-${index}`}
         >
           {summary}
@@ -191,8 +194,8 @@ export function TaskReviewCard({
           accessibilityState={{ expanded: detailsOpen }}
           testID={`task-details-toggle-${index}`}
         >
-          <Text style={styles.detailsToggleText}>Details</Text>
-          <Text style={styles.chevron}>
+          <Text style={[styles.detailsToggleText, { color: colors.secondaryText }]}>Details</Text>
+          <Text style={[styles.chevron, { color: colors.mutedText }]}>
             {detailsOpen ? "\u25B2" : "\u25BC"}
           </Text>
         </TouchableOpacity>
@@ -204,7 +207,7 @@ export function TaskReviewCard({
           accessibilityLabel={label(`Delete task ${task.title || "untitled"}`)}
           testID={`task-delete-${index}`}
         >
-          <Text style={styles.deleteText}>✕</Text>
+          <Text style={[styles.deleteText, { color: colors.error }]}>✕</Text>
         </TouchableOpacity>
       </View>
 
@@ -216,7 +219,7 @@ export function TaskReviewCard({
               return (
                 <TouchableOpacity
                   key={option.value}
-                  style={[styles.chip, selected && styles.chipActive]}
+                  style={[styles.chip, { backgroundColor: colors.inputBackground, borderColor: colors.border }, selected && { backgroundColor: colors.accentSoft, borderColor: colors.accent }]}
                   onPress={() =>
                     onUpdate({ priority: priorityFromDifficulty(option.value) })
                   }
@@ -227,7 +230,7 @@ export function TaskReviewCard({
                   testID={`task-difficulty-${index}-${option.value}`}
                 >
                   <Text
-                    style={[styles.chipText, selected && styles.chipTextActive]}
+                    style={[styles.chipText, { color: selected ? colors.accentSoftForeground : colors.secondaryText }, selected && styles.chipTextActive]}
                   >
                     {option.label}
                   </Text>
@@ -240,7 +243,8 @@ export function TaskReviewCard({
             <TouchableOpacity
               style={[
                 styles.chip,
-                task.estimated_minutes === null && styles.chipActive,
+                { backgroundColor: colors.inputBackground, borderColor: colors.border },
+                task.estimated_minutes === null && { backgroundColor: colors.accentSoft, borderColor: colors.accent },
               ]}
               onPress={() => onUpdate({ estimated_minutes: null })}
               activeOpacity={0.7}
@@ -252,6 +256,7 @@ export function TaskReviewCard({
               <Text
                 style={[
                   styles.chipText,
+                  { color: task.estimated_minutes === null ? colors.accentSoftForeground : colors.secondaryText },
                   task.estimated_minutes === null && styles.chipTextActive,
                 ]}
               >
@@ -263,7 +268,7 @@ export function TaskReviewCard({
               return (
                 <TouchableOpacity
                   key={minutes}
-                  style={[styles.chip, selected && styles.chipActive]}
+                  style={[styles.chip, { backgroundColor: colors.inputBackground, borderColor: colors.border }, selected && { backgroundColor: colors.accentSoft, borderColor: colors.accent }]}
                   onPress={() => onUpdate({ estimated_minutes: minutes })}
                   activeOpacity={0.7}
                   accessibilityRole="button"
@@ -272,7 +277,7 @@ export function TaskReviewCard({
                   testID={`task-est-${index}-${minutes}`}
                 >
                   <Text
-                    style={[styles.chipText, selected && styles.chipTextActive]}
+                    style={[styles.chipText, { color: selected ? colors.accentSoftForeground : colors.secondaryText }, selected && styles.chipTextActive]}
                   >
                     {formatMinutes(minutes)}
                   </Text>
@@ -283,13 +288,13 @@ export function TaskReviewCard({
 
           <View style={styles.notesRow}>
             <TextInput
-              style={styles.notesInput}
+              style={[styles.notesInput, { backgroundColor: colors.inputBackground, borderColor: colors.border, color: colors.primaryText }]}
               value={task.description ?? ""}
               onChangeText={(value) =>
                 onUpdate({ description: value.trim() ? value : null })
               }
               placeholder="Notes (e.g. 20 questions)"
-              placeholderTextColor="#94A3B8"
+              placeholderTextColor={colors.placeholder}
               maxLength={200}
               accessibilityLabel={label("Notes")}
               testID={`task-notes-${index}`}

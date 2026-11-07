@@ -23,10 +23,12 @@ import {
 } from "@/services/hooks";
 import type { Course } from "@/services/types";
 import { COURSE_COLORS } from "@/lib/onboarding";
+import { useTheme } from "@/theme/ThemeProvider";
 
 const PRESET_COLORS = COURSE_COLORS;
 
 export default function CoursesScreen() {
+  const { colors } = useTheme();
   const router = useRouter();
   const [showForm, setShowForm] = useState(false);
   const [editingCourse, setEditingCourse] = useState<Course | null>(null);
@@ -94,7 +96,7 @@ export default function CoursesScreen() {
   const renderItem = useCallback(
     ({ item }: { item: Course }) => (
       <TouchableOpacity
-        style={styles.card}
+        style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border }]}
         onPress={() => openEdit(item)}
         activeOpacity={0.7}
       >
@@ -102,11 +104,11 @@ export default function CoursesScreen() {
         <View style={styles.cardContent}>
           <View style={styles.cardRow}>
             <View style={[styles.colorDot, { backgroundColor: item.color }]} />
-            <Text style={styles.cardName} numberOfLines={1}>
+            <Text style={[styles.cardName, { color: colors.primaryText }]} numberOfLines={1}>
               {item.name}
             </Text>
           </View>
-          <Text style={styles.cardMeta}>
+          <Text style={[styles.cardMeta, { color: colors.mutedText }]}>
             {backlogCountForCourse(item.id)} task
             {backlogCountForCourse(item.id) !== 1 ? "s" : ""}
           </Text>
@@ -116,17 +118,17 @@ export default function CoursesScreen() {
           onPress={() => openDelete(item)}
           activeOpacity={0.7}
         >
-          <Text style={styles.deleteBtnText}>Delete</Text>
+          <Text style={[styles.deleteBtnText, { color: colors.error }]}>Delete</Text>
         </TouchableOpacity>
       </TouchableOpacity>
     ),
-    [openEdit, openDelete, backlogCountForCourse],
+    [openEdit, openDelete, backlogCountForCourse, colors],
   );
 
   const keyExtractor = useCallback((item: Course) => item.id, []);
 
   return (
-    <SafeAreaView style={styles.container} edges={["top"]}>
+    <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]} edges={["top"]}>
       {/* Header */}
       <View style={styles.header}>
         <TouchableOpacity
@@ -134,15 +136,15 @@ export default function CoursesScreen() {
           style={styles.backBtn}
           activeOpacity={0.7}
         >
-          <Text style={styles.backText}>{"< Back"}</Text>
+          <Text style={[styles.backText, { color: colors.accentText }]}>{"< Back"}</Text>
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>Courses</Text>
+        <Text style={[styles.headerTitle, { color: colors.primaryText }]}>Courses</Text>
         <TouchableOpacity
-          style={styles.addBtn}
+          style={[styles.addBtn, { backgroundColor: colors.accent }]}
           onPress={() => setShowForm(true)}
           activeOpacity={0.8}
         >
-          <Text style={styles.addBtnText}>+ Add</Text>
+          <Text style={[styles.addBtnText, { color: colors.accentForeground }]}>+ Add</Text>
         </TouchableOpacity>
       </View>
 
@@ -150,27 +152,27 @@ export default function CoursesScreen() {
       {isLoading ? (
         <View style={styles.loadingContainer}>
           {[1, 2, 3].map((n) => (
-            <View key={n} style={styles.skeletonCard}>
-              <View style={styles.skeletonColor} />
+            <View key={n} style={[styles.skeletonCard, { backgroundColor: colors.card }]}>
+              <View style={[styles.skeletonColor, { backgroundColor: colors.pressed }]} />
               <View style={styles.skeletonContent}>
-                <View style={styles.skeletonLine} />
-                <View style={[styles.skeletonLine, { width: "40%" }]} />
+                <View style={[styles.skeletonLine, { backgroundColor: colors.pressed }]} />
+                <View style={[styles.skeletonLine, { width: "40%", backgroundColor: colors.pressed }]} />
               </View>
             </View>
           ))}
         </View>
       ) : courses.length === 0 ? (
         <View style={styles.emptyContainer}>
-          <Text style={styles.emptyTitle}>No courses yet.</Text>
-          <Text style={styles.emptyBody}>
+          <Text style={[styles.emptyTitle, { color: colors.primaryText }]}>No courses yet.</Text>
+          <Text style={[styles.emptyBody, { color: colors.mutedText }]}>
             Add your subjects and Momentum will organize your work by course.
           </Text>
           <TouchableOpacity
-            style={styles.emptyButton}
+            style={[styles.emptyButton, { backgroundColor: colors.accent }]}
             onPress={() => setShowForm(true)}
             activeOpacity={0.8}
           >
-            <Text style={styles.emptyButtonText}>+ Add Course</Text>
+            <Text style={[styles.emptyButtonText, { color: colors.accentForeground }]}>+ Add Course</Text>
           </TouchableOpacity>
         </View>
       ) : (
@@ -183,8 +185,8 @@ export default function CoursesScreen() {
             <RefreshControl
               refreshing={isRefetching}
               onRefresh={refetch}
-              tintColor="#64748B"
-              colors={["#3B82F6"]}
+              tintColor={colors.mutedText}
+              colors={[colors.accent]}
             />
           }
           ItemSeparatorComponent={() => <View style={styles.separator} />}
@@ -232,22 +234,23 @@ export default function CoursesScreen() {
           onRequestClose={() => setDeletingCourse(null)}
         >
           <View style={styles.deleteOverlay}>
-            <View style={styles.deleteDialog}>
-              <Text style={styles.deleteDialogTitle}>Delete Course</Text>
-              <Text style={styles.deleteDialogBody}>
+            <View style={[styles.deleteDialog, { backgroundColor: colors.dialog }]}>
+              <Text style={[styles.deleteDialogTitle, { color: colors.primaryText }]}>Delete Course</Text>
+              <Text style={[styles.deleteDialogBody, { color: colors.secondaryText }]}>
                 {`Are you sure you want to delete "${deletingCourse.name}"? This action cannot be undone.`}
               </Text>
               <View style={styles.deleteDialogActions}>
                 <TouchableOpacity
-                  style={styles.deleteDialogCancel}
+                  style={[styles.deleteDialogCancel, { backgroundColor: colors.pressed }]}
                   onPress={() => setDeletingCourse(null)}
                   activeOpacity={0.7}
                 >
-                  <Text style={styles.deleteDialogCancelText}>Cancel</Text>
+                  <Text style={[styles.deleteDialogCancelText, { color: colors.secondaryText }]}>Cancel</Text>
                 </TouchableOpacity>
                 <TouchableOpacity
                   style={[
                     styles.deleteDialogConfirm,
+                    { backgroundColor: colors.error },
                     deleteCourse.isPending && styles.deleteDialogConfirmDisabled,
                   ]}
                   onPress={handleDelete}
@@ -255,9 +258,9 @@ export default function CoursesScreen() {
                   activeOpacity={0.8}
                 >
                   {deleteCourse.isPending ? (
-                    <ActivityIndicator size="small" color="#FFF" />
+                    <ActivityIndicator size="small" color={colors.accentForeground} />
                   ) : (
-                    <Text style={styles.deleteDialogConfirmText}>Delete</Text>
+                    <Text style={[styles.deleteDialogConfirmText, { color: colors.accentForeground }]}>Delete</Text>
                   )}
                 </TouchableOpacity>
               </View>
@@ -284,24 +287,25 @@ function CourseFormModal({
   onSave: (data: { name: string; color: string }) => void;
   onClose: () => void;
 }) {
+  const { colors } = useTheme();
   const [name, setName] = useState(initial?.name ?? "");
   const [color, setColor] = useState(initial?.color ?? PRESET_COLORS[0]);
 
   const canSave = name.trim().length > 0 && !saving;
 
   return (
-    <SafeAreaView style={styles.formContainer}>
-      <View style={styles.formHeader}>
+    <SafeAreaView style={[styles.formContainer, { backgroundColor: colors.background }]}>
+      <View style={[styles.formHeader, { borderBottomColor: colors.divider }]}>
         <TouchableOpacity onPress={onClose}>
-          <Text style={styles.formCancel}>Cancel</Text>
+          <Text style={[styles.formCancel, { color: colors.accentText }]}>Cancel</Text>
         </TouchableOpacity>
-        <Text style={styles.formTitle}>{title}</Text>
+        <Text style={[styles.formTitle, { color: colors.primaryText }]}>{title}</Text>
         <TouchableOpacity
           onPress={() => onSave({ name: name.trim(), color })}
           disabled={!canSave}
           activeOpacity={0.7}
         >
-          <Text style={[styles.formSave, !canSave && styles.formSaveDisabled]}>
+          <Text style={[styles.formSave, { color: colors.accentText }, !canSave && styles.formSaveDisabled]}>
             {saving ? "Saving..." : "Save"}
           </Text>
         </TouchableOpacity>
@@ -311,25 +315,25 @@ function CourseFormModal({
         {/* Preview */}
         <View style={styles.previewRow}>
           <View style={[styles.previewCircle, { backgroundColor: color }]} />
-          <Text style={styles.previewName} numberOfLines={1}>
+          <Text style={[styles.previewName, { color: colors.primaryText }]} numberOfLines={1}>
             {name.trim() || "Course Name"}
           </Text>
         </View>
 
         {/* Name Input */}
-        <Text style={styles.fieldLabel}>Name</Text>
+        <Text style={[styles.fieldLabel, { color: colors.secondaryText }]}>Name</Text>
         <TextInput
-          style={styles.input}
+          style={[styles.input, { backgroundColor: colors.inputBackground, borderColor: colors.border, color: colors.primaryText }]}
           value={name}
           onChangeText={setName}
           placeholder="e.g. Mathematics"
-          placeholderTextColor="#64748B"
+          placeholderTextColor={colors.placeholder}
           maxLength={255}
           autoFocus
         />
 
         {/* Color Picker */}
-        <Text style={styles.fieldLabel}>Color</Text>
+        <Text style={[styles.fieldLabel, { color: colors.secondaryText }]}>Color</Text>
         <View style={styles.colorGrid}>
           {PRESET_COLORS.map((c) => (
             <TouchableOpacity
@@ -338,6 +342,7 @@ function CourseFormModal({
                 styles.colorSwatch,
                 { backgroundColor: c },
                 color === c && styles.colorSwatchSelected,
+                color === c && { borderColor: colors.primaryText },
               ]}
               onPress={() => setColor(c)}
               activeOpacity={0.7}

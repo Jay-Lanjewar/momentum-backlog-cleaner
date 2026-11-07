@@ -1,11 +1,12 @@
 import { View, Text, StyleSheet } from "react-native";
 import type { StreakAllData, SubjectStreakData } from "@/services/types";
+import { useTheme } from "@/theme/ThemeProvider";
 
 interface StreakCardProps {
   streaks: StreakAllData;
 }
 
-function SubjectRow({ subject }: { subject: SubjectStreakData }) {
+function SubjectRow({ subject, colors }: { subject: SubjectStreakData; colors: ReturnType<typeof useTheme>["colors"] }) {
   const progress = subject.longest_streak > 0
     ? Math.min((subject.current_streak / subject.longest_streak) * 100, 100)
     : 0;
@@ -14,13 +15,13 @@ function SubjectRow({ subject }: { subject: SubjectStreakData }) {
     <View style={styles.subjectRow}>
       <View style={[styles.subjectDot, { backgroundColor: subject.course_color }]} />
       <View style={styles.subjectInfo}>
-        <Text style={styles.subjectName} numberOfLines={1}>
+        <Text style={[styles.subjectName, { color: colors.primaryText }]} numberOfLines={1}>
           {subject.course_name}
         </Text>
         <View style={styles.subjectMeta}>
           <Text style={styles.subjectStreak}>🔥 {subject.current_streak}</Text>
           {subject.longest_streak > 0 && (
-            <Text style={styles.subjectBest}>best: {subject.longest_streak}</Text>
+            <Text style={[styles.subjectBest, { color: colors.mutedText }]}>best: {subject.longest_streak}</Text>
           )}
         </View>
       </View>
@@ -37,25 +38,26 @@ function SubjectRow({ subject }: { subject: SubjectStreakData }) {
 }
 
 export function StreakCard({ streaks }: StreakCardProps) {
+  const { colors } = useTheme();
   const { momentum, subjects } = streaks;
 
   return (
-    <View style={styles.card}>
+    <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border }]}>
       <View style={styles.header}>
         <View>
-          <Text style={styles.title}>Momentum</Text>
+          <Text style={[styles.title, { color: colors.primaryText }]}>Momentum</Text>
           <Text style={styles.streakCount}>
             🔥 {momentum.current_streak} day{momentum.current_streak !== 1 ? "s" : ""}
           </Text>
         </View>
         <View style={styles.statsSide}>
           <View style={styles.miniStat}>
-            <Text style={styles.miniStatValue}>{momentum.total_study_days}</Text>
-            <Text style={styles.miniStatLabel}>total days</Text>
+            <Text style={[styles.miniStatValue, { color: colors.primaryText }]}>{momentum.total_study_days}</Text>
+            <Text style={[styles.miniStatLabel, { color: colors.mutedText }]}>total days</Text>
           </View>
           <View style={styles.miniStat}>
-            <Text style={styles.miniStatValue}>{momentum.longest_streak}</Text>
-            <Text style={styles.miniStatLabel}>best streak</Text>
+            <Text style={[styles.miniStatValue, { color: colors.primaryText }]}>{momentum.longest_streak}</Text>
+            <Text style={[styles.miniStatLabel, { color: colors.mutedText }]}>best streak</Text>
           </View>
         </View>
       </View>
@@ -63,12 +65,12 @@ export function StreakCard({ streaks }: StreakCardProps) {
       {/* Recovery Tokens */}
       <View style={styles.tokenSection}>
         <View style={styles.tokenHeader}>
-          <Text style={styles.tokenLabel}>Recovery Tokens</Text>
-          <Text style={styles.tokenCount}>
+          <Text style={[styles.tokenLabel, { color: colors.secondaryText }]}>Recovery Tokens</Text>
+          <Text style={[styles.tokenCount, { color: colors.primaryText }]}>
             {momentum.recovery_tokens_current}/{momentum.recovery_tokens_current + momentum.recovery_tokens_used}
           </Text>
         </View>
-        <View style={styles.tokenTrack}>
+        <View style={[styles.tokenTrack, { backgroundColor: colors.border }]}>
           <View
             style={[
               styles.tokenFill,
@@ -76,6 +78,7 @@ export function StreakCard({ streaks }: StreakCardProps) {
                 width: `${momentum.recovery_tokens_current + momentum.recovery_tokens_used > 0
                   ? (momentum.recovery_tokens_current / (momentum.recovery_tokens_current + momentum.recovery_tokens_used)) * 100
                   : 0}%`,
+                backgroundColor: colors.accent,
               },
             ]}
           />
@@ -85,9 +88,9 @@ export function StreakCard({ streaks }: StreakCardProps) {
       {/* Subject Streaks */}
       {subjects.length > 0 && (
         <View style={styles.subjectsSection}>
-          <Text style={styles.subjectsTitle}>Subject Streaks</Text>
+          <Text style={[styles.subjectsTitle, { color: colors.primaryText }]}>Subject Streaks</Text>
           {subjects.slice(0, 5).map((s) => (
-            <SubjectRow key={s.id} subject={s} />
+            <SubjectRow key={s.id} subject={s} colors={colors} />
           ))}
         </View>
       )}

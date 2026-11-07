@@ -15,9 +15,11 @@ import { useRouter } from "expo-router";
 import { supabase } from "@/lib/supabase";
 import { passwordStrength } from "@/lib/onboarding";
 import { useAuthStore } from "@/store/useAuthStore";
+import { useTheme } from "@/theme/ThemeProvider";
 
 export default function ResetPasswordScreen() {
   const router = useRouter();
+  const { colors } = useTheme();
   const [password, setPassword] = useState("");
   const [confirm, setConfirm] = useState("");
   const [loading, setLoading] = useState(false);
@@ -97,33 +99,33 @@ export default function ResetPasswordScreen() {
 
   if (!sessionReady) {
     return (
-      <SafeAreaView style={styles.container}>
+      <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
         <View style={styles.loadingBox}>
-          <ActivityIndicator size="large" color="#2563EB" />
+          <ActivityIndicator size="large" color={colors.accent} />
         </View>
       </SafeAreaView>
     );
   }
 
   return (
-    <SafeAreaView style={styles.container}>
+    <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
       <KeyboardAvoidingView
         behavior={Platform.OS === "ios" ? "padding" : "height"}
         style={styles.flex}
       >
         <View style={styles.content}>
-          <Text style={styles.title}>Set New Password</Text>
-          <Text style={styles.subtitle}>
+          <Text style={[styles.title, { color: colors.primaryText }]}>Set New Password</Text>
+          <Text style={[styles.subtitle, { color: colors.secondaryText }]}>
             Choose a new password for your account.
           </Text>
 
-          <Text style={styles.label}>New Password</Text>
+          <Text style={[styles.label, { color: colors.secondaryText }]}>New Password</Text>
           <TextInput
-            style={styles.input}
+            style={[styles.input, { backgroundColor: colors.inputBackground, borderColor: colors.border, color: colors.primaryText }]}
             value={password}
             onChangeText={setPassword}
             placeholder="Min 8 characters"
-            placeholderTextColor="#999"
+            placeholderTextColor={colors.placeholder}
             secureTextEntry
             autoComplete="new-password"
             autoCapitalize="none"
@@ -134,33 +136,33 @@ export default function ResetPasswordScreen() {
             </Text>
           ) : null}
 
-          <Text style={styles.label}>Confirm Password</Text>
+          <Text style={[styles.label, { color: colors.secondaryText }]}>Confirm Password</Text>
           <TextInput
-            style={styles.input}
+            style={[styles.input, { backgroundColor: colors.inputBackground, borderColor: colors.border, color: colors.primaryText }]}
             value={confirm}
             onChangeText={setConfirm}
             placeholder="Re-enter password"
-            placeholderTextColor="#999"
+            placeholderTextColor={colors.placeholder}
             secureTextEntry
             autoComplete="new-password"
             autoCapitalize="none"
           />
           {password.length > 0 && password !== confirm ? (
-            <Text style={styles.errorSmall}>Passwords do not match</Text>
+            <Text style={[styles.errorSmall, { color: colors.error }]}>Passwords do not match</Text>
           ) : null}
 
-          {error ? <Text style={styles.errorText}>{error}</Text> : null}
+          {error ? <Text style={[styles.errorText, { color: colors.error }]}>{error}</Text> : null}
 
           <TouchableOpacity
-            style={[styles.button, !canSubmit && styles.buttonDisabled]}
+            style={[styles.button, { backgroundColor: colors.accent }, !canSubmit && styles.buttonDisabled]}
             onPress={handleSubmit}
             disabled={!canSubmit}
             activeOpacity={0.8}
           >
             {loading ? (
-              <ActivityIndicator color="#fff" />
+              <ActivityIndicator color={colors.accentForeground} />
             ) : (
-              <Text style={styles.buttonText}>Update Password</Text>
+              <Text style={[styles.buttonText, { color: colors.accentForeground }]}>Update Password</Text>
             )}
           </TouchableOpacity>
 
@@ -172,7 +174,7 @@ export default function ResetPasswordScreen() {
             }}
             activeOpacity={0.8}
           >
-            <Text style={styles.linkText}>Back to Sign In</Text>
+            <Text style={[styles.linkText, { color: colors.accentText }]}>Back to Sign In</Text>
           </TouchableOpacity>
         </View>
       </KeyboardAvoidingView>

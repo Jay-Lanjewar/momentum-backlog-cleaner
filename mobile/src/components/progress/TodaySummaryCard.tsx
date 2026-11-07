@@ -2,6 +2,7 @@ import { View, Text, StyleSheet } from "react-native";
 
 import type { TodayMetrics } from "@/services/types";
 import { formatMinutes } from "@/lib/coaching";
+import { useTheme } from "@/theme/ThemeProvider";
 
 interface Props {
   today: TodayMetrics;
@@ -9,51 +10,54 @@ interface Props {
 }
 
 export function TodaySummaryCard({ today, dailyTarget }: Props) {
+  const { colors } = useTheme();
   const ratio =
     today.estimated_minutes > 0
       ? Math.round((today.study_minutes / today.estimated_minutes) * 100)
       : 0;
 
   return (
-    <View style={styles.card}>
-      <Text style={styles.title}>Today</Text>
+    <View style={[styles.card, { backgroundColor: colors.card }]}>
+      <Text style={[styles.title, { color: colors.primaryText }]}>Today</Text>
 
       <View style={styles.row}>
         <View style={styles.stat}>
-          <Text style={styles.statValue}>{formatMinutes(today.study_minutes)}</Text>
-          <Text style={styles.statLabel}>Studied</Text>
+          <Text style={[styles.statValue, { color: colors.primaryText }]}>{formatMinutes(today.study_minutes)}</Text>
+          <Text style={[styles.statLabel, { color: colors.mutedText }]}>Studied</Text>
         </View>
 
-        <View style={styles.divider} />
+        <View style={[styles.divider, { backgroundColor: colors.divider }]} />
 
         <View style={styles.stat}>
-          <Text style={styles.statValue}>{today.sessions_completed}</Text>
-          <Text style={styles.statLabel}>Sessions</Text>
+          <Text style={[styles.statValue, { color: colors.primaryText }]}>{today.sessions_completed}</Text>
+          <Text style={[styles.statLabel, { color: colors.mutedText }]}>Sessions</Text>
         </View>
 
-        <View style={styles.divider} />
+        <View style={[styles.divider, { backgroundColor: colors.divider }]} />
 
         <View style={styles.stat}>
-          <Text style={styles.statValue}>
+          <Text style={[styles.statValue, { color: colors.primaryText }]}>
             {today.estimated_minutes > 0 ? `${ratio}%` : "--"}
           </Text>
-          <Text style={styles.statLabel}>vs Estimated</Text>
+          <Text style={[styles.statLabel, { color: colors.mutedText }]}>vs Estimated</Text>
         </View>
       </View>
 
       {dailyTarget != null && dailyTarget > 0 && (
         <View style={styles.targetRow}>
-          <Text style={styles.targetText}>
+          <Text style={[styles.targetText, { color: colors.mutedText }]}>
             {formatMinutes(today.study_minutes)} / {formatMinutes(dailyTarget)} target
           </Text>
-          <View style={styles.targetTrack}>
+          <View style={[styles.targetTrack, { backgroundColor: colors.border }]}>
             <View
               style={[
                 styles.targetFill,
                 {
                   width: `${Math.min(100, (today.study_minutes / dailyTarget) * 100)}%`,
+                  backgroundColor: colors.accent,
                 },
               ]}
+              testID="today-target-fill"
             />
           </View>
         </View>

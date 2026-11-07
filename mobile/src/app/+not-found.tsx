@@ -1,17 +1,19 @@
 import { View, Text, TouchableOpacity, StyleSheet } from "react-native";
 import { useRouter } from "expo-router";
+import { useTheme } from "@/theme/ThemeProvider";
 
 export default function NotFoundScreen() {
   const router = useRouter();
+  const { colors } = useTheme();
 
   return (
-    <View style={styles.container}>
-      <Text style={styles.title}>Page Not Found</Text>
+    <View style={[styles.container, { backgroundColor: colors.background }]}>
+      <Text style={[styles.title, { color: colors.primaryText }]}>Page Not Found</Text>
       <TouchableOpacity
-        style={styles.button}
+        style={[styles.button, { backgroundColor: colors.accent }]}
         onPress={() => router.replace("/(app)")}
       >
-        <Text style={styles.buttonText}>Go to Home</Text>
+        <Text style={[styles.buttonText, { color: colors.accentForeground }]}>Go to Home</Text>
       </TouchableOpacity>
     </View>
   );

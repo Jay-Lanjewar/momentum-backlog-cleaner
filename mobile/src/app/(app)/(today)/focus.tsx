@@ -50,6 +50,7 @@ import {
 import { AdaptiveSessionLegend } from "@/components/adaptive/AdaptiveSessionLegend";
 import { AdaptiveChangeGroup } from "@/components/adaptive/AdaptiveChangeGroup";
 import { StudyBuddyPanel } from "@/components/focus/StudyBuddyPanel";
+import { useTheme } from "@/theme/ThemeProvider";
 
 function parseDurationMs(start: string | undefined, end: string | undefined): number {
   if (!start || !end) return 0;
@@ -78,6 +79,7 @@ function createFocusGeneration(): string {
 }
 
 export default function FocusModeScreen() {
+  const { colors } = useTheme();
   const router = useRouter();
   const params = useLocalSearchParams<{
     sessionId: string;
@@ -492,9 +494,9 @@ export default function FocusModeScreen() {
   // ─── Session not found (notification deep link) ───
   if (!identityReady && dashboardLoading) {
     return (
-      <SafeAreaView style={styles.container}>
+      <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
         <View style={styles.center}>
-          <Text style={styles.loadingText}>Loading your session...</Text>
+          <Text style={[styles.loadingText, { color: colors.mutedText }]}>Loading your session...</Text>
         </View>
       </SafeAreaView>
     );
@@ -502,16 +504,16 @@ export default function FocusModeScreen() {
 
   if (isMissingSession) {
     return (
-      <SafeAreaView style={styles.container}>
+      <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
         <View style={styles.center}>
-          <Text style={{ color: "#666", fontSize: 16 }}>
+          <Text style={{ color: colors.secondaryText, fontSize: 16 }}>
             Session not found. Return to Today.
           </Text>
           <TouchableOpacity
-            style={styles.primaryButton}
+            style={[styles.primaryButton, { backgroundColor: colors.accent }]}
             onPress={() => router.replace("/(app)")}
           >
-            <Text style={styles.primaryButtonText}>Back to Today</Text>
+            <Text style={[styles.primaryButtonText, { color: colors.accentForeground }]}>Back to Today</Text>
           </TouchableOpacity>
         </View>
       </SafeAreaView>
@@ -520,15 +522,15 @@ export default function FocusModeScreen() {
 
   if (focusLeaseError) {
     return (
-      <SafeAreaView style={styles.container}>
+      <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
         <View style={styles.center}>
-          <Text style={styles.errorTitle}>This session is no longer available</Text>
-          <Text style={styles.errorBody}>{focusLeaseError}</Text>
+          <Text style={[styles.errorTitle, { color: colors.primaryText }]}>This session is no longer available</Text>
+          <Text style={[styles.errorBody, { color: colors.error }]}>{focusLeaseError}</Text>
           <TouchableOpacity
-            style={styles.primaryButton}
+            style={[styles.primaryButton, { backgroundColor: colors.accent }]}
             onPress={handleBackToMission}
           >
-            <Text style={styles.primaryButtonText}>Back to Today</Text>
+            <Text style={[styles.primaryButtonText, { color: colors.accentForeground }]}>Back to Today</Text>
           </TouchableOpacity>
         </View>
       </SafeAreaView>
@@ -538,20 +540,20 @@ export default function FocusModeScreen() {
   // ─── Completion error (recoverable) ───
   if (completionError && !adaptiveResult) {
     return (
-      <SafeAreaView style={styles.container} edges={["bottom"]}>
+      <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]} edges={["bottom"]}>
         <View style={styles.errorContainer}>
-          <Text style={styles.errorTitle}>Couldn&apos;t save your session</Text>
-          <Text style={styles.errorBody}>{completionError}</Text>
-          <Text style={styles.errorHint}>
+          <Text style={[styles.errorTitle, { color: colors.primaryText }]}>Couldn&apos;t save your session</Text>
+          <Text style={[styles.errorBody, { color: colors.error }]}>{completionError}</Text>
+          <Text style={[styles.errorHint, { color: colors.mutedText }]}>
             Your focused time was not recorded yet.
           </Text>
           <TouchableOpacity
-            style={[styles.primaryButton, styles.errorPrimaryButton]}
+            style={[styles.primaryButton, styles.errorPrimaryButton, { backgroundColor: colors.accent }]}
             onPress={handleComplete}
             disabled={completeSession.isPending}
             activeOpacity={0.8}
           >
-            <Text style={styles.primaryButtonText}>
+            <Text style={[styles.primaryButtonText, { color: colors.accentForeground }]}>
               {completeSession.isPending ? "Saving..." : "Try Again"}
             </Text>
           </TouchableOpacity>
@@ -560,7 +562,7 @@ export default function FocusModeScreen() {
             onPress={handleBackToMission}
             activeOpacity={0.8}
           >
-            <Text style={styles.errorLeaveText}>Leave without saving</Text>
+            <Text style={[styles.errorLeaveText, { color: colors.mutedText }]}>Leave without saving</Text>
           </TouchableOpacity>
         </View>
       </SafeAreaView>
@@ -573,9 +575,9 @@ export default function FocusModeScreen() {
     (completeSession.isPending || phase === "complete")
   ) {
     return (
-      <SafeAreaView style={styles.container} edges={["bottom"]}>
+      <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]} edges={["bottom"]}>
         <View style={styles.center}>
-          <Text style={styles.loadingText}>Saving your progress...</Text>
+          <Text style={[styles.loadingText, { color: colors.mutedText }]}>Saving your progress...</Text>
         </View>
       </SafeAreaView>
     );
@@ -585,9 +587,9 @@ export default function FocusModeScreen() {
   if (phase === "complete" || adaptiveResult) {
     if (!adaptiveResult) {
       return (
-        <SafeAreaView style={styles.container} edges={["bottom"]}>
+        <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]} edges={["bottom"]}>
           <View style={styles.center}>
-            <Text style={styles.loadingText}>Saving your progress...</Text>
+            <Text style={[styles.loadingText, { color: colors.mutedText }]}>Saving your progress...</Text>
           </View>
         </SafeAreaView>
       );
@@ -606,7 +608,7 @@ export default function FocusModeScreen() {
     const hasTimelines = previousSessions.length > 0 || currentSessions.length > 0;
 
     return (
-      <SafeAreaView style={styles.container} edges={["bottom"]}>
+      <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]} edges={["bottom"]}>
         <ScrollView
           style={styles.scrollContainer}
           contentContainerStyle={styles.scrollContent}
@@ -617,23 +619,23 @@ export default function FocusModeScreen() {
             <View style={styles.checkCircle}>
               <Text style={styles.checkIcon}>{"\u2713"}</Text>
             </View>
-            <Text style={styles.celebrationTitle}>Nice work!</Text>
-            <Text style={styles.celebrationSubtitle}>
+            <Text style={[styles.celebrationTitle, { color: colors.primaryText }]}>Nice work!</Text>
+            <Text style={[styles.celebrationSubtitle, { color: colors.mutedText }]}>
               You finished a focused session.
             </Text>
           </View>
 
           {/* ── Session summary card ── */}
-          <View style={styles.card}>
+          <View style={[styles.card, { backgroundColor: colors.card }]}>
             <View style={styles.summaryRow}>
               <View style={styles.summaryIconCircle}>
                 <Text style={styles.summaryIconCheck}>{"\u2713"}</Text>
               </View>
               <View style={styles.summaryContent}>
-                <Text style={styles.summaryTopic} numberOfLines={2}>
+                <Text style={[styles.summaryTopic, { color: colors.primaryText }]} numberOfLines={2}>
                   {topicFromSession({ reason })}
                 </Text>
-                <Text style={styles.summaryTime}>
+                <Text style={[styles.summaryTime, { color: colors.mutedText }]}>
                   {formatTimeRange(startTime, endTime)}{" "}
                   {" \u00B7 "} {focusedMinutes} min
                 </Text>
@@ -645,10 +647,10 @@ export default function FocusModeScreen() {
                   <Text style={styles.summaryIconStar}>{"\u2726"}</Text>
                 </View>
                 <View style={styles.summaryContent}>
-                  <Text style={styles.summaryMotivation}>
+                  <Text style={[styles.summaryMotivation, { color: colors.primaryText }]}>
                     One less thing to worry about
                   </Text>
-                  <Text style={styles.summaryMotivationSub}>
+                  <Text style={[styles.summaryMotivationSub, { color: colors.mutedText }]}>
                     Future You will thank you.
                   </Text>
                 </View>
@@ -713,14 +715,14 @@ export default function FocusModeScreen() {
               <AdaptiveChangeGroup changes={adaptiveResult.changes} />
             </View>
           ) : (
-            <View style={styles.onTrackCard}>
+            <View style={[styles.onTrackCard, { backgroundColor: colors.card }]}>
               <View style={styles.onTrackRow}>
                 <View style={styles.onTrackIconCircle}>
                   <Text style={styles.onTrackIconCheck}>{"\u2713"}</Text>
                 </View>
-                <Text style={styles.onTrackTitle}>Plan stays on track</Text>
+                <Text style={[styles.onTrackTitle, { color: colors.primaryText }]}>Plan stays on track</Text>
               </View>
-              <Text style={styles.onTrackText}>
+              <Text style={[styles.onTrackText, { color: colors.mutedText }]}>
                 No adjustments needed. Everything is running smoothly.
               </Text>
             </View>
@@ -728,12 +730,12 @@ export default function FocusModeScreen() {
 
           {/* ── Next session card ── */}
           {nextSession ? (
-            <View style={styles.nextSessionCard}>
-              <Text style={styles.nextSessionLabel}>UP NEXT</Text>
-              <Text style={styles.nextSessionTopic} numberOfLines={2}>
+            <View style={[styles.nextSessionCard, { backgroundColor: colors.card, borderLeftColor: colors.accent }]}>
+              <Text style={[styles.nextSessionLabel, { color: colors.accentText }]}>UP NEXT</Text>
+              <Text style={[styles.nextSessionTopic, { color: colors.primaryText }]} numberOfLines={2}>
                 {topicFromSession(nextSession)}
               </Text>
-              <Text style={styles.nextSessionTime}>
+              <Text style={[styles.nextSessionTime, { color: colors.mutedText }]}>
                 {formatTimeRange(nextSession.start_time, nextSession.end_time)}
                 {" \u00B7 "}
                 {formatMinutes(
@@ -741,7 +743,7 @@ export default function FocusModeScreen() {
                 )}
               </Text>
               <TouchableOpacity
-                style={styles.primaryButton}
+                style={[styles.primaryButton, { backgroundColor: colors.accent }]}
                 onPress={() =>
                   router.push({
                     pathname: "/(app)/(today)/focus",
@@ -761,17 +763,17 @@ export default function FocusModeScreen() {
                 }
                 activeOpacity={0.8}
               >
-                <Text style={styles.primaryButtonText}>
+                <Text style={[styles.primaryButtonText, { color: colors.accentForeground }]}>
                   Start Next Session
                 </Text>
               </TouchableOpacity>
             </View>
           ) : (
-            <View style={styles.caughtUpCard}>
-              <Text style={styles.caughtUpTitle}>
+            <View style={[styles.caughtUpCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
+              <Text style={[styles.caughtUpTitle, { color: colors.primaryText }]}>
                 You&apos;re all caught up for today.
               </Text>
-              <Text style={styles.caughtUpSubtitle}>
+              <Text style={[styles.caughtUpSubtitle, { color: colors.mutedText }]}>
                 Momentum will line up your next mission for tomorrow.
               </Text>
             </View>
@@ -783,7 +785,7 @@ export default function FocusModeScreen() {
             onPress={handleBackToMission}
             activeOpacity={0.8}
           >
-            <Text style={styles.secondaryButtonText}>
+            <Text style={[styles.secondaryButtonText, { color: colors.mutedText }]}>
               Back to Today&apos;s Mission
             </Text>
           </TouchableOpacity>
@@ -794,17 +796,17 @@ export default function FocusModeScreen() {
 
   // ─── Focus timer screen ───
   return (
-    <View style={styles.container}>
+    <View style={[styles.container, { backgroundColor: colors.background }]}>
       {/* Session info — fixed at top */}
       <View style={styles.sessionInfo}>
-        <Text style={styles.sessionReason} numberOfLines={2}>
+        <Text style={[styles.sessionReason, { color: colors.primaryText }]} numberOfLines={2}>
           {reason}
         </Text>
-        <Text style={styles.sessionTime}>
+        <Text style={[styles.sessionTime, { color: colors.mutedText }]}>
           {formatHourMinute(startTime)} – {formatHourMinute(endTime)}
         </Text>
         {userName && (phase === "focusing" || phase === "entering") && (
-          <Text style={styles.sessionGreeting}>
+          <Text style={[styles.sessionGreeting, { color: colors.mutedText }]}>
             Let&apos;s finish this one, {userName}.
           </Text>
         )}
@@ -824,7 +826,7 @@ export default function FocusModeScreen() {
               cx={RING_SIZE / 2}
               cy={RING_SIZE / 2}
               r={RING_RADIUS}
-              stroke="#1E293B"
+              stroke={colors.border}
               strokeWidth={RING_STROKE}
               fill="none"
             />
@@ -833,7 +835,7 @@ export default function FocusModeScreen() {
               cx={RING_SIZE / 2}
               cy={RING_SIZE / 2}
               r={RING_RADIUS}
-              stroke="#3B82F6"
+              stroke={colors.accent}
               strokeWidth={RING_STROKE}
               fill="none"
               strokeLinecap="round"
@@ -842,10 +844,10 @@ export default function FocusModeScreen() {
             />
           </Svg>
           <View style={styles.timerInner}>
-            <Text style={styles.timerText}>
+            <Text style={[styles.timerText, { color: colors.primaryText }]}>
               {formatCountdown(remainingMs)}
             </Text>
-            <Text style={styles.timerLabel}>
+            <Text style={[styles.timerLabel, { color: colors.mutedText }]}>
               {phase === "focusing"
                 ? "Focusing"
                 : phase === "paused_by_user"
@@ -871,28 +873,28 @@ export default function FocusModeScreen() {
 
       {/* Focus status messages */}
       {phase === "paused_lost_focus" && (
-        <View style={styles.statusBanner}>
-          <Text style={styles.statusText}>
+        <View style={[styles.statusBanner, { backgroundColor: colors.pressed }]}>
+          <Text style={[styles.statusText, { color: colors.secondaryText }]}>
             You left the app. Timer is paused.
           </Text>
-          <Text style={styles.statusFocused}>
+          <Text style={[styles.statusFocused, { color: colors.mutedText }]}>
             {formatCountdown(focusedElapsedMs)} focused
           </Text>
         </View>
       )}
       {phase === "focus_returned" && (
-        <View style={[styles.statusBanner, styles.statusReturned]}>
-          <Text style={styles.statusText}>
+        <View style={[styles.statusBanner, styles.statusReturned, { backgroundColor: colors.accentSoft }]}>
+          <Text style={[styles.statusText, { color: colors.secondaryText }]}>
             Welcome back! Tap Resume to continue.
           </Text>
-          <Text style={styles.statusFocused}>
+          <Text style={[styles.statusFocused, { color: colors.mutedText }]}>
             {formatCountdown(focusedElapsedMs)} focused
           </Text>
         </View>
       )}
 
       {/* Coaching message — always below ring, above controls */}
-      <Text style={styles.coachMessage}>
+      <Text style={[styles.coachMessage, { color: colors.mutedText }]}>
         {focusCoachMessage(focusedElapsedMs, totalDurationMs)}
       </Text>
 
@@ -900,19 +902,19 @@ export default function FocusModeScreen() {
       <View style={styles.controls}>
         {phase === "focusing" ? (
           <TouchableOpacity
-            style={styles.controlButton}
+            style={[styles.controlButton, { backgroundColor: colors.pressed }]}
             onPress={handlePause}
             activeOpacity={0.7}
           >
-            <Text style={styles.controlButtonText}>Pause</Text>
+            <Text style={[styles.controlButtonText, { color: colors.primaryText }]}>Pause</Text>
           </TouchableOpacity>
         ) : phase === "paused_by_user" || phase === "focus_returned" ? (
           <TouchableOpacity
-            style={[styles.controlButton, styles.controlButtonPrimary]}
+            style={[styles.controlButton, styles.controlButtonPrimary, { backgroundColor: colors.accent }]}
             onPress={handleResume}
             activeOpacity={0.7}
           >
-            <Text style={[styles.controlButtonText, styles.controlButtonTextPrimary]}>
+            <Text style={[styles.controlButtonText, { color: colors.accentForeground }]}>
               Resume
             </Text>
           </TouchableOpacity>
@@ -924,7 +926,7 @@ export default function FocusModeScreen() {
             onPress={handleFinishEarly}
             activeOpacity={0.7}
           >
-            <Text style={styles.finishButtonText}>Finish Early</Text>
+            <Text style={[styles.finishButtonText, { color: colors.mutedText }]}>Finish Early</Text>
           </TouchableOpacity>
         )}
       </View>

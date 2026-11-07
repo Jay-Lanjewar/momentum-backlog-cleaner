@@ -1,5 +1,16 @@
-import { computeTimelineBounds } from "@/components/adaptive/AdaptiveTimelineBar";
+import React from "react";
+import {
+  AdaptiveTimelineBar,
+  computeTimelineBounds,
+} from "@/components/adaptive/AdaptiveTimelineBar";
+import { AdaptiveChangeGroup } from "@/components/adaptive/AdaptiveChangeGroup";
+import { AdaptiveChangeRow } from "@/components/adaptive/AdaptiveChangeRow";
+import { AdaptiveSessionLegend } from "@/components/adaptive/AdaptiveSessionLegend";
 import type { PlanSession, PlanChange } from "@/services/types";
+import { render, screen, act } from "@testing-library/react-native";
+import { StyleSheet, Text } from "react-native";
+import { ThemeProvider, useTheme } from "@/theme/ThemeProvider";
+import { DEFAULT_PREFERENCES, usePreferencesStore } from "@/store/usePreferencesStore";
 
 function makeSession(
   overrides: Partial<PlanSession> & { session_id: string },
@@ -29,6 +40,22 @@ function makeChange(
     ...overrides,
   };
 }
+
+function ThemeProbe() {
+  const { accent, mode, colors } = useTheme();
+  return (
+    <Text testID="theme-probe">
+      {accent}:{mode}:{colors.background}
+    </Text>
+  );
+}
+
+beforeEach(() => {
+  usePreferencesStore.setState({
+    ...DEFAULT_PREFERENCES,
+    hydrationStatus: "ready",
+  });
+});
 
 // ─── computeTimelineBounds ───
 
@@ -190,8 +217,6 @@ describe("AdaptiveTimelineBar overflow logic", () => {
   });
 
   it("enforces minimum width of 4%", () => {
-    const minStart = 900;
-    const span = 180;
     const widthPct = Math.max(4, (5 / 180) * 100);
     expect(widthPct).toBe(4);
   });
@@ -282,6 +307,56 @@ describe("AdaptiveSessionLegend logic", () => {
     expect(pickColor(true, false)).toBe("#2563EB");
     expect(pickColor(false, true)).toBe("#F0B429");
     expect(pickColor(false, false)).toBe("#64748B");
+  });
+});
+
+describe("adaptive theme rendering", () => {
+  const session = makeSession({ session_id: "s1" });
+  const change = makeChange({ session_id: "c1" });
+
+  it("renders all adaptive components and preserves semantic labels", async () => {
+    await render(
+      <ThemeProvider>
+        <AdaptiveChangeGroup changes={[change]} />
+        <AdaptiveChangeRow change={change} />
+        <AdaptiveSessionLegend
+          sessions={[session]}
+          changedSessionIds={new Set(["s1"])}
+          overflowIds={new Set()}
+        />
+        <AdaptiveTimelineBar
+          sessions={[session]}
+          changedSessionIds={new Set(["s1"])}
+          minStart={900}
+          span={180}
+        />
+      </ThemeProvider>,
+    );
+
+    expect(screen.getAllByText("Maths").length).toBeGreaterThan(0);
+    expect(screen.getByLabelText("Maths, 16:00 to 16:30")).toBeTruthy();
+  });
+
+  it("updates adaptive content when appearance and accent change live", async () => {
+    await render(
+      <ThemeProvider>
+        <AdaptiveChangeRow change={change} />
+        <ThemeProbe />
+      </ThemeProvider>,
+    );
+
+    await act(async () => {
+      usePreferencesStore.getState().setAppearance("light");
+      usePreferencesStore.getState().setAccent("rose");
+    });
+
+    expect(screen.getByText("Maths")).toBeTruthy();
+    expect(StyleSheet.flatten(screen.getByText("Maths").props.style)).toEqual(
+      expect.objectContaining({ color: "#0F172A" }),
+    );
+    expect(screen.getByTestId("theme-probe")).toHaveTextContent(
+      "rose:light:#F8FAFC",
+    );
   });
 });
 

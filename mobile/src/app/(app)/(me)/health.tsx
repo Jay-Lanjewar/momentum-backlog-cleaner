@@ -3,8 +3,10 @@ import { SafeAreaView } from "react-native-safe-area-context";
 
 import { MeHeader } from "@/components/MeHeader";
 import { useBalanceScore, useStreaks, useDashboard } from "@/services/hooks";
+import { useTheme } from "@/theme/ThemeProvider";
 
 export default function HealthScreen() {
+  const { colors } = useTheme();
   const { data: balance } = useBalanceScore();
   const { data: streaks } = useStreaks();
   const { data: dashboard } = useDashboard();
@@ -16,81 +18,81 @@ export default function HealthScreen() {
   const backlogHealth = planning?.backlog_health;
 
   return (
-    <SafeAreaView style={styles.container} edges={["bottom"]}>
+    <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]} edges={["bottom"]}>
       <ScrollView contentContainerStyle={styles.scroll}>
         <MeHeader screen="health" title="Health" />
 
-        <View style={styles.scoreCard}>
-          <Text style={styles.scoreLabel}>Study Balance</Text>
-          <Text style={styles.scoreValue}>
+        <View style={[styles.scoreCard, { backgroundColor: colors.card }]}>
+          <Text style={[styles.scoreLabel, { color: colors.mutedText }]}>Study Balance</Text>
+          <Text style={[styles.scoreValue, { color: colors.primaryText }]}>
             {score != null ? `${score}%` : "--"}
           </Text>
-          {message && <Text style={styles.scoreMessage}>{message}</Text>}
+          {message && <Text style={[styles.scoreMessage, { color: colors.secondaryText }]}>{message}</Text>}
         </View>
 
         {neglected.length > 0 && (
-          <View style={styles.card}>
-            <Text style={styles.cardTitle}>Neglected Subjects</Text>
+          <View style={[styles.card, { backgroundColor: colors.card }]}>
+            <Text style={[styles.cardTitle, { color: colors.primaryText }]}>Neglected Subjects</Text>
             {neglected.map((name, i) => (
               <View key={i} style={styles.neglectedRow}>
                 <View style={styles.neglectedDot} />
-                <Text style={styles.neglectedText}>{name}</Text>
+                <Text style={[styles.neglectedText, { color: colors.primaryText }]}>{name}</Text>
               </View>
             ))}
           </View>
         )}
 
         {backlogHealth && (
-          <View style={styles.card}>
-            <Text style={styles.cardTitle}>Backlog Health</Text>
+          <View style={[styles.card, { backgroundColor: colors.card }]}>
+            <Text style={[styles.cardTitle, { color: colors.primaryText }]}>Backlog Health</Text>
             <View style={styles.healthRow}>
               <View style={styles.healthStat}>
-                <Text style={styles.healthValue}>{backlogHealth.total_items}</Text>
-                <Text style={styles.healthLabel}>Total</Text>
+                <Text style={[styles.healthValue, { color: colors.primaryText }]}>{backlogHealth.total_items}</Text>
+                <Text style={[styles.healthLabel, { color: colors.mutedText }]}>Total</Text>
               </View>
               <View style={styles.healthStat}>
-                <Text style={styles.healthValue}>{backlogHealth.completed_items}</Text>
-                <Text style={styles.healthLabel}>Done</Text>
+                <Text style={[styles.healthValue, { color: colors.primaryText }]}>{backlogHealth.completed_items}</Text>
+                <Text style={[styles.healthLabel, { color: colors.mutedText }]}>Done</Text>
               </View>
               <View style={styles.healthStat}>
-                <Text style={[styles.healthValue, styles.healthWarning]}>
+                <Text style={[styles.healthValue, { color: colors.error }]}>
                   {backlogHealth.overdue_items}
                 </Text>
-                <Text style={styles.healthLabel}>Overdue</Text>
+                <Text style={[styles.healthLabel, { color: colors.mutedText }]}>Overdue</Text>
               </View>
               <View style={styles.healthStat}>
-                <Text style={styles.healthValue}>{backlogHealth.pending_items}</Text>
-                <Text style={styles.healthLabel}>Pending</Text>
+                <Text style={[styles.healthValue, { color: colors.primaryText }]}>{backlogHealth.pending_items}</Text>
+                <Text style={[styles.healthLabel, { color: colors.mutedText }]}>Pending</Text>
               </View>
             </View>
             {backlogHealth.estimated_completion_date && (
-              <Text style={styles.estimateText}>
+              <Text style={[styles.estimateText, { color: colors.mutedText }]}>
                 Est. completion: {backlogHealth.estimated_completion_date}
               </Text>
             )}
           </View>
         )}
 
-        <View style={styles.card}>
-          <Text style={styles.cardTitle}>Quick Stats</Text>
+        <View style={[styles.card, { backgroundColor: colors.card }]}>
+          <Text style={[styles.cardTitle, { color: colors.primaryText }]}>Quick Stats</Text>
           <View style={styles.healthRow}>
             <View style={styles.healthStat}>
-              <Text style={styles.healthValue}>
+              <Text style={[styles.healthValue, { color: colors.primaryText }]}>
                 {streaks?.momentum?.current_streak ?? 0}
               </Text>
-              <Text style={styles.healthLabel}>Streak</Text>
+              <Text style={[styles.healthLabel, { color: colors.mutedText }]}>Streak</Text>
             </View>
             <View style={styles.healthStat}>
-              <Text style={styles.healthValue}>
+              <Text style={[styles.healthValue, { color: colors.primaryText }]}>
                 {streaks?.momentum?.total_study_days ?? 0}
               </Text>
-              <Text style={styles.healthLabel}>Study Days</Text>
+              <Text style={[styles.healthLabel, { color: colors.mutedText }]}>Study Days</Text>
             </View>
             <View style={styles.healthStat}>
-              <Text style={styles.healthValue}>
+              <Text style={[styles.healthValue, { color: colors.primaryText }]}>
                 {streaks?.momentum?.recovery_tokens_current ?? 0}
               </Text>
-              <Text style={styles.healthLabel}>Recovery</Text>
+              <Text style={[styles.healthLabel, { color: colors.mutedText }]}>Recovery</Text>
             </View>
           </View>
         </View>

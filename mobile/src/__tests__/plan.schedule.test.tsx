@@ -13,6 +13,8 @@
 
 import React from "react";
 import { render, screen, fireEvent, act } from "@testing-library/react-native";
+import { StyleSheet } from "react-native";
+import { usePreferencesStore } from "@/store/usePreferencesStore";
 
 import {
   DAYS,
@@ -143,9 +145,26 @@ async function renderPlan(
 
 beforeEach(() => {
   jest.clearAllMocks();
+  usePreferencesStore.setState({
+    appearance: "dark",
+    accent: "blue",
+    hydrationStatus: "ready",
+  });
   mockScheduleLoading = false;
   mockScheduleError = false;
   mockPlanLoading = false;
+});
+
+it("renders schedule surfaces with the active light accent theme", async () => {
+  usePreferencesStore.setState({ appearance: "light", accent: "amber" });
+  await renderPlan([], []);
+
+  expect(StyleSheet.flatten(screen.getByText("Weekly Schedule").props.style)).toEqual(
+    expect.objectContaining({ color: "#0F172A" }),
+  );
+  expect(StyleSheet.flatten(screen.getByTestId("schedule-block-0").props.style)).toEqual(
+    expect.objectContaining({ backgroundColor: "#FFFFFF", borderColor: "#E2E8F0" }),
+  );
 });
 
 // ─── 1. Fixed schedule ───

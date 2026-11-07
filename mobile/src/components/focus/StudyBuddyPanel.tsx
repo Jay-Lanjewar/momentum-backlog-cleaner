@@ -15,6 +15,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { Renderer, useMarkdown } from "react-native-marked";
 
 import type { StudyBuddyMessage } from "@/services/types";
+import { useTheme } from "@/theme/ThemeProvider";
 
 interface StudyBuddyPanelProps {
   messages: StudyBuddyMessage[];
@@ -55,12 +56,22 @@ class StudyBuddyRenderer extends Renderer {
   }
 }
 
-function AssistantMarkdown({ content }: { content: string }) {
+function AssistantMarkdown({ content, colors }: { content: string; colors: ReturnType<typeof useTheme>["colors"] }) {
   const renderer = useMemo(() => new StudyBuddyRenderer({ selectable: true }), []);
   const elements = useMarkdown(content, {
-    colorScheme: "dark",
+    colorScheme: colors.background === "#F8FAFC" ? "light" : "dark",
     renderer,
-    styles: markdownStyles,
+    styles: {
+      ...markdownStyles,
+      text: { ...markdownStyles.text, color: colors.secondaryText },
+      strong: { ...markdownStyles.strong, color: colors.primaryText },
+      em: { ...markdownStyles.em, color: colors.secondaryText },
+      link: { ...markdownStyles.link, color: colors.accentText },
+      h1: { ...markdownStyles.h1, color: colors.primaryText },
+      h2: { ...markdownStyles.h2, color: colors.primaryText },
+      h3: { ...markdownStyles.h3, color: colors.primaryText },
+      li: { ...markdownStyles.li, color: colors.secondaryText },
+    },
   });
 
   return (
@@ -97,6 +108,7 @@ export function StudyBuddyPanel({
   onClose,
   onSuggestion,
 }: StudyBuddyPanelProps) {
+  const { colors } = useTheme();
   const canSend = draft.trim().length > 0 && !busy;
   const messagesRef = useRef<ScrollView>(null);
   const didInitialScrollRef = useRef(false);
@@ -130,38 +142,38 @@ export function StudyBuddyPanel({
   };
 
   return (
-    <SafeAreaView style={styles.safeArea} edges={["top", "bottom"]}>
+    <SafeAreaView style={[styles.safeArea, { backgroundColor: colors.background }]} edges={["top", "bottom"]}>
       <KeyboardAvoidingView
         testID="study-buddy-keyboard-layout"
         style={styles.keyboardAvoiding}
         behavior={Platform.OS === "ios" ? "padding" : "height"}
       >
-        <View style={styles.screen}>
-          <View style={styles.header}>
+        <View style={[styles.screen, { backgroundColor: colors.background }]}>
+          <View style={[styles.header, { borderBottomColor: colors.divider }]}>
             <View style={styles.headerIdentity}>
               <View style={styles.brandMark} accessibilityElementsHidden>
-                <Text style={styles.brandMarkText}>✦</Text>
+                <Text style={[styles.brandMarkText, { color: colors.accentText }]}>✦</Text>
               </View>
               <View style={styles.headerCopy}>
-                <Text style={styles.eyebrow}>MOMENTUM · STUDY SUPPORT</Text>
-                <Text style={styles.title}>Study Buddy</Text>
+                <Text style={[styles.eyebrow, { color: colors.accentText }]}>MOMENTUM · STUDY SUPPORT</Text>
+                <Text style={[styles.title, { color: colors.primaryText }]}>Study Buddy</Text>
               </View>
             </View>
             <TouchableOpacity
               accessibilityRole="button"
               accessibilityLabel="Close Study Buddy"
               onPress={onClose}
-              style={styles.closeButton}
+              style={[styles.closeButton, { backgroundColor: colors.pressed, borderColor: colors.border }]}
               hitSlop={8}
             >
-              <Text style={styles.closeText}>Close</Text>
+              <Text style={[styles.closeText, { color: colors.secondaryText }]}>Close</Text>
             </TouchableOpacity>
           </View>
 
-          <View style={styles.focusStatus}>
+          <View style={[styles.focusStatus, { backgroundColor: colors.accentSoft }]}>
             <View style={styles.focusDot} />
-            <Text style={styles.focusStatusText}>Focus session continues ·</Text>
-            <Text style={styles.focusCountdown}>{countdown}</Text>
+            <Text style={[styles.focusStatusText, { color: colors.secondaryText }]}>Focus session continues ·</Text>
+            <Text style={[styles.focusCountdown, { color: colors.primaryText }]}>{countdown}</Text>
           </View>
 
           <ScrollView
@@ -177,8 +189,8 @@ export function StudyBuddyPanel({
           >
             {messages.length === 0 ? (
               <View style={styles.welcome}>
-                <Text style={styles.welcomeTitle}>What are you working through?</Text>
-                <Text style={styles.welcomeText}>
+                <Text style={[styles.welcomeTitle, { color: colors.primaryText }]}>What are you working through?</Text>
+                <Text style={[styles.welcomeText, { color: colors.mutedText }]}>
                   Ask a question, share where you got stuck, or get a small hint to keep moving.
                 </Text>
                 <View style={styles.suggestions}>
@@ -187,9 +199,9 @@ export function StudyBuddyPanel({
                       accessibilityRole="button"
                       key={suggestion}
                       onPress={() => onSuggestion(suggestion)}
-                      style={styles.suggestion}
+                      style={[styles.suggestion, { borderColor: colors.border, backgroundColor: colors.pressed }]}
                     >
-                      <Text style={styles.suggestionText}>{suggestion}</Text>
+                      <Text style={[styles.suggestionText, { color: colors.accentText }]}>{suggestion}</Text>
                     </TouchableOpacity>
                   ))}
                 </View>
@@ -205,14 +217,14 @@ export function StudyBuddyPanel({
                 >
                   {message.role === "assistant" ? (
                     <>
-                      <Text style={styles.assistantLabel}>STUDY BUDDY</Text>
-                      <View style={styles.assistantBubble}>
-                        <AssistantMarkdown content={message.content} />
+                      <Text style={[styles.assistantLabel, { color: colors.mutedText }]}>STUDY BUDDY</Text>
+                      <View style={[styles.assistantBubble, { backgroundColor: colors.card, borderColor: colors.border }]}>
+                        <AssistantMarkdown content={message.content} colors={colors} />
                       </View>
                     </>
                   ) : (
-                    <View style={styles.userBubble}>
-                      <Text selectable style={styles.userText}>{message.content}</Text>
+                    <View style={[styles.userBubble, { backgroundColor: colors.accent }]}>
+                      <Text selectable style={[styles.userText, { color: colors.accentForeground }]}>{message.content}</Text>
                     </View>
                   )}
                 </View>
@@ -221,20 +233,20 @@ export function StudyBuddyPanel({
 
             {busy && (
               <View accessibilityRole="progressbar" style={styles.loadingRow}>
-                <ActivityIndicator size="small" color="#93C5FD" />
-                <Text style={styles.loading}>Study Buddy is thinking…</Text>
+                <ActivityIndicator size="small" color={colors.accent} />
+                <Text style={[styles.loading, { color: colors.mutedText }]}>Study Buddy is thinking…</Text>
               </View>
             )}
             {error && (
-              <View style={styles.errorCard}>
-                <Text accessibilityRole="alert" style={styles.errorText}>{error}</Text>
+              <View style={[styles.errorCard, { backgroundColor: colors.accentSoft, borderColor: colors.error }]}>
+                <Text accessibilityRole="alert" style={[styles.errorText, { color: colors.error }]}>{error}</Text>
                 <TouchableOpacity
                   accessibilityRole="button"
                   onPress={onRetry}
                   disabled={busy || !draft.trim()}
                   style={styles.retryButton}
                 >
-                  <Text style={[styles.retryText, (busy || !draft.trim()) && styles.disabledText]}>
+                  <Text style={[styles.retryText, { color: colors.error }, (busy || !draft.trim()) && { color: colors.mutedText }]}>
                     Retry
                   </Text>
                 </TouchableOpacity>
@@ -242,7 +254,7 @@ export function StudyBuddyPanel({
             )}
           </ScrollView>
 
-          <View style={styles.composerShell} testID="study-buddy-composer">
+          <View style={[styles.composerShell, { borderTopColor: colors.divider, backgroundColor: colors.surface }]} testID="study-buddy-composer">
             <View style={styles.composer}>
               <TextInput
                 testID="study-buddy-input"
@@ -250,7 +262,7 @@ export function StudyBuddyPanel({
                 value={draft}
                 onChangeText={onDraftChange}
                 placeholder="Ask a question…"
-                placeholderTextColor="#94A3B8"
+                placeholderTextColor={colors.placeholder}
                 multiline
                 maxLength={2000}
                 editable={!busy}
@@ -259,7 +271,7 @@ export function StudyBuddyPanel({
                 textAlignVertical="top"
                 scrollEnabled
                 onSubmitEditing={handleSend}
-                style={styles.input}
+                style={[styles.input, { backgroundColor: colors.inputBackground, borderColor: colors.border, color: colors.primaryText }]}
               />
               <TouchableOpacity
                 accessibilityRole="button"
@@ -267,12 +279,14 @@ export function StudyBuddyPanel({
                 accessibilityState={{ disabled: !canSend }}
                 onPress={handleSend}
                 disabled={!canSend}
-                style={[styles.sendButton, !canSend && styles.sendButtonDisabled]}
+                style={[styles.sendButton, { backgroundColor: colors.accent }, !canSend && { backgroundColor: colors.pressed }]}
               >
-                <Text style={styles.sendText}>{busy ? "Sending…" : "Send"}</Text>
+                <Text style={[styles.sendText, { color: canSend ? colors.accentForeground : colors.mutedText }]}>
+                  {busy ? "Sending…" : "Send"}
+                </Text>
               </TouchableOpacity>
             </View>
-            <Text style={styles.composerHint}>Study Buddy can make mistakes. Keep your own notes, too.</Text>
+            <Text style={[styles.composerHint, { color: colors.mutedText }]}>Study Buddy can make mistakes. Keep your own notes, too.</Text>
           </View>
         </View>
       </KeyboardAvoidingView>

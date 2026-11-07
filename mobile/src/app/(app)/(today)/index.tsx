@@ -43,8 +43,10 @@ import { BacklogHealthCard } from "@/components/dashboard/BacklogHealthCard";
 import { ProgressOverview } from "@/components/dashboard/ProgressOverview";
 import { StreakCard } from "@/components/dashboard/StreakCard";
 import { BalanceScoreCard } from "@/components/dashboard/BalanceScoreCard";
+import { useTheme } from "@/theme/ThemeProvider";
 
 export default function TodayMissionPage() {
+  const { colors } = useTheme();
   const router = useRouter();
   const { user, isLoading: isAuthLoading, logout } = useAuth();
   const logoutInProgress = useAuthStore((state) => state.logoutInProgress);
@@ -177,9 +179,9 @@ export default function TodayMissionPage() {
 
   if (logoutInProgress || (isLoading && !previewDashboard)) {
     return (
-      <SafeAreaView style={styles.container}>
+      <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
         <View style={styles.center}>
-          <ActivityIndicator size="large" color="#2563EB" />
+          <ActivityIndicator size="large" color={colors.accent} />
         </View>
       </SafeAreaView>
     );
@@ -187,17 +189,17 @@ export default function TodayMissionPage() {
 
   if (!data) {
     return (
-      <SafeAreaView style={styles.container}>
+      <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
         <View style={styles.center}>
-          <Text style={styles.errorText}>Could not load dashboard.</Text>
+          <Text style={[styles.errorText, { color: colors.secondaryText }]}>Could not load dashboard.</Text>
           <TouchableOpacity
             onPress={() => refetch()}
-            style={styles.retryButton}
+            style={[styles.retryButton, { backgroundColor: colors.accent }]}
             accessibilityRole="button"
             accessibilityLabel="Retry loading dashboard"
             activeOpacity={0.7}
           >
-            <Text style={styles.retryText}>Retry</Text>
+            <Text style={[styles.retryText, { color: colors.accentForeground }]}>Retry</Text>
           </TouchableOpacity>
         </View>
       </SafeAreaView>
@@ -248,7 +250,7 @@ export default function TodayMissionPage() {
     `${count} task${count === 1 ? "" : "s"}`;
 
   return (
-    <SafeAreaView style={styles.container}>
+    <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
       <ScrollView
         contentContainerStyle={styles.scrollContent}
         refreshControl={
@@ -278,7 +280,7 @@ export default function TodayMissionPage() {
         {/* Header */}
         <View style={styles.header}>
           <Text
-            style={styles.greeting}
+            style={[styles.greeting, { color: colors.primaryText }]}
             accessibilityRole="header"
             numberOfLines={2}
             ellipsizeMode="tail"
@@ -293,7 +295,7 @@ export default function TodayMissionPage() {
             activeOpacity={0.7}
             hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
           >
-            <Text style={styles.logoutText}>Sign Out</Text>
+            <Text style={[styles.logoutText, { color: colors.mutedText }]}>Sign Out</Text>
           </TouchableOpacity>
         </View>
 
@@ -323,24 +325,24 @@ export default function TodayMissionPage() {
           />
         ) : hasEmptyBacklog ? (
           <View style={styles.emptyCard}>
-            <Text style={styles.emptyTitle}>No work yet.</Text>
-            <Text style={styles.emptySubtitle}>
+            <Text style={[styles.emptyTitle, { color: colors.primaryText }]}>No work yet.</Text>
+            <Text style={[styles.emptySubtitle, { color: colors.secondaryText }]}>
               Add your first task and Momentum will build your study plan.
             </Text>
             <TouchableOpacity
               onPress={() => router.push("/(app)/(work)")}
-              style={styles.emptyCta}
+              style={[styles.emptyCta, { backgroundColor: colors.accent }]}
               accessibilityRole="button"
               accessibilityLabel="Add Work"
               activeOpacity={0.7}
             >
-              <Text style={styles.emptyCtaText}>Add Work</Text>
+              <Text style={[styles.emptyCtaText, { color: colors.accentForeground }]}>Add Work</Text>
             </TouchableOpacity>
           </View>
         ) : allPlanSessionsCompleted ? (
           <View style={styles.emptyCard}>
-            <Text style={styles.emptyTitle}>All caught up!</Text>
-            <Text style={styles.emptySubtitle}>
+            <Text style={[styles.emptyTitle, { color: colors.primaryText }]}>All caught up!</Text>
+            <Text style={[styles.emptySubtitle, { color: colors.secondaryText }]}>
               {pendingTaskCount > 0
                 ? "You've finished everything planned for today. Anything still waiting will continue in your next study period."
                 : "You've finished everything planned for today. Nothing else needs you right now."}
@@ -349,38 +351,38 @@ export default function TodayMissionPage() {
         ) : data?.planning.total_available_minutes === 0 &&
           allSessions.length === 0 ? (
           <View style={styles.emptyCard}>
-            <Text style={styles.emptyTitle}>No study time left today</Text>
-            <Text style={styles.emptySubtitle}>
+            <Text style={[styles.emptyTitle, { color: colors.primaryText }]}>No study time left today</Text>
+            <Text style={[styles.emptySubtitle, { color: colors.secondaryText }]}>
               {`${taskLabel(pendingTaskCount)} waiting, but no free window remains today. ${
                 pendingTaskCount === 1 ? "It" : "They"
               }'ll continue in your next available study period.`}
             </Text>
             <TouchableOpacity
               onPress={() => router.push("/(app)/(plan)")}
-              style={styles.emptyCta}
+              style={[styles.emptyCta, { backgroundColor: colors.accent }]}
               accessibilityRole="button"
               accessibilityLabel="View schedule"
               activeOpacity={0.7}
             >
-              <Text style={styles.emptyCtaText}>View schedule</Text>
+              <Text style={[styles.emptyCtaText, { color: colors.accentForeground }]}>View schedule</Text>
             </TouchableOpacity>
           </View>
         ) : (
           <View style={styles.emptyCard}>
-            <Text style={styles.emptyTitle}>No more sessions today</Text>
-            <Text style={styles.emptySubtitle}>
+            <Text style={[styles.emptyTitle, { color: colors.primaryText }]}>No more sessions today</Text>
+            <Text style={[styles.emptySubtitle, { color: colors.secondaryText }]}>
               {pendingTaskCount > 0
                 ? `${taskLabel(pendingTaskCount)} still waiting. Unfinished work continues in your next available study period.`
                 : "Nothing else is scheduled for today. Your next session lines up in your next study period."}
             </Text>
             <TouchableOpacity
               onPress={() => router.push("/(app)/(plan)")}
-              style={styles.emptyCta}
+              style={[styles.emptyCta, { backgroundColor: colors.accent }]}
               accessibilityRole="button"
               accessibilityLabel="View schedule"
               activeOpacity={0.7}
             >
-              <Text style={styles.emptyCtaText}>View schedule</Text>
+              <Text style={[styles.emptyCtaText, { color: colors.accentForeground }]}>View schedule</Text>
             </TouchableOpacity>
           </View>
         )}
@@ -389,12 +391,12 @@ export default function TodayMissionPage() {
         {planStatus || dailyMessage ? (
           <View style={styles.planStatusBlock}>
             {planStatus ? (
-              <Text style={styles.planStatus}>{planStatus}</Text>
+              <Text style={[styles.planStatus, { color: colors.mutedText }]}>{planStatus}</Text>
             ) : null}
             {dailyMessage ? (
               <Text
                 style={
-                  isFirstRun ? styles.dailyMessageFirstRun : styles.dailyMessage
+                  [isFirstRun ? styles.dailyMessageFirstRun : styles.dailyMessage, { color: colors.mutedText }]
                 }
               >
                 {dailyMessage}
@@ -405,9 +407,15 @@ export default function TodayMissionPage() {
 
         {/* 2. Insight — deferred on first-run (zero-state noise) */}
         {!isFirstRun && data.insight && (
-          <View style={styles.insightCard}>
-            <Text style={styles.insightTitle}>{data.insight.title}</Text>
-            <Text style={styles.insightMessage}>{data.insight.message}</Text>
+          <View
+            testID="today-insight-card"
+            style={[
+              styles.insightCard,
+              { backgroundColor: colors.card, borderColor: colors.border },
+            ]}
+          >
+            <Text style={[styles.insightTitle, { color: colors.primaryText }]}>{data.insight.title}</Text>
+            <Text style={[styles.insightMessage, { color: colors.secondaryText }]}>{data.insight.message}</Text>
           </View>
         )}
 
@@ -430,11 +438,10 @@ export default function TodayMissionPage() {
             }
           >
             <Text
-              style={
-                isFirstRun
-                  ? styles.sectionTitleFirstRun
-                  : styles.sectionTitle
-              }
+              style={[
+                isFirstRun ? styles.sectionTitleFirstRun : styles.sectionTitle,
+                { color: isFirstRun ? colors.mutedText : colors.primaryText },
+              ]}
             >
               Upcoming Today
             </Text>
@@ -448,7 +455,9 @@ export default function TodayMissionPage() {
                   key={s.session_id}
                   testID={`today-upcoming-${s.session_id}`}
                   style={
-                    isFirstRun ? styles.sessionRowFirstRun : styles.sessionRow
+                    isFirstRun
+                      ? styles.sessionRowFirstRun
+                      : [styles.sessionRow, { backgroundColor: colors.card, borderColor: colors.border }]
                   }
                   accessible
                   accessibilityRole="text"
@@ -464,14 +473,14 @@ export default function TodayMissionPage() {
                     accessible={false}
                   />
                   <View style={styles.sessionInfo}>
-                    <Text style={styles.sessionTime}>
+                    <Text style={[styles.sessionTime, { color: colors.accentText }]}>
                       {formatHourMinute(s.start_time)}
                     </Text>
-                    <Text style={styles.sessionTitle} numberOfLines={1}>
+                    <Text style={[styles.sessionTitle, { color: colors.primaryText }]} numberOfLines={1}>
                       {title}
                     </Text>
                   </View>
-                  <Text style={styles.sessionDuration}>
+                  <Text style={[styles.sessionDuration, { color: colors.mutedText }]}>
                     {duration}
                   </Text>
                 </View>

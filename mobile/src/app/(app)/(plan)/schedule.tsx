@@ -48,6 +48,7 @@ import {
   isValidTimeRange,
   hasOverlap,
 } from "@/lib/schedule";
+import { useTheme } from "@/theme/ThemeProvider";
 
 type ScheduleMap = Partial<Record<DayName, WeeklyBlock[]>>;
 
@@ -63,6 +64,7 @@ function dateToTime(d: Date): string {
 }
 
 export default function ScheduleScreen() {
+  const { colors } = useTheme();
   const {
     data: scheduleData,
     isLoading,
@@ -179,28 +181,34 @@ export default function ScheduleScreen() {
   );
 
   return (
-    <SafeAreaView style={styles.container} edges={["top"]}>
+    <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]} edges={["top"]}>
       {/* Header */}
       <View style={styles.header}>
-        <Text style={styles.headerTitle}>Weekly Schedule</Text>
+        <Text style={[styles.headerTitle, { color: colors.primaryText }]}>Weekly Schedule</Text>
         {hasChanges && scheduleReady && (
           <TouchableOpacity
-            style={[styles.saveBtn, saveSchedule.isPending && styles.saveBtnDisabled]}
+            style={[styles.saveBtn, { backgroundColor: colors.accent }, saveSchedule.isPending && styles.saveBtnDisabled]}
             onPress={handleSave}
             disabled={saveSchedule.isPending}
             activeOpacity={0.8}
           >
             {saveSchedule.isPending ? (
-              <ActivityIndicator size="small" color="#fff" />
+              <ActivityIndicator size="small" color={colors.accentForeground} />
             ) : (
-              <Text style={styles.saveBtnText}>Save</Text>
+              <Text style={[styles.saveBtnText, { color: colors.accentForeground }]}>Save</Text>
             )}
           </TouchableOpacity>
         )}
       </View>
 
       {/* Day Selector */}
-      <View style={styles.dayBar}>
+      <View
+        testID="schedule-day-bar"
+        style={[
+          styles.dayBar,
+          { backgroundColor: colors.tabBar, borderColor: colors.tabBarBorder },
+        ]}
+      >
         {DAYS.map((day) => {
           const isToday = day === getCurrentDayName();
           const isSelected = day === selectedDay;
@@ -208,14 +216,28 @@ export default function ScheduleScreen() {
           return (
             <TouchableOpacity
               key={day}
-              style={[styles.dayTab, isSelected && styles.dayTabActive]}
+              testID={`schedule-day-${day}`}
+              style={[
+                styles.dayTab,
+                isSelected && { backgroundColor: colors.accentSoft },
+              ]}
               onPress={() => setSelectedDay(day)}
               activeOpacity={0.7}
             >
-              <Text style={[styles.dayLabel, isSelected && styles.dayLabelActive]}>
+              <Text
+                style={[
+                  styles.dayLabel,
+                  {
+                    color: isSelected
+                      ? colors.accentSoftForeground
+                      : colors.mutedText,
+                    fontWeight: isSelected ? "700" : "500",
+                  },
+                ]}
+              >
                 {DAY_LABELS[day]}
               </Text>
-              {isToday && <View style={styles.todayDot} />}
+              {isToday && <View style={[styles.todayDot, { backgroundColor: colors.accent }]} />}
               {hasBlocks && !isSelected && <View style={styles.blocksDot} />}
             </TouchableOpacity>
           );
@@ -230,12 +252,17 @@ export default function ScheduleScreen() {
           <RefreshControl
             refreshing={isPlanRefetching}
             onRefresh={refetchPlan}
-            tintColor="#60A5FA"
-            colors={["#60A5FA"]}
+            tintColor={colors.accent}
+            colors={[colors.accent]}
           />
         }
       >
-        <Text style={styles.dayTitle}>{DAY_FULL_LABELS[selectedDay]}</Text>
+        <Text
+          testID="schedule-day-title"
+          style={[styles.dayTitle, { color: colors.primaryText }]}
+        >
+          {DAY_FULL_LABELS[selectedDay]}
+        </Text>
         <Text style={styles.fixedSectionLabel} testID="fixed-schedule-label">
           Fixed Schedule
         </Text>
@@ -244,22 +271,22 @@ export default function ScheduleScreen() {
           <View style={styles.emptyContainer}>
             {isScheduleError ? (
               <>
-                <Text style={styles.emptyText}>Schedule unavailable.</Text>
+                <Text style={[styles.emptyText, { color: colors.secondaryText }]}>Schedule unavailable.</Text>
                 <TouchableOpacity onPress={() => void refetchSchedule()}>
-                  <Text style={styles.emptyHint}>Tap to retry loading your schedule.</Text>
+                  <Text style={[styles.emptyHint, { color: colors.mutedText }]}>Tap to retry loading your schedule.</Text>
                 </TouchableOpacity>
               </>
             ) : (
               <>
-                <ActivityIndicator size="small" color="#60A5FA" />
-                <Text style={styles.emptyHint}>Loading your schedule…</Text>
+                <ActivityIndicator size="small" color={colors.accent} />
+                <Text style={[styles.emptyHint, { color: colors.mutedText }]}>Loading your schedule…</Text>
               </>
             )}
           </View>
         ) : blocks.length === 0 ? (
           <View style={styles.emptyContainer}>
-            <Text style={styles.emptyText}>No fixed commitments.</Text>
-            <Text style={styles.emptyHint}>
+            <Text style={[styles.emptyText, { color: colors.secondaryText }]}>No fixed commitments.</Text>
+            <Text style={[styles.emptyHint, { color: colors.mutedText }]}>
               Add school, coaching, or other recurring blocks.
             </Text>
           </View>
@@ -269,7 +296,7 @@ export default function ScheduleScreen() {
             return (
               <TouchableOpacity
                 key={`${block.start}-${block.end}-${block.type}-${index}`}
-                style={styles.blockCard}
+                style={[styles.blockCard, { backgroundColor: colors.card, borderColor: colors.border }]}
                 testID={`schedule-block-${index}`}
                 onPress={() => {
                   setEditingIndex(index);
@@ -280,23 +307,23 @@ export default function ScheduleScreen() {
                 <View style={[styles.blockDot, { backgroundColor: info?.color ?? "#737373" }]} />
                 <View style={styles.blockContent}>
                   <View style={styles.blockTop}>
-                    <Text style={styles.blockType}>
+                    <Text style={[styles.blockType, { color: colors.primaryText }]}>
                       {info?.label ?? block.type}
                     </Text>
                     {block.title ? (
-                      <Text style={styles.blockTitle}>{block.title}</Text>
+                      <Text style={[styles.blockTitle, { color: colors.secondaryText }]}>{block.title}</Text>
                     ) : null}
                   </View>
-                  <Text style={styles.blockTime}>
+                  <Text style={[styles.blockTime, { color: colors.mutedText }]}>
                     {formatTime12h(block.start)} – {formatTime12h(block.end)}
                   </Text>
                 </View>
                 <TouchableOpacity
-                  style={styles.blockDeleteBtn}
+                  style={[styles.blockDeleteBtn, { backgroundColor: colors.pressed }]}
                   onPress={() => setDeletingIndex(index)}
                   activeOpacity={0.7}
                 >
-                  <Text style={styles.blockDeleteText}>✕</Text>
+                  <Text style={[styles.blockDeleteText, { color: colors.mutedText }]}>✕</Text>
                 </TouchableOpacity>
               </TouchableOpacity>
             );
@@ -304,37 +331,42 @@ export default function ScheduleScreen() {
         )}
 
         {/* Momentum's Plan — generated sessions (read-only) */}
-        <View style={styles.planSection} testID="momentum-plan-section">
-          <Text style={styles.planSectionTitle}>Momentum&apos;s Plan</Text>
-          <Text style={styles.planSectionSubtitle}>
+        <View style={[styles.planSection, { borderTopColor: colors.divider }]} testID="momentum-plan-section">
+          <Text style={[styles.planSectionTitle, { color: colors.primaryText }]}>Momentum&apos;s Plan</Text>
+          <Text style={[styles.planSectionSubtitle, { color: colors.secondaryText }]}>
             Automatically planned around your schedule — recommendations, not
             commitments.
           </Text>
           {planDailyMessage ? (
-            <Text style={styles.planDailyMessage}>{planDailyMessage}</Text>
+            <Text
+              testID="schedule-plan-summary"
+              style={[styles.planDailyMessage, { color: colors.accentText }]}
+            >
+              {planDailyMessage}
+            </Text>
           ) : null}
 
           {isPlanLoading ? (
             <View style={styles.planLoading}>
-              <ActivityIndicator size="small" color="#60A5FA" />
-              <Text style={styles.planEmptyBody}>Loading your plan…</Text>
+              <ActivityIndicator size="small" color={colors.accent} />
+              <Text style={[styles.planEmptyBody, { color: colors.mutedText }]}>Loading your plan…</Text>
             </View>
           ) : !dashboard ? (
-            <View style={styles.planEmpty} testID="plan-empty">
-              <Text style={styles.planEmptyTitle}>Plan unavailable right now</Text>
-              <Text style={styles.planEmptyBody}>
+            <View style={[styles.planEmpty, { backgroundColor: colors.card, borderColor: colors.border }]} testID="plan-empty">
+              <Text style={[styles.planEmptyTitle, { color: colors.secondaryText }]}>Plan unavailable right now</Text>
+              <Text style={[styles.planEmptyBody, { color: colors.mutedText }]}>
                 Your fixed schedule still works. Momentum&apos;s plan appears
                 here once it loads.
               </Text>
             </View>
           ) : planSessions.length === 0 ? (
-            <View style={styles.planEmpty} testID="plan-empty">
-              <Text style={styles.planEmptyTitle}>
+            <View style={[styles.planEmpty, { backgroundColor: colors.card, borderColor: colors.border }]} testID="plan-empty">
+              <Text style={[styles.planEmptyTitle, { color: colors.secondaryText }]}>
                 {selectedDay === today
                   ? "No study sessions planned today"
                   : "Nothing planned for this day"}
               </Text>
-              <Text style={styles.planEmptyBody}>
+              <Text style={[styles.planEmptyBody, { color: colors.mutedText }]}>
                 {selectedDay === today
                   ? "Add tasks to your backlog so Momentum can plan sessions around your schedule."
                   : "Momentum plans one day at a time — switch to " +
@@ -354,6 +386,7 @@ export default function ScheduleScreen() {
                   testID={`plan-session-${session.session_id}`}
                   style={[
                     styles.planSessionCard,
+                    { backgroundColor: colors.card, borderColor: colors.border },
                     done && styles.planSessionCardDone,
                   ]}
                 >
@@ -364,12 +397,16 @@ export default function ScheduleScreen() {
                     ]}
                   />
                   <View style={styles.planSessionInfo}>
-                    <Text style={styles.planSessionTime}>
+                    <Text
+                      testID={`schedule-plan-time-${session.session_id}`}
+                      style={[styles.planSessionTime, { color: colors.accentText }]}
+                    >
                       {formatTimeRange(session.start_time, session.end_time)}
                     </Text>
                     <Text
                       style={[
                         styles.planSessionTitle,
+                        { color: colors.primaryText },
                         done && styles.planSessionTitleDone,
                       ]}
                       numberOfLines={1}
@@ -377,17 +414,17 @@ export default function ScheduleScreen() {
                       {item?.title ?? topicFromSession(session)}
                     </Text>
                     {item?.course_name ? (
-                      <Text style={styles.planSessionCourse}>
+                      <Text style={[styles.planSessionCourse, { color: colors.mutedText }]}>
                         {item.course_name}
                       </Text>
                     ) : null}
                   </View>
                   <View style={styles.planSessionMeta}>
-                    <Text style={styles.planSessionDuration}>
+                    <Text style={[styles.planSessionDuration, { color: colors.mutedText }]}>
                       {formatPlannedDuration(session)}
                     </Text>
                     {done ? (
-                      <Text style={styles.planSessionDone}>Done</Text>
+                      <Text style={[styles.planSessionDone, { color: colors.success }]}>Done</Text>
                     ) : null}
                   </View>
                 </View>
@@ -399,7 +436,7 @@ export default function ScheduleScreen() {
 
       {/* Add Button */}
       <TouchableOpacity
-        style={styles.fab}
+        style={[styles.fab, { backgroundColor: colors.accent, shadowColor: colors.accent }]}
         disabled={!scheduleReady}
         onPress={() => {
           setEditingIndex(null);
@@ -407,32 +444,32 @@ export default function ScheduleScreen() {
         }}
         activeOpacity={0.8}
       >
-        <Text style={styles.fabText}>+</Text>
+        <Text style={[styles.fabText, { color: colors.accentForeground }]}>+</Text>
       </TouchableOpacity>
 
       {/* Delete Confirmation */}
       {deletingIndex !== null && (
         <Modal transparent animationType="fade" onRequestClose={() => setDeletingIndex(null)}>
           <View style={styles.overlay}>
-            <View style={styles.dialog}>
-              <Text style={styles.dialogTitle}>Delete Block</Text>
-              <Text style={styles.dialogBody}>
+            <View style={[styles.dialog, { backgroundColor: colors.dialog }]}>
+              <Text style={[styles.dialogTitle, { color: colors.primaryText }]}>Delete Block</Text>
+              <Text style={[styles.dialogBody, { color: colors.secondaryText }]}>
                 Remove {BLOCK_TYPE_MAP.get(blocks[deletingIndex]?.type ?? "")?.label ?? "this block"} from {DAY_FULL_LABELS[selectedDay]}?
               </Text>
               <View style={styles.dialogActions}>
                 <TouchableOpacity
-                  style={styles.dialogCancel}
+                  style={[styles.dialogCancel, { backgroundColor: colors.pressed }]}
                   onPress={() => setDeletingIndex(null)}
                   activeOpacity={0.7}
                 >
-                  <Text style={styles.dialogCancelText}>Cancel</Text>
+                  <Text style={[styles.dialogCancelText, { color: colors.secondaryText }]}>Cancel</Text>
                 </TouchableOpacity>
                 <TouchableOpacity
-                  style={styles.dialogDelete}
+                  style={[styles.dialogDelete, { backgroundColor: colors.error }]}
                   onPress={handleDelete}
                   activeOpacity={0.8}
                 >
-                  <Text style={styles.dialogDeleteText}>Delete</Text>
+                  <Text style={[styles.dialogDeleteText, { color: colors.accentForeground }]}>Delete</Text>
                 </TouchableOpacity>
               </View>
             </View>
@@ -477,6 +514,7 @@ function BlockFormModal({
   onSave: (block: WeeklyBlock) => void;
   onClose: () => void;
 }) {
+  const { colors } = useTheme();
   const [type, setType] = useState<BlockType>(initial?.type ?? "school");
   const [title, setTitle] = useState(initial?.title ?? "");
   const [start, setStart] = useState(initial?.start ?? "08:00");
@@ -513,16 +551,16 @@ function BlockFormModal({
 
   return (
     <Modal visible={visible} animationType="slide" onRequestClose={onClose}>
-      <SafeAreaView style={styles.formContainer}>
-        <View style={styles.formHeader}>
+      <SafeAreaView style={[styles.formContainer, { backgroundColor: colors.background }]}>
+        <View style={[styles.formHeader, { borderBottomColor: colors.divider }]}>
           <TouchableOpacity onPress={onClose}>
-            <Text style={styles.formCancel}>Cancel</Text>
+            <Text style={[styles.formCancel, { color: colors.accentText }]}>Cancel</Text>
           </TouchableOpacity>
-          <Text style={styles.formTitle}>
+          <Text style={[styles.formTitle, { color: colors.primaryText }]}>
             {initial ? "Edit Block" : "Add Block"}
           </Text>
           <TouchableOpacity onPress={handleSave} disabled={!canSave}>
-            <Text style={[styles.formSave, !canSave && styles.formSaveDisabled]}>
+            <Text style={[styles.formSave, { color: colors.accentText }, !canSave && styles.formSaveDisabled]}>
               Save
             </Text>
           </TouchableOpacity>
@@ -530,13 +568,14 @@ function BlockFormModal({
 
         <ScrollView style={styles.formBody} contentContainerStyle={styles.formBodyContent}>
           {/* Block Type Grid */}
-          <Text style={styles.fieldLabel}>Category</Text>
+          <Text style={[styles.fieldLabel, { color: colors.secondaryText }]}>Category</Text>
           <View style={styles.typeGrid}>
             {BLOCK_TYPES.map((bt) => (
               <TouchableOpacity
                 key={bt.value}
                 style={[
                   styles.typeChip,
+                  { backgroundColor: colors.inputBackground, borderColor: colors.border },
                   type === bt.value && { backgroundColor: bt.color + "30", borderColor: bt.color },
                 ]}
                 onPress={() => setType(bt.value)}
@@ -546,6 +585,7 @@ function BlockFormModal({
                 <Text
                   style={[
                     styles.typeLabel,
+                    { color: colors.secondaryText },
                     type === bt.value && { color: bt.color, fontWeight: "600" },
                   ]}
                   numberOfLines={1}
@@ -557,24 +597,24 @@ function BlockFormModal({
           </View>
 
           {/* Title */}
-          <Text style={styles.fieldLabel}>Name (optional)</Text>
+          <Text style={[styles.fieldLabel, { color: colors.secondaryText }]}>Name (optional)</Text>
           <TextInput
-            style={styles.input}
+            style={[styles.input, { backgroundColor: colors.inputBackground, borderColor: colors.border, color: colors.primaryText }]}
             value={title}
             onChangeText={setTitle}
             placeholder="e.g. AP Physics"
-            placeholderTextColor="#64748b"
+            placeholderTextColor={colors.placeholder}
             maxLength={100}
           />
 
           {/* Start Time */}
-          <Text style={styles.fieldLabel}>Start Time</Text>
+          <Text style={[styles.fieldLabel, { color: colors.secondaryText }]}>Start Time</Text>
           <TouchableOpacity
-            style={styles.timeBtn}
+            style={[styles.timeBtn, { backgroundColor: colors.inputBackground, borderColor: colors.border }]}
             onPress={() => setShowStartPicker(true)}
             activeOpacity={0.7}
           >
-            <Text style={styles.timeBtnText}>{formatTime12h(start)}</Text>
+            <Text style={[styles.timeBtnText, { color: colors.primaryText }]}>{formatTime12h(start)}</Text>
           </TouchableOpacity>
           {showStartPicker && (
             <DateTimePicker
@@ -587,13 +627,13 @@ function BlockFormModal({
           )}
 
           {/* End Time */}
-          <Text style={styles.fieldLabel}>End Time</Text>
+          <Text style={[styles.fieldLabel, { color: colors.secondaryText }]}>End Time</Text>
           <TouchableOpacity
-            style={styles.timeBtn}
+            style={[styles.timeBtn, { backgroundColor: colors.inputBackground, borderColor: colors.border }]}
             onPress={() => setShowEndPicker(true)}
             activeOpacity={0.7}
           >
-            <Text style={styles.timeBtnText}>{formatTime12h(end)}</Text>
+            <Text style={[styles.timeBtnText, { color: colors.primaryText }]}>{formatTime12h(end)}</Text>
           </TouchableOpacity>
           {showEndPicker && (
             <DateTimePicker
@@ -607,16 +647,16 @@ function BlockFormModal({
 
           {/* Validation */}
           {!timeValid && (
-            <Text style={styles.errorText}>End time must be after start time.</Text>
+            <Text style={[styles.errorText, { color: colors.error }]}>End time must be after start time.</Text>
           )}
           {timeValid && overlap && (
-            <Text style={styles.errorText}>This block overlaps with an existing block.</Text>
+            <Text style={[styles.errorText, { color: colors.error }]}>This block overlaps with an existing block.</Text>
           )}
 
           {/* Day Info */}
-          <Text style={styles.fieldLabel}>Day</Text>
-          <View style={styles.dayInfo}>
-            <Text style={styles.dayInfoText}>{DAY_FULL_LABELS[dayName]}</Text>
+          <Text style={[styles.fieldLabel, { color: colors.secondaryText }]}>Day</Text>
+          <View style={[styles.dayInfo, { backgroundColor: colors.inputBackground, borderColor: colors.border }]}>
+            <Text style={[styles.dayInfoText, { color: colors.primaryText }]}>{DAY_FULL_LABELS[dayName]}</Text>
           </View>
         </ScrollView>
       </SafeAreaView>
@@ -654,6 +694,8 @@ const styles = StyleSheet.create({
     marginHorizontal: 16,
     marginBottom: 8,
     backgroundColor: "#1E293B",
+    borderWidth: 1,
+    borderColor: "#334155",
     borderRadius: 12,
     padding: 4,
   },

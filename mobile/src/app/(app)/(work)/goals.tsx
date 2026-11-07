@@ -6,7 +6,6 @@ import {
   TouchableOpacity,
   StyleSheet,
   RefreshControl,
-  ActivityIndicator,
   Modal,
   TextInput,
   Alert,
@@ -25,6 +24,7 @@ import {
   useDeleteGoal,
 } from "@/services/hooks";
 import type { Goal } from "@/services/types";
+import { useTheme } from "@/theme/ThemeProvider";
 
 const GOAL_TABS = [
   { value: "active", label: "Active" },
@@ -57,6 +57,7 @@ function isOverdue(dateStr: string | null): boolean {
 }
 
 export default function GoalsScreen() {
+  const { colors } = useTheme();
   const router = useRouter();
   const [activeTab, setActiveTab] = useState<GoalTabValue>("active");
   const [showForm, setShowForm] = useState(false);
@@ -135,40 +136,40 @@ export default function GoalsScreen() {
 
       return (
         <TouchableOpacity
-          style={[styles.card, activeTab === "achieved" && styles.cardAchieved]}
+          style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border }, activeTab === "achieved" && styles.cardAchieved]}
           onPress={() => setEditingGoal(item)}
           activeOpacity={0.7}
         >
           <View style={styles.cardHeader}>
-            <Text style={styles.cardTitle} numberOfLines={2}>
+            <Text style={[styles.cardTitle, { color: colors.primaryText }]} numberOfLines={2}>
               {item.title}
             </Text>
             {activeTab === "active" && (
               <TouchableOpacity
-                style={styles.achieveBtn}
+                style={[styles.achieveBtn, { backgroundColor: `${colors.success}20` }]}
                 onPress={() => handleMarkAchieved(item)}
                 activeOpacity={0.7}
               >
-                <Text style={styles.achieveBtnText}>Achieve</Text>
+                <Text style={[styles.achieveBtnText, { color: colors.success }]}>Achieve</Text>
               </TouchableOpacity>
             )}
           </View>
 
           {item.description ? (
-            <Text style={styles.cardDesc} numberOfLines={2}>
+            <Text style={[styles.cardDesc, { color: colors.secondaryText }]} numberOfLines={2}>
               {item.description}
             </Text>
           ) : null}
 
           <View style={styles.cardMeta}>
             {item.category ? (
-              <View style={styles.categoryBadge}>
-                <Text style={styles.categoryText}>{item.category}</Text>
+              <View style={[styles.categoryBadge, { backgroundColor: colors.pressed }]}>
+                <Text style={[styles.categoryText, { color: colors.secondaryText }]}>{item.category}</Text>
               </View>
             ) : null}
             {item.target_date ? (
               <Text
-                style={[styles.dateText, overdue && styles.dateOverdue]}
+                style={[styles.dateText, { color: colors.mutedText }, overdue && styles.dateOverdue]}
               >
                 {overdue ? "Overdue" : formatDate(item.target_date)}
               </Text>
@@ -180,18 +181,18 @@ export default function GoalsScreen() {
             onPress={() => handleDelete(item)}
             activeOpacity={0.7}
           >
-            <Text style={styles.deleteBtnText}>Delete</Text>
+            <Text style={[styles.deleteBtnText, { color: colors.error }]}>Delete</Text>
           </TouchableOpacity>
         </TouchableOpacity>
       );
     },
-    [activeTab, handleMarkAchieved, handleDelete],
+    [activeTab, handleMarkAchieved, handleDelete, colors],
   );
 
   const keyExtractor = useCallback((item: Goal) => item.id, []);
 
   return (
-    <SafeAreaView style={styles.container} edges={["top"]}>
+    <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]} edges={["top"]}>
       {/* Header */}
       <View style={styles.header}>
         <TouchableOpacity
@@ -199,15 +200,15 @@ export default function GoalsScreen() {
           style={styles.backBtn}
           activeOpacity={0.7}
         >
-          <Text style={styles.backText}>{"< Back"}</Text>
+          <Text style={[styles.backText, { color: colors.accentText }]}>{"< Back"}</Text>
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>Goals</Text>
+        <Text style={[styles.headerTitle, { color: colors.primaryText }]}>Goals</Text>
         <TouchableOpacity
-          style={styles.addBtn}
+          style={[styles.addBtn, { backgroundColor: colors.accent }]}
           onPress={() => setShowForm(true)}
           activeOpacity={0.8}
         >
-          <Text style={styles.addBtnText}>+ Add</Text>
+          <Text style={[styles.addBtnText, { color: colors.accentForeground }]}>+ Add</Text>
         </TouchableOpacity>
       </View>
 
@@ -216,14 +217,20 @@ export default function GoalsScreen() {
         {GOAL_TABS.map((tab) => (
           <TouchableOpacity
             key={tab.value}
-            style={[styles.tab, activeTab === tab.value && styles.tabActive]}
+            testID={`goals-tab-${tab.value}`}
+            style={[
+              styles.tab,
+              { backgroundColor: colors.tabBar },
+              activeTab === tab.value && { backgroundColor: colors.accentSoft },
+            ]}
             onPress={() => setActiveTab(tab.value)}
             activeOpacity={0.7}
           >
             <Text
               style={[
                 styles.tabText,
-                activeTab === tab.value && styles.tabTextActive,
+                { color: colors.mutedText },
+                activeTab === tab.value && { color: colors.accentSoftForeground },
               ]}
             >
               {tab.label}
@@ -236,31 +243,31 @@ export default function GoalsScreen() {
       {isLoading ? (
         <View style={styles.loadingContainer}>
           {[1, 2, 3].map((n) => (
-            <View key={n} style={styles.skeletonCard}>
-              <View style={[styles.skeletonLine, { width: "70%" }]} />
-              <View style={[styles.skeletonLine, { width: "40%" }]} />
+            <View key={n} style={[styles.skeletonCard, { backgroundColor: colors.card }]}>
+              <View style={[styles.skeletonLine, { width: "70%", backgroundColor: colors.pressed }]} />
+              <View style={[styles.skeletonLine, { width: "40%", backgroundColor: colors.pressed }]} />
             </View>
           ))}
         </View>
       ) : goals.length === 0 ? (
         <View style={styles.emptyContainer}>
-          <Text style={styles.emptyTitle}>
+          <Text style={[styles.emptyTitle, { color: colors.primaryText }]}>
             {activeTab === "active"
               ? "No active goals."
               : "No achieved goals yet."}
           </Text>
-          <Text style={styles.emptyBody}>
+          <Text style={[styles.emptyBody, { color: colors.mutedText }]}>
             {activeTab === "active"
               ? "Set goals to stay motivated and track your progress."
               : "Achieve a goal and it will appear here."}
           </Text>
           {activeTab === "active" && (
             <TouchableOpacity
-              style={styles.emptyButton}
+              style={[styles.emptyButton, { backgroundColor: colors.accent }]}
               onPress={() => setShowForm(true)}
               activeOpacity={0.8}
             >
-              <Text style={styles.emptyButtonText}>+ Add Goal</Text>
+              <Text style={[styles.emptyButtonText, { color: colors.accentForeground }]}>+ Add Goal</Text>
             </TouchableOpacity>
           )}
         </View>
@@ -274,8 +281,8 @@ export default function GoalsScreen() {
             <RefreshControl
               refreshing={isRefetching}
               onRefresh={refetch}
-              tintColor="#64748B"
-              colors={["#3B82F6"]}
+              tintColor={colors.mutedText}
+              colors={[colors.accent]}
             />
           }
           ItemSeparatorComponent={() => <View style={styles.separator} />}
@@ -338,6 +345,7 @@ function GoalFormModal({
   }) => void;
   onClose: () => void;
 }) {
+  const { colors } = useTheme();
   const [goalTitle, setGoalTitle] = useState(initial?.title ?? "");
   const [description, setDescription] = useState(initial?.description ?? "");
   const [targetDate, setTargetDate] = useState<Date | null>(
@@ -379,18 +387,18 @@ function GoalFormModal({
   }, [canSave, goalTitle, description, targetDate, category, onSave]);
 
   return (
-    <SafeAreaView style={styles.formContainer}>
-      <View style={styles.formHeader}>
+    <SafeAreaView style={[styles.formContainer, { backgroundColor: colors.background }]}>
+      <View style={[styles.formHeader, { borderBottomColor: colors.divider }]}>
         <TouchableOpacity onPress={onClose}>
-          <Text style={styles.formCancel}>Cancel</Text>
+          <Text style={[styles.formCancel, { color: colors.accentText }]}>Cancel</Text>
         </TouchableOpacity>
-        <Text style={styles.formTitle}>{title}</Text>
+        <Text style={[styles.formTitle, { color: colors.primaryText }]}>{title}</Text>
         <TouchableOpacity
           onPress={handleSubmit}
           disabled={!canSave}
           activeOpacity={0.7}
         >
-          <Text style={[styles.formSave, !canSave && styles.formSaveDisabled]}>
+          <Text style={[styles.formSave, { color: colors.accentText }, !canSave && styles.formSaveDisabled]}>
             {saving ? "Saving..." : "Save"}
           </Text>
         </TouchableOpacity>
@@ -398,39 +406,39 @@ function GoalFormModal({
 
       <View style={styles.formBody}>
         {/* Title */}
-        <Text style={styles.fieldLabel}>Title</Text>
+        <Text style={[styles.fieldLabel, { color: colors.secondaryText }]}>Title</Text>
         <TextInput
-          style={styles.input}
+          style={[styles.input, { backgroundColor: colors.inputBackground, borderColor: colors.border, color: colors.primaryText }]}
           value={goalTitle}
           onChangeText={setGoalTitle}
           placeholder="e.g. Score 90% in finals"
-          placeholderTextColor="#64748B"
+          placeholderTextColor={colors.placeholder}
           maxLength={255}
           autoFocus
         />
 
         {/* Description */}
-        <Text style={styles.fieldLabel}>Description (optional)</Text>
+        <Text style={[styles.fieldLabel, { color: colors.secondaryText }]}>Description (optional)</Text>
         <TextInput
-          style={[styles.input, styles.textArea]}
+          style={[styles.input, styles.textArea, { backgroundColor: colors.inputBackground, borderColor: colors.border, color: colors.primaryText }]}
           value={description}
           onChangeText={setDescription}
           placeholder="What does achieving this look like?"
-          placeholderTextColor="#64748B"
+          placeholderTextColor={colors.placeholder}
           multiline
           numberOfLines={3}
           textAlignVertical="top"
         />
 
         {/* Target Date */}
-        <Text style={styles.fieldLabel}>Target Date (optional)</Text>
+        <Text style={[styles.fieldLabel, { color: colors.secondaryText }]}>Target Date (optional)</Text>
         <View style={styles.dateRow}>
           <TouchableOpacity
-            style={styles.dateBtn}
+            style={[styles.dateBtn, { backgroundColor: colors.inputBackground, borderColor: colors.border }]}
             onPress={() => setShowDatePicker(true)}
             activeOpacity={0.7}
           >
-            <Text style={styles.dateBtnText}>
+            <Text style={[styles.dateBtnText, { color: colors.primaryText }]}>
               {targetDate ? formatDate(targetDate.toISOString()) : "Pick a date"}
             </Text>
           </TouchableOpacity>
@@ -440,7 +448,7 @@ function GoalFormModal({
               onPress={clearDate}
               activeOpacity={0.7}
             >
-              <Text style={styles.clearDateText}>Clear</Text>
+              <Text style={[styles.clearDateText, { color: colors.error }]}>Clear</Text>
             </TouchableOpacity>
           )}
         </View>
@@ -455,14 +463,15 @@ function GoalFormModal({
         )}
 
         {/* Category */}
-        <Text style={styles.fieldLabel}>Category (optional)</Text>
+        <Text style={[styles.fieldLabel, { color: colors.secondaryText }]}>Category (optional)</Text>
         <View style={styles.categoryGrid}>
           {GOAL_CATEGORIES.map((cat) => (
             <TouchableOpacity
               key={cat}
               style={[
                 styles.categoryChip,
-                category === cat && styles.categoryChipActive,
+                { backgroundColor: colors.inputBackground, borderColor: colors.border },
+                category === cat && { backgroundColor: colors.accentSoft, borderColor: colors.accent },
               ]}
               onPress={() => setCategory(category === cat ? null : cat)}
               activeOpacity={0.7}
@@ -470,6 +479,7 @@ function GoalFormModal({
               <Text
                 style={[
                   styles.categoryChipText,
+                  { color: category === cat ? colors.accentSoftForeground : colors.mutedText },
                   category === cat && styles.categoryChipTextActive,
                 ]}
               >

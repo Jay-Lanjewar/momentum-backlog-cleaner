@@ -10,9 +10,11 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { useRouter, useLocalSearchParams } from "expo-router";
 
 import { supabase } from "@/lib/supabase";
+import { useTheme } from "@/theme/ThemeProvider";
 
 export default function VerifyEmailScreen() {
   const router = useRouter();
+  const { colors } = useTheme();
   const { email } = useLocalSearchParams<{ email: string }>();
   const [loading, setLoading] = useState(false);
   const [sent, setSent] = useState(false);
@@ -45,49 +47,49 @@ export default function VerifyEmailScreen() {
   }
 
   return (
-    <SafeAreaView style={styles.container}>
+    <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
       <View style={styles.content}>
-        <View style={styles.iconCircle}>
+        <View style={[styles.iconCircle, { backgroundColor: colors.accentSoft }]}>
           <Text style={styles.icon}>{"\u2709"}</Text>
         </View>
 
-        <Text style={styles.title}>Check your email</Text>
-        <Text style={styles.body}>
+        <Text style={[styles.title, { color: colors.primaryText }]}>Check your email</Text>
+        <Text style={[styles.body, { color: colors.secondaryText }]}>
           We sent a verification link to
         </Text>
-        {email ? <Text style={styles.email}>{email}</Text> : null}
+        {email ? <Text style={[styles.email, { color: colors.primaryText }]}>{email}</Text> : null}
 
         <TouchableOpacity
-          style={[styles.button, loading && styles.buttonDisabled]}
+          style={[styles.button, { backgroundColor: colors.accent }, loading && styles.buttonDisabled]}
           onPress={handleResend}
           disabled={loading || !email}
           activeOpacity={0.8}
         >
           {loading ? (
-            <ActivityIndicator color="#fff" />
+            <ActivityIndicator color={colors.accentForeground} />
           ) : (
-            <Text style={styles.buttonText}>
+            <Text style={[styles.buttonText, { color: colors.accentForeground }]}>
               {sent ? "Sent!" : "Resend Verification Email"}
             </Text>
           )}
         </TouchableOpacity>
 
         {error ? (
-          <Text style={styles.errorText}>{error}</Text>
+          <Text style={[styles.errorText, { color: colors.error }]}>{error}</Text>
         ) : null}
 
         <TouchableOpacity
           style={styles.linkRow}
           onPress={() => router.replace("/(auth)/login")}
         >
-          <Text style={styles.linkText}>Back to Sign In</Text>
+          <Text style={[styles.linkText, { color: colors.accentText }]}>Back to Sign In</Text>
         </TouchableOpacity>
 
         <TouchableOpacity
           style={styles.linkRow}
           onPress={() => router.replace("/(auth)/register")}
         >
-          <Text style={[styles.linkText, styles.linkBold]}>Change Email</Text>
+          <Text style={[styles.linkText, { color: colors.accentText }, styles.linkBold]}>Change Email</Text>
         </TouchableOpacity>
       </View>
     </SafeAreaView>

@@ -1,56 +1,58 @@
 import { View, Text, StyleSheet } from "react-native";
 
 import type { StreakProgress } from "@/services/types";
+import { useTheme } from "@/theme/ThemeProvider";
 
 interface Props {
   streaks: StreakProgress;
 }
 
 export function ProgressStreakCard({ streaks }: Props) {
+  const { colors } = useTheme();
   return (
-    <View style={styles.card}>
-      <Text style={styles.title}>Streaks</Text>
+    <View style={[styles.card, { backgroundColor: colors.card }]}>
+      <Text style={[styles.title, { color: colors.primaryText }]}>Streaks</Text>
 
       <View style={styles.row}>
         <View style={styles.stat}>
           <Text style={styles.statEmoji}>{"\uD83D\uDD25"}</Text>
-          <Text style={styles.statValue}>{streaks.current}</Text>
-          <Text style={styles.statLabel}>Current</Text>
+          <Text style={[styles.statValue, { color: colors.primaryText }]}>{streaks.current}</Text>
+          <Text style={[styles.statLabel, { color: colors.mutedText }]}>Current</Text>
         </View>
 
-        <View style={styles.divider} />
+        <View style={[styles.divider, { backgroundColor: colors.divider }]} />
 
         <View style={styles.stat}>
           <Text style={styles.statEmoji}>{"\uD83C\uDFC6"}</Text>
-          <Text style={styles.statValue}>{streaks.best}</Text>
-          <Text style={styles.statLabel}>Best</Text>
+          <Text style={[styles.statValue, { color: colors.primaryText }]}>{streaks.best}</Text>
+          <Text style={[styles.statLabel, { color: colors.mutedText }]}>Best</Text>
         </View>
 
-        <View style={styles.divider} />
+        <View style={[styles.divider, { backgroundColor: colors.divider }]} />
 
         <View style={styles.stat}>
           <Text style={styles.statEmoji}>{"\uD83D\uDCC5"}</Text>
-          <Text style={styles.statValue}>{streaks.total_study_days}</Text>
-          <Text style={styles.statLabel}>Total Days</Text>
+          <Text style={[styles.statValue, { color: colors.primaryText }]}>{streaks.total_study_days}</Text>
+          <Text style={[styles.statLabel, { color: colors.mutedText }]}>Total Days</Text>
         </View>
       </View>
 
       {streaks.milestones.length > 0 && (
-        <View style={styles.milestones}>
-          <Text style={styles.milestonesTitle}>Milestones</Text>
+        <View style={[styles.milestones, { borderTopColor: colors.divider }]}>
+        <Text style={[styles.milestonesTitle, { color: colors.mutedText }]}>Milestones</Text>
           <View style={styles.milestoneRow}>
             {streaks.milestones.map((m) => (
               <View
                 key={m.days}
                 style={[
                   styles.milestoneChip,
-                  m.achieved && styles.milestoneChipAchieved,
+                  { backgroundColor: m.achieved ? colors.accentSoft : colors.pressed },
                 ]}
               >
                 <Text
                   style={[
                     styles.milestoneText,
-                    m.achieved && styles.milestoneTextAchieved,
+                    { color: m.achieved ? colors.accentText : colors.mutedText },
                   ]}
                 >
                   {m.days}d

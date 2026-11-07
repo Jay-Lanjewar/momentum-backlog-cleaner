@@ -1,5 +1,6 @@
 import { View, Text, StyleSheet } from "react-native";
 import type { BacklogHealth } from "@/services/types";
+import { useTheme } from "@/theme/ThemeProvider";
 
 interface BacklogHealthCardProps {
   health: BacklogHealth;
@@ -32,6 +33,7 @@ function healthLabel(score: string): string {
 }
 
 export function BacklogHealthCard({ health }: BacklogHealthCardProps) {
+  const { colors } = useTheme();
   const color = healthColor(health.health_score);
   const clearRate = Math.round(health.clear_rate_7d * 100);
   const donePercent = health.total_items > 0
@@ -39,9 +41,9 @@ export function BacklogHealthCard({ health }: BacklogHealthCardProps) {
     : 0;
 
   return (
-    <View style={styles.card}>
+    <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border }]}>
       <View style={styles.header}>
-        <Text style={styles.title}>Backlog Health</Text>
+        <Text style={[styles.title, { color: colors.primaryText }]}>Backlog Health</Text>
         <View style={[styles.badge, { backgroundColor: color + "20" }]}>
           <Text style={[styles.badgeText, { color }]}>
             {healthLabel(health.health_score)}
@@ -52,10 +54,10 @@ export function BacklogHealthCard({ health }: BacklogHealthCardProps) {
       {/* Clear Rate Bar */}
       <View style={styles.rateSection}>
         <View style={styles.rateHeader}>
-          <Text style={styles.rateLabel}>7-day clear rate</Text>
-          <Text style={styles.rateValue}>{clearRate}%</Text>
+          <Text style={[styles.rateLabel, { color: colors.mutedText }]}>7-day clear rate</Text>
+          <Text style={[styles.rateValue, { color: colors.primaryText }]}>{clearRate}%</Text>
         </View>
-        <View style={styles.rateTrack}>
+        <View style={[styles.rateTrack, { backgroundColor: colors.border }]}>
           <View
             style={[
               styles.rateFill,
@@ -68,26 +70,26 @@ export function BacklogHealthCard({ health }: BacklogHealthCardProps) {
       {/* Counts */}
       <View style={styles.countsRow}>
         <View style={styles.countItem}>
-          <Text style={styles.countValue}>{health.pending_items}</Text>
-          <Text style={styles.countLabel}>Pending</Text>
+          <Text style={[styles.countValue, { color: colors.primaryText }]}>{health.pending_items}</Text>
+          <Text style={[styles.countLabel, { color: colors.mutedText }]}>Pending</Text>
         </View>
-        <View style={styles.countDivider} />
+        <View style={[styles.countDivider, { backgroundColor: colors.divider }]} />
         <View style={styles.countItem}>
           <Text style={[styles.countValue, health.overdue_items > 0 && styles.countCritical]}>
             {health.overdue_items}
           </Text>
-          <Text style={styles.countLabel}>Overdue</Text>
+          <Text style={[styles.countLabel, { color: colors.mutedText }]}>Overdue</Text>
         </View>
-        <View style={styles.countDivider} />
+        <View style={[styles.countDivider, { backgroundColor: colors.divider }]} />
         <View style={styles.countItem}>
-          <Text style={styles.countValue}>{donePercent}%</Text>
-          <Text style={styles.countLabel}>Done</Text>
+          <Text style={[styles.countValue, { color: colors.primaryText }]}>{donePercent}%</Text>
+          <Text style={[styles.countLabel, { color: colors.mutedText }]}>Done</Text>
         </View>
       </View>
 
       {/* Estimated completion */}
       {health.estimated_completion_date && (
-        <Text style={styles.estimate}>
+        <Text style={[styles.estimate, { color: colors.mutedText }]}>
           Est. clear: {new Date(health.estimated_completion_date).toLocaleDateString("en-US", { month: "short", day: "numeric" })}
         </Text>
       )}

@@ -23,6 +23,7 @@ import {
   qrSvgFromDataUri,
 } from "@/lib/mfa";
 import type { FactorList, TotpFactor } from "@/lib/mfa";
+import { useTheme } from "@/theme/ThemeProvider";
 
 const QR_SIZE = 176;
 
@@ -43,6 +44,7 @@ type EnrollDraft = {
 };
 
 export default function SecurityScreen() {
+  const { colors } = useTheme();
   const [phase, setPhase] = useState<Phase>("loading");
   const [verified, setVerified] = useState<TotpFactor | null>(null);
   const [draft, setDraft] = useState<EnrollDraft | null>(null);
@@ -238,13 +240,13 @@ export default function SecurityScreen() {
     if (!error) return null;
     return (
       <View
-        style={[styles.errorBox, inline && styles.errorBoxInline]}
+        style={[styles.errorBox, { backgroundColor: `${colors.error}15`, borderColor: `${colors.error}55` }, inline && styles.errorBoxInline]}
         testID="security-error"
       >
-        <Text style={styles.errorText}>{error}</Text>
+        <Text style={[styles.errorText, { color: colors.error }]}>{error}</Text>
         {phase === "off" ? (
           <TouchableOpacity
-            style={styles.retryButton}
+            style={[styles.retryButton, { backgroundColor: `${colors.error}20` }]}
             onPress={() => {
               setError(null);
               void reload();
@@ -254,7 +256,7 @@ export default function SecurityScreen() {
             accessibilityLabel="Try again"
             testID="security-retry"
           >
-            <Text style={styles.retryText}>Try again</Text>
+            <Text style={[styles.retryText, { color: colors.primaryText }]}>Try again</Text>
           </TouchableOpacity>
         ) : null}
       </View>
@@ -264,15 +266,17 @@ export default function SecurityScreen() {
   function renderCodeInput(withLabel: boolean) {
     return (
       <>
-        {withLabel ? <Text style={styles.label}>6-digit code</Text> : null}
+        {withLabel ? (
+          <Text style={[styles.label, { color: colors.primaryText }]}>6-digit code</Text>
+        ) : null}
         <TextInput
-          style={[styles.codeInput, codeFocused && styles.codeInputFocused]}
+          style={[styles.codeInput, { backgroundColor: colors.inputBackground, borderColor: codeFocused ? colors.accent : colors.border, color: colors.primaryText }, codeFocused && { backgroundColor: colors.pressed }]}
           value={code}
           onChangeText={setCode}
           onFocus={() => setCodeFocused(true)}
           onBlur={() => setCodeFocused(false)}
           placeholder="123456"
-          placeholderTextColor="#64748B"
+          placeholderTextColor={colors.placeholder}
           keyboardType="number-pad"
           textContentType="oneTimeCode"
           maxLength={6}
@@ -286,7 +290,7 @@ export default function SecurityScreen() {
 
   const verifyButton = (
     <TouchableOpacity
-      style={[styles.primaryButton, !canVerify && styles.buttonDisabled]}
+      style={[styles.primaryButton, { backgroundColor: colors.accent }, !canVerify && styles.buttonDisabled]}
       onPress={() => void handleVerify()}
       disabled={!canVerify}
       activeOpacity={0.8}
@@ -295,9 +299,9 @@ export default function SecurityScreen() {
       testID="security-verify"
     >
       {busy ? (
-        <ActivityIndicator color="#FFF" size="small" />
+        <ActivityIndicator color={colors.accentForeground} size="small" />
       ) : (
-        <Text style={styles.primaryButtonText}>Verify and turn on</Text>
+        <Text style={[styles.primaryButtonText, { color: colors.accentForeground }]}>Verify and turn on</Text>
       )}
     </TouchableOpacity>
   );
@@ -309,14 +313,14 @@ export default function SecurityScreen() {
         accessibilityElementsHidden
         importantForAccessibility="no-hide-descendants"
       >
-        <Text style={styles.stepBadgeText}>{number}</Text>
+        <Text style={[styles.stepBadgeText, { color: colors.accentForeground }]}>{number}</Text>
       </View>
-      <Text style={styles.stepTitle}>{title}</Text>
+      <Text style={[styles.stepTitle, { color: colors.primaryText }]}>{title}</Text>
     </View>
   );
 
   return (
-    <SafeAreaView style={styles.container} edges={["bottom"]}>
+    <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]} edges={["bottom"]}>
       <ScrollView
         contentContainerStyle={styles.scroll}
         keyboardShouldPersistTaps="handled"
@@ -327,30 +331,30 @@ export default function SecurityScreen() {
 
         {phase === "loading" ? (
           <View style={styles.loadingBox} testID="security-loading">
-            <ActivityIndicator color="#2563EB" size="small" />
-            <Text style={styles.loadingText}>Checking your settings…</Text>
+            <ActivityIndicator color={colors.accent} size="small" />
+            <Text style={[styles.loadingText, { color: colors.mutedText }]}>Checking your settings…</Text>
           </View>
         ) : null}
 
         {phase === "off" ? (
           <>
-            <Text style={styles.hero}>Keep your account secure</Text>
-            <View style={styles.card}>
+            <Text style={[styles.hero, { color: colors.primaryText }]}>Keep your account secure</Text>
+            <View style={[styles.card, { backgroundColor: colors.card }]}>
               <View style={styles.statusRow}>
-                <Text style={styles.cardTitle}>2-step authentication</Text>
+                <Text style={[styles.cardTitle, { color: colors.primaryText }]}>2-step authentication</Text>
                 <View style={[styles.chip, styles.chipOff]}>
                   <Text style={styles.chipOffText} testID="security-status">
                     Off
                   </Text>
                 </View>
               </View>
-              <Text style={styles.body}>
+              <Text style={[styles.body, { color: colors.secondaryText }]}>
                 Add a second step when you sign in. After your password,
                 you&apos;ll enter a 6-digit code that your authenticator app
                 (like Google Authenticator or 1Password) generates for Momentum.
               </Text>
               <TouchableOpacity
-                style={[styles.primaryButton, busy && styles.buttonDisabled]}
+                style={[styles.primaryButton, { backgroundColor: colors.accent }, busy && styles.buttonDisabled]}
                 onPress={() => void handleEnable()}
                 disabled={busy}
                 activeOpacity={0.8}
@@ -359,9 +363,9 @@ export default function SecurityScreen() {
                 testID="security-enable"
               >
                 {busy ? (
-                  <ActivityIndicator color="#FFF" size="small" />
+                  <ActivityIndicator color={colors.accentForeground} size="small" />
                 ) : (
-                  <Text style={styles.primaryButtonText}>
+                  <Text style={[styles.primaryButtonText, { color: colors.accentForeground }]}>
                     Enable 2-step authentication
                   </Text>
                 )}
@@ -371,17 +375,17 @@ export default function SecurityScreen() {
         ) : null}
 
         {phase === "setup" && draft ? (
-          <View style={styles.card}>
-            <Text style={[styles.cardTitle, styles.titleBlock]}>
+          <View style={[styles.card, { backgroundColor: colors.card }]}>
+            <Text style={[styles.cardTitle, { color: colors.primaryText }, styles.titleBlock]}>
               Set up 2-step authentication
             </Text>
 
             {stepHeader("1", "Scan with your authenticator app")}
-            <Text style={[styles.body, styles.bodySpaced]}>
+            <Text style={[styles.body, { color: colors.secondaryText }, styles.bodySpaced]}>
               Open your authenticator app, add a new account, and scan this code
               for Momentum.
             </Text>
-            <View style={styles.qrWrap} testID="security-qr">
+            <View style={[styles.qrWrap, { backgroundColor: colors.accentForeground }]} testID="security-qr">
               {qrXml ? (
                 <SvgXml
                   xml={qrXml}
@@ -393,10 +397,10 @@ export default function SecurityScreen() {
             </View>
 
             <View style={styles.revealBlock}>
-              <Text style={styles.label}>Can&apos;t scan the code?</Text>
+              <Text style={[styles.label, { color: colors.primaryText }]}>Can&apos;t scan the code?</Text>
               {!showKey ? (
                 <TouchableOpacity
-                  style={styles.ghostButton}
+                  style={[styles.ghostButton, { backgroundColor: colors.accentSoft, borderColor: colors.border }]}
                   onPress={() => setShowKey(true)}
                   disabled={busy}
                   activeOpacity={0.7}
@@ -405,19 +409,19 @@ export default function SecurityScreen() {
                   accessibilityHint="Displays the manual setup key for your authenticator app"
                   testID="security-show-key"
                 >
-                  <Text style={styles.ghostButtonText}>Show setup key</Text>
+                  <Text style={[styles.ghostButtonText, { color: colors.accentText }]}>Show setup key</Text>
                 </TouchableOpacity>
               ) : (
                 <>
-                  <Text style={styles.secretText} testID="security-secret">
+                  <Text style={[styles.secretText, { color: colors.primaryText, backgroundColor: colors.inputBackground, borderColor: colors.border }]} testID="security-secret">
                     {formatSecret(draft.secret)}
                   </Text>
-                  <Text style={styles.warningText}>
+                  <Text style={[styles.warningText, { color: colors.warning }]}>
                     Keep this key private. Anyone with this key can generate
                     codes for your Momentum account.
                   </Text>
                   <TouchableOpacity
-                    style={styles.ghostButton}
+                    style={[styles.ghostButton, { backgroundColor: colors.accentSoft, borderColor: colors.border }]}
                     onPress={() => setShowKey(false)}
                     disabled={busy}
                     activeOpacity={0.7}
@@ -425,7 +429,7 @@ export default function SecurityScreen() {
                     accessibilityLabel="Hide setup key"
                     testID="security-hide-key"
                   >
-                    <Text style={styles.ghostButtonText}>Hide setup key</Text>
+                    <Text style={[styles.ghostButtonText, { color: colors.accentText }]}>Hide setup key</Text>
                   </TouchableOpacity>
                 </>
               )}
@@ -444,20 +448,20 @@ export default function SecurityScreen() {
               accessibilityLabel="Cancel setup"
               testID="security-cancel"
             >
-              <Text style={styles.secondaryButtonText}>Cancel setup</Text>
+              <Text style={[styles.secondaryButtonText, { color: colors.secondaryText }]}>Cancel setup</Text>
             </TouchableOpacity>
           </View>
         ) : null}
 
         {phase === "pending" && pendingFactorId ? (
-          <View style={styles.card}>
+          <View style={[styles.card, { backgroundColor: colors.card }]}>
             <View style={styles.statusRow}>
-              <Text style={styles.cardTitle}>Setup in progress</Text>
+              <Text style={[styles.cardTitle, { color: colors.primaryText }]}>Setup in progress</Text>
               <View style={[styles.chip, styles.chipPending]}>
                 <Text style={styles.chipPendingText}>Not finished</Text>
               </View>
             </View>
-            <Text style={styles.body}>
+            <Text style={[styles.body, { color: colors.secondaryText }]}>
               You started adding 2-step authentication. If you already added
               Momentum to your authenticator app, enter the 6-digit code to
               finish. Otherwise, discard this setup to start fresh.
@@ -474,13 +478,13 @@ export default function SecurityScreen() {
               accessibilityLabel="Discard unfinished setup"
               testID="security-discard"
             >
-              <Text style={styles.secondaryButtonText}>Discard setup</Text>
+              <Text style={[styles.secondaryButtonText, { color: colors.secondaryText }]}>Discard setup</Text>
             </TouchableOpacity>
           </View>
         ) : null}
 
         {phase === "on" && verified ? (
-          <View style={styles.card}>
+          <View style={[styles.card, { backgroundColor: colors.card }]}>
             <View style={styles.onHeadingRow}>
               <View
                 style={styles.checkCircle}
@@ -489,17 +493,17 @@ export default function SecurityScreen() {
               >
                 <Text style={styles.checkText}>{"\u2713"}</Text>
               </View>
-              <Text style={styles.cardTitle}>
+              <Text style={[styles.cardTitle, { color: colors.primaryText }]}>
                 2-step authentication is on
               </Text>
             </View>
-            <Text style={styles.body}>
+            <Text style={[styles.body, { color: colors.secondaryText }]}>
               Momentum asks for a 6-digit code from your authenticator app after
               your password at sign-in.
             </Text>
             <View style={styles.factorRow} testID="security-factor">
               <View style={styles.factorDot} />
-              <Text style={styles.factorName} numberOfLines={1}>
+              <Text style={[styles.factorName, { color: colors.primaryText }]} numberOfLines={1}>
                 {verified.friendly_name || "Authenticator app"}
               </Text>
               <Text style={styles.factorMeta}>Verified</Text>
@@ -515,9 +519,9 @@ export default function SecurityScreen() {
               testID="security-disable"
             >
               {busy ? (
-                <ActivityIndicator color="#EF4444" size="small" />
+                <ActivityIndicator color={colors.error} size="small" />
               ) : (
-                <Text style={styles.dangerText}>
+                <Text style={[styles.dangerText, { color: colors.error }]}>
                   Disable 2-step authentication
                 </Text>
               )}

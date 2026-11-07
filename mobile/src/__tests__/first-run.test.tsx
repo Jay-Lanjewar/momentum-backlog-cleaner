@@ -12,7 +12,8 @@ import {
   fireEvent,
   waitFor,
 } from "@testing-library/react-native";
-import { Alert, Platform } from "react-native";
+import { Alert, Platform, StyleSheet } from "react-native";
+import { usePreferencesStore } from "@/store/usePreferencesStore";
 
 const mockReplace = jest.fn();
 const mockPush = jest.fn();
@@ -916,6 +917,34 @@ describe("Availability step", () => {
         ?.selected,
     ).toBe(false);
   });
+
+  it.each(["light", "dark"] as const)(
+    "renders availability controls with %s theme tokens",
+    async (appearance) => {
+      usePreferencesStore.setState({
+        appearance,
+        accent: "amber",
+        hydrationStatus: "ready",
+      });
+      await openAvailability();
+
+      const dayChip = screen.getByTestId("school-day-monday");
+      const dayChipStyle = StyleSheet.flatten(dayChip.props.style);
+      expect(dayChipStyle).toEqual(
+        expect.objectContaining({
+          backgroundColor: appearance === "light" ? "#FFFBEB" : "#243B63",
+          borderColor: "#D97706",
+        }),
+      );
+
+      const dailyTarget = screen.getByText("Daily target");
+      expect(StyleSheet.flatten(dailyTarget.props.style)).toEqual(
+        expect.objectContaining({
+          color: appearance === "light" ? "#0F172A" : "#F8FAFC",
+        }),
+      );
+    },
+  );
 
   it("school start and end changes reach the payload", async () => {
     await openAvailability();

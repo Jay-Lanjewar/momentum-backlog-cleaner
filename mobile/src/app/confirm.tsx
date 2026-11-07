@@ -8,6 +8,7 @@ import { supabase } from "@/lib/supabase";
 import { api } from "@/lib/api";
 import { useAuthStore } from "@/store/useAuthStore";
 import type { AuthMeResponse } from "@/services/types";
+import { useTheme } from "@/theme/ThemeProvider";
 
 type ConfirmState = "loading" | "success" | "error";
 
@@ -28,6 +29,7 @@ function parseHashTokens(url: string): Record<string, string> | null {
 
 export default function ConfirmScreen() {
   const router = useRouter();
+  const { colors } = useTheme();
   const linkingURL = useLinkingURL();
   const [state, setState] = useState<ConfirmState>("loading");
   const [errorMessage, setErrorMessage] = useState("");
@@ -136,10 +138,10 @@ export default function ConfirmScreen() {
 
   if (state === "loading") {
     return (
-      <SafeAreaView style={styles.container}>
+      <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
         <View style={styles.content}>
-          <ActivityIndicator size="large" color="#2563EB" />
-          <Text style={styles.title}>Verifying your email...</Text>
+          <ActivityIndicator size="large" color={colors.accent} />
+          <Text style={[styles.title, { color: colors.primaryText }]}>Verifying your email...</Text>
         </View>
       </SafeAreaView>
     );
@@ -147,21 +149,21 @@ export default function ConfirmScreen() {
 
   if (state === "success") {
     return (
-      <SafeAreaView style={styles.container}>
+      <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
         <View style={styles.content}>
-          <View style={styles.iconCircle}>
-            <Text style={styles.icon}>{"\u2713"}</Text>
+          <View style={[styles.iconCircle, { backgroundColor: `${colors.success}20` }]}>
+            <Text style={[styles.icon, { color: colors.success }]}>{"\u2713"}</Text>
           </View>
-          <Text style={styles.title}>Email verified!</Text>
-          <Text style={styles.body}>Taking you to Momentum...</Text>
+          <Text style={[styles.title, { color: colors.primaryText }]}>Email verified!</Text>
+          <Text style={[styles.body, { color: colors.secondaryText }]}>Taking you to Momentum...</Text>
           <TouchableOpacity
-            style={styles.button}
+            style={[styles.button, { backgroundColor: colors.accent }]}
             onPress={() => navigateOnce("/")}
             accessibilityRole="button"
             accessibilityLabel="Continue to Momentum"
             activeOpacity={0.8}
           >
-            <Text style={styles.buttonText}>Continue to Momentum</Text>
+            <Text style={[styles.buttonText, { color: colors.accentForeground }]}>Continue to Momentum</Text>
           </TouchableOpacity>
         </View>
       </SafeAreaView>
@@ -169,27 +171,27 @@ export default function ConfirmScreen() {
   }
 
   return (
-    <SafeAreaView style={styles.container}>
+    <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
       <View style={styles.content}>
-        <View style={[styles.iconCircle, styles.iconCircleError]}>
-          <Text style={styles.icon}>{"\u2715"}</Text>
+        <View style={[styles.iconCircle, styles.iconCircleError, { backgroundColor: `${colors.error}20` }]}>
+          <Text style={[styles.icon, { color: colors.error }]}>{"\u2715"}</Text>
         </View>
-        <Text style={styles.title}>Confirmation failed</Text>
-        <Text style={styles.body}>{errorMessage}</Text>
+        <Text style={[styles.title, { color: colors.primaryText }]}>Confirmation failed</Text>
+        <Text style={[styles.body, { color: colors.secondaryText }]}>{errorMessage}</Text>
 
         <TouchableOpacity
-          style={styles.button}
+          style={[styles.button, { backgroundColor: colors.accent }]}
           onPress={() => router.replace("/(auth)/login")}
           activeOpacity={0.8}
         >
-          <Text style={styles.buttonText}>Back to Sign In</Text>
+          <Text style={[styles.buttonText, { color: colors.accentForeground }]}>Back to Sign In</Text>
         </TouchableOpacity>
 
         <TouchableOpacity
           style={styles.linkRow}
           onPress={() => router.replace("/(auth)/register")}
         >
-          <Text style={styles.linkText}>Create a new account</Text>
+          <Text style={[styles.linkText, { color: colors.accentText }]}>Create a new account</Text>
         </TouchableOpacity>
       </View>
     </SafeAreaView>

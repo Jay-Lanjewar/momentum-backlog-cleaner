@@ -2,6 +2,7 @@ import { View, Text, StyleSheet } from "react-native";
 
 import type { WeekMetrics } from "@/services/types";
 import { formatMinutes } from "@/lib/coaching";
+import { useTheme } from "@/theme/ThemeProvider";
 
 interface Props {
   week: WeekMetrics;
@@ -10,11 +11,12 @@ interface Props {
 const DAY_LABELS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 
 export function WeeklyOverviewCard({ week }: Props) {
+  const { colors } = useTheme();
   const maxMinutes = Math.max(1, ...week.daily.map((d) => d.study_minutes));
 
   return (
-    <View style={styles.card}>
-      <Text style={styles.title}>This Week</Text>
+    <View style={[styles.card, { backgroundColor: colors.card }]}>
+      <Text style={[styles.title, { color: colors.primaryText }]}>This Week</Text>
 
       <View style={styles.barChart}>
         {week.daily.map((day, i) => {
@@ -31,35 +33,35 @@ export function WeeklyOverviewCard({ week }: Props) {
                     {
                       height,
                       backgroundColor:
-                        day.study_minutes > 0 ? "#2563EB" : "#334155",
+                        day.study_minutes > 0 ? colors.accent : colors.border,
                     },
                   ]}
                 />
               </View>
-              <Text style={styles.barLabel}>{DAY_LABELS[i]}</Text>
+              <Text style={[styles.barLabel, { color: colors.mutedText }]}>{DAY_LABELS[i]}</Text>
             </View>
           );
         })}
       </View>
 
-      <View style={styles.summaryRow}>
+      <View style={[styles.summaryRow, { borderTopColor: colors.divider }]}>
         <View style={styles.summaryStat}>
-          <Text style={styles.summaryValue}>
+          <Text style={[styles.summaryValue, { color: colors.primaryText }]}>
             {formatMinutes(week.total_study_minutes)}
           </Text>
-          <Text style={styles.summaryLabel}>Total</Text>
+          <Text style={[styles.summaryLabel, { color: colors.mutedText }]}>Total</Text>
         </View>
         <View style={styles.summaryStat}>
-          <Text style={styles.summaryValue}>{week.total_sessions}</Text>
-          <Text style={styles.summaryLabel}>Sessions</Text>
+          <Text style={[styles.summaryValue, { color: colors.primaryText }]}>{week.total_sessions}</Text>
+          <Text style={[styles.summaryLabel, { color: colors.mutedText }]}>Sessions</Text>
         </View>
         <View style={styles.summaryStat}>
-          <Text style={styles.summaryValue}>
+          <Text style={[styles.summaryValue, { color: colors.primaryText }]}>
             {week.total_estimated_minutes > 0
               ? `${Math.round((week.total_study_minutes / week.total_estimated_minutes) * 100)}%`
               : "--"}
           </Text>
-          <Text style={styles.summaryLabel}>Completion</Text>
+          <Text style={[styles.summaryLabel, { color: colors.mutedText }]}>Completion</Text>
         </View>
       </View>
     </View>

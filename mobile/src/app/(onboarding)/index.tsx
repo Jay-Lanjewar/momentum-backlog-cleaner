@@ -42,6 +42,7 @@ import {
   type TaskDraft,
 } from "@/lib/backlogInterpret";
 import { TaskReviewCard } from "@/components/onboarding/TaskReviewCard";
+import { useTheme } from "@/theme/ThemeProvider";
 import {
   BLOCK_TYPES,
   BLOCK_TYPE_MAP,
@@ -193,6 +194,7 @@ function findScheduleIssue(
 
 export default function OnboardingScreen() {
   const router = useRouter();
+  const { colors } = useTheme();
   const setUser = useAuthStore((s) => s.setUser);
   const queryClient = useQueryClient();
 
@@ -592,7 +594,11 @@ export default function OnboardingScreen() {
           return (
             <TouchableOpacity
               key={day}
-              style={[styles.dayChip, active && styles.dayChipActive]}
+              style={[
+                styles.dayChip,
+                { backgroundColor: colors.inputBackground, borderColor: colors.border },
+                active && { backgroundColor: colors.selected, borderColor: colors.accent },
+              ]}
               onPress={() => onToggle(day)}
               activeOpacity={0.7}
               accessibilityRole="button"
@@ -601,7 +607,11 @@ export default function OnboardingScreen() {
               testID={`${testIDPrefix}-${day}`}
             >
               <Text
-                style={[styles.dayChipText, active && styles.dayChipTextActive]}
+                style={[
+                  styles.dayChipText,
+                  { color: active ? colors.accentText : colors.secondaryText },
+                  active && styles.dayChipTextActive,
+                ]}
               >
                 {DAY_LABELS[day]}
               </Text>
@@ -628,13 +638,13 @@ export default function OnboardingScreen() {
     if (Platform.OS === "web") {
       return (
         <View style={styles.timeField}>
-          <Text style={styles.fieldLabel}>{label}</Text>
+          <Text style={[styles.fieldLabel, { color: colors.secondaryText }]}>{label}</Text>
           <TextInput
-            style={styles.input}
+            style={[styles.input, { backgroundColor: colors.inputBackground, borderColor: colors.border, color: colors.primaryText }]}
             value={value}
             onChangeText={onTimeText}
             placeholder="HH:mm"
-            placeholderTextColor="#999"
+            placeholderTextColor={colors.placeholder}
             accessibilityLabel={accessibilityLabel}
             testID={buttonTestID}
           />
@@ -644,9 +654,9 @@ export default function OnboardingScreen() {
 
     return (
       <View style={styles.timeField}>
-        <Text style={styles.fieldLabel}>{label}</Text>
+        <Text style={[styles.fieldLabel, { color: colors.secondaryText }]}>{label}</Text>
         <TouchableOpacity
-          style={styles.timeBtn}
+          style={[styles.timeBtn, { backgroundColor: colors.inputBackground, borderColor: colors.border }]}
           onPress={() => setPicker(picker === pickerKey ? null : pickerKey)}
           activeOpacity={0.7}
           accessibilityRole="button"
@@ -654,7 +664,7 @@ export default function OnboardingScreen() {
           accessibilityValue={{ text: formatTime12h(value) }}
           testID={buttonTestID}
         >
-          <Text style={styles.timeBtnText}>{formatTime12h(value)}</Text>
+          <Text style={[styles.timeBtnText, { color: colors.primaryText }]}>{formatTime12h(value)}</Text>
         </TouchableOpacity>
         {picker === pickerKey && (
           <DateTimePicker
@@ -688,10 +698,10 @@ export default function OnboardingScreen() {
           contentContainerStyle={styles.stepScrollContent}
           keyboardShouldPersistTaps="handled"
         >
-          <Text style={styles.stepTitle}>{AVAILABILITY_TITLE}</Text>
-          <Text style={styles.stepSubtitle}>{AVAILABILITY_SUBTITLE}</Text>
+          <Text style={[styles.stepTitle, { color: colors.primaryText }]}>{AVAILABILITY_TITLE}</Text>
+          <Text style={[styles.stepSubtitle, { color: colors.secondaryText }]}>{AVAILABILITY_SUBTITLE}</Text>
 
-          <View style={styles.card}>
+          <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border }]}>
             <View style={styles.cardHeader}>
               <View
                 style={[
@@ -702,7 +712,7 @@ export default function OnboardingScreen() {
                   },
                 ]}
               />
-              <Text style={styles.cardTitle}>School</Text>
+              <Text style={[styles.cardTitle, { color: colors.primaryText }]}>School</Text>
             </View>
             {renderDayChips(
               schoolDays,
@@ -744,7 +754,7 @@ export default function OnboardingScreen() {
             return (
               <View
                 key={commitment.id}
-                style={[styles.card, styles.commitmentRow]}
+                style={[                styles.card, styles.commitmentRow, { backgroundColor: colors.card, borderColor: colors.border }]}
               >
                 <TouchableOpacity
                   style={styles.cardBody}
@@ -763,14 +773,14 @@ export default function OnboardingScreen() {
                         { backgroundColor: info?.color ?? "#737373" },
                       ]}
                     />
-                    <Text style={styles.cardTitle}>
+                    <Text style={[styles.cardTitle, { color: colors.primaryText }]}>
                       {title || categoryLabel}
                     </Text>
                   </View>
-                  <Text style={styles.cardMeta}>
+                  <Text style={[styles.cardMeta, { color: colors.mutedText }]}>
                     {title ? `${categoryLabel} · ${daysLabel}` : daysLabel}
                   </Text>
-                  <Text style={styles.cardMeta}>
+                  <Text style={[styles.cardMeta, { color: colors.mutedText }]}>
                     {formatTime12h(commitment.start)} –{" "}
                     {formatTime12h(commitment.end)}
                   </Text>
@@ -795,21 +805,21 @@ export default function OnboardingScreen() {
 
           {form === null ? (
             <TouchableOpacity
-              style={styles.addBtn}
+              style={[styles.addBtn, { backgroundColor: colors.accentSoft, borderColor: colors.border }]}
               onPress={openNewCommitment}
               activeOpacity={0.8}
               accessibilityRole="button"
               accessibilityLabel="Add commitment"
               testID="onboarding-add-commitment"
             >
-              <Text style={styles.addBtnText}>+ Add commitment</Text>
+              <Text style={[styles.addBtnText, { color: colors.accentSoftForeground }]}>+ Add commitment</Text>
             </TouchableOpacity>
           ) : (
-            <View style={styles.card}>
-              <Text style={styles.cardTitle}>
+            <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border }]}>
+              <Text style={[styles.cardTitle, { color: colors.primaryText }]}>
                 {form.id ? "Edit commitment" : "New commitment"}
               </Text>
-              <Text style={styles.fieldLabel}>Category</Text>
+              <Text style={[styles.fieldLabel, { color: colors.secondaryText }]}>Category</Text>
               <View style={styles.typeGrid}>
                 {BLOCK_TYPES.map((bt) => {
                   const active = form.type === bt.value;
@@ -848,11 +858,11 @@ export default function OnboardingScreen() {
 
               <Text style={styles.fieldLabel}>Name (optional)</Text>
               <TextInput
-                style={styles.input}
+                style={[styles.input, { backgroundColor: colors.inputBackground, borderColor: colors.border, color: colors.primaryText }]}
                 value={form.title}
                 onChangeText={(t) => setForm({ ...form, title: t })}
                 placeholder="e.g. Football practice"
-                placeholderTextColor="#999"
+                placeholderTextColor={colors.placeholder}
                 maxLength={100}
               />
 
@@ -894,22 +904,23 @@ export default function OnboardingScreen() {
               )}
 
               {validateCommitment(form) ? (
-                <Text style={styles.errorText}>{validateCommitment(form)}</Text>
+                <Text style={[styles.errorText, { color: colors.error }]}>{validateCommitment(form)}</Text>
               ) : null}
 
               <View style={styles.row}>
                 <TouchableOpacity
-                  style={styles.secondaryButton}
+                  style={[styles.secondaryButton, { backgroundColor: colors.pressed, borderColor: colors.border }]}
                   onPress={closeForm}
                   activeOpacity={0.8}
                   accessibilityRole="button"
                   accessibilityLabel="Cancel commitment"
                 >
-                  <Text style={styles.secondaryButtonText}>Cancel</Text>
+                  <Text style={[styles.secondaryButtonText, { color: colors.secondaryText }]}>Cancel</Text>
                 </TouchableOpacity>
                 <TouchableOpacity
                   style={[
                     styles.primaryButton,
+                    { backgroundColor: colors.accent },
                     styles.primaryButtonFlex,
                     validateCommitment(form) && styles.disabled,
                   ]}
@@ -919,21 +930,22 @@ export default function OnboardingScreen() {
                   accessibilityRole="button"
                   accessibilityLabel="Save commitment"
                 >
-                  <Text style={styles.primaryButtonText}>Save</Text>
+                  <Text style={[styles.primaryButtonText, { color: colors.accentForeground }]}>Save</Text>
                 </TouchableOpacity>
               </View>
             </View>
           )}
 
-          <View style={styles.card}>
-            <Text style={styles.cardTitle}>Daily target</Text>
-            <Text style={styles.cardMeta}>
+          <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border }]}>
+            <Text style={[styles.cardTitle, { color: colors.primaryText }]}>Daily target</Text>
+            <Text style={[styles.cardMeta, { color: colors.mutedText }]}>
               How long you want to study every day.
             </Text>
             <View style={styles.stepperRow}>
               <TouchableOpacity
                 style={[
                   styles.stepperBtn,
+                  { backgroundColor: colors.inputBackground, borderColor: colors.border },
                   dailyTarget <= MIN_DAILY_TARGET_MINUTES && styles.disabled,
                 ]}
                 onPress={() => changeDailyTarget(-DAILY_TARGET_STEP)}
@@ -943,10 +955,10 @@ export default function OnboardingScreen() {
                 accessibilityLabel="Decrease daily target"
                 testID="daily-target-decrease"
               >
-                <Text style={styles.stepperBtnText}>−</Text>
+                <Text style={[styles.stepperBtnText, { color: colors.accentText }]}>−</Text>
               </TouchableOpacity>
               <Text
-                style={styles.stepperValue}
+                style={[styles.stepperValue, { color: colors.primaryText }]}
                 testID="daily-target-value"
                 accessibilityLabel={`Daily target: ${dailyTarget} min`}
               >
@@ -955,6 +967,7 @@ export default function OnboardingScreen() {
               <TouchableOpacity
                 style={[
                   styles.stepperBtn,
+                  { backgroundColor: colors.inputBackground, borderColor: colors.border },
                   dailyTarget >= MAX_DAILY_TARGET_MINUTES && styles.disabled,
                 ]}
                 onPress={() => changeDailyTarget(DAILY_TARGET_STEP)}
@@ -964,26 +977,27 @@ export default function OnboardingScreen() {
                 accessibilityLabel="Increase daily target"
                 testID="daily-target-increase"
               >
-                <Text style={styles.stepperBtnText}>+</Text>
+                <Text style={[styles.stepperBtnText, { color: colors.accentText }]}>+</Text>
               </TouchableOpacity>
             </View>
           </View>
 
-          {issue ? <Text style={styles.errorText}>{issue}</Text> : null}
+          {issue ? <Text style={[styles.errorText, { color: colors.error }]}>{issue}</Text> : null}
 
           <View style={styles.row}>
             <TouchableOpacity
-              style={styles.secondaryButton}
+              style={[styles.secondaryButton, { backgroundColor: colors.pressed, borderColor: colors.border }]}
               onPress={() => setView("review")}
               activeOpacity={0.8}
               accessibilityRole="button"
               accessibilityLabel="Back to tasks"
             >
-              <Text style={styles.secondaryButtonText}>Back</Text>
+              <Text style={[styles.secondaryButtonText, { color: colors.secondaryText }]}>Back</Text>
             </TouchableOpacity>
             <TouchableOpacity
               style={[
                 styles.primaryButton,
+                { backgroundColor: colors.accent },
                 styles.primaryButtonFlex,
                 (issue || submitting) && styles.disabled,
               ]}
@@ -996,7 +1010,7 @@ export default function OnboardingScreen() {
               accessibilityRole="button"
               accessibilityLabel="Continue"
             >
-              <Text style={styles.primaryButtonText}>Continue</Text>
+              <Text style={[styles.primaryButtonText, { color: colors.accentForeground }]}>Continue</Text>
             </TouchableOpacity>
           </View>
         </ScrollView>
@@ -1009,27 +1023,27 @@ export default function OnboardingScreen() {
 
     return (
       <>
-        <Text style={styles.stepTitle}>{BACKLOG_TITLE}</Text>
-        <Text style={styles.stepSubtitle}>{BACKLOG_SUBTITLE}</Text>
+        <Text style={[styles.stepTitle, { color: colors.primaryText }]}>{BACKLOG_TITLE}</Text>
+        <Text style={[styles.stepSubtitle, { color: colors.secondaryText }]}>{BACKLOG_SUBTITLE}</Text>
         <TextInput
-          style={styles.textArea}
+          style={[styles.textArea, { backgroundColor: colors.inputBackground, borderColor: colors.border, color: colors.primaryText }]}
           value={backlogText}
           onChangeText={setBacklogText}
           placeholder={BACKLOG_PLACEHOLDER}
-          placeholderTextColor="#999"
+          placeholderTextColor={colors.placeholder}
           multiline
           textAlignVertical="top"
           accessibilityLabel="Your tasks, one per line"
           testID="backlog-input"
         />
         {hasText && totalTopics > 0 ? (
-          <Text style={styles.backlogCount} testID="backlog-task-count">
+          <Text style={[styles.backlogCount, { color: colors.mutedText }]} testID="backlog-task-count">
             {`${totalTopics} task${totalTopics === 1 ? "" : "s"} found`}
           </Text>
         ) : null}
         {hasText && totalTopics === 0 ? (
           <Text
-            style={styles.errorText}
+            style={[styles.errorText, { color: colors.error }]}
             accessibilityRole="alert"
             testID="backlog-zero-error"
           >
@@ -1039,6 +1053,7 @@ export default function OnboardingScreen() {
         <TouchableOpacity
           style={[
             styles.primaryButton,
+            { backgroundColor: colors.accent },
             totalTopics === 0 && styles.disabled,
           ]}
           onPress={handleInterpret}
@@ -1049,7 +1064,7 @@ export default function OnboardingScreen() {
           accessibilityState={{ disabled: totalTopics === 0 }}
           testID="interpret-tasks"
         >
-          <Text style={styles.primaryButtonText}>{INTERPRET_LABEL}</Text>
+          <Text style={[styles.primaryButtonText, { color: colors.accentForeground }]}>{INTERPRET_LABEL}</Text>
         </TouchableOpacity>
       </>
     );
@@ -1066,10 +1081,10 @@ export default function OnboardingScreen() {
 
     return (
       <>
-        <Text style={styles.stepTitle}>{REVIEW_TITLE}</Text>
-        <Text style={styles.stepSubtitle}>{REVIEW_SUBTITLE}</Text>
+        <Text style={[styles.stepTitle, { color: colors.primaryText }]}>{REVIEW_TITLE}</Text>
+        <Text style={[styles.stepSubtitle, { color: colors.secondaryText }]}>{REVIEW_SUBTITLE}</Text>
         {total === 0 ? (
-          <Text style={styles.emptyText}>Add at least one task to continue.</Text>
+          <Text style={[styles.emptyText, { color: colors.mutedText }]}>Add at least one task to continue.</Text>
         ) : null}
         {drafts.map((course, courseIndex) => {
           const groupFirstIndex = taskIndex;
@@ -1096,34 +1111,35 @@ export default function OnboardingScreen() {
           });
         })}
         <TouchableOpacity
-          style={styles.addBtn}
+          style={[styles.addBtn, { backgroundColor: colors.accentSoft, borderColor: colors.border }]}
           onPress={addTask}
           activeOpacity={0.8}
           accessibilityRole="button"
           accessibilityLabel="Add a task"
           testID="add-task"
         >
-          <Text style={styles.addBtnText}>+ Add a task</Text>
+          <Text style={[styles.addBtnText, { color: colors.accentSoftForeground }]}>+ Add a task</Text>
         </TouchableOpacity>
         {hasBlankTitle ? (
-          <Text style={styles.errorText}>
+          <Text style={[styles.errorText, { color: colors.error }]}>
             Give every task a name to continue.
           </Text>
         ) : null}
         <View style={styles.row}>
           <TouchableOpacity
-            style={styles.secondaryButton}
+            style={[styles.secondaryButton, { backgroundColor: colors.pressed, borderColor: colors.border }]}
             onPress={() => setView("backlog")}
             activeOpacity={0.8}
             accessibilityRole="button"
             accessibilityLabel="Back to task entry"
             testID="review-back"
           >
-            <Text style={styles.secondaryButtonText}>Back</Text>
+            <Text style={[styles.secondaryButtonText, { color: colors.secondaryText }]}>Back</Text>
           </TouchableOpacity>
           <TouchableOpacity
             style={[
               styles.primaryButton,
+              { backgroundColor: colors.accent },
               styles.primaryButtonFlex,
               (total === 0 || hasBlankTitle) && styles.disabled,
             ]}
@@ -1135,7 +1151,7 @@ export default function OnboardingScreen() {
             accessibilityState={{ disabled: total === 0 || hasBlankTitle }}
             testID="review-continue"
           >
-            <Text style={styles.primaryButtonText}>Continue</Text>
+            <Text style={[styles.primaryButtonText, { color: colors.accentForeground }]}>Continue</Text>
           </TouchableOpacity>
         </View>
       </>
@@ -1149,8 +1165,8 @@ export default function OnboardingScreen() {
 
     return (
       <>
-        <Text style={styles.stepTitle}>Here&apos;s what I understood</Text>
-        <Text style={styles.stepSubtitle}>
+        <Text style={[styles.stepTitle, { color: colors.primaryText }]}>Here&apos;s what I understood</Text>
+        <Text style={[styles.stepSubtitle, { color: colors.secondaryText }]}>
           {confirmSubtitle(taskCount, subjectCount)}
         </Text>
         {courses.map((course, i) => {
@@ -1159,11 +1175,14 @@ export default function OnboardingScreen() {
           ).length;
           if (count === 0) return null;
           return (
-            <View key={i} style={styles.confirmCard}>
+            <View
+              key={i}
+              style={[styles.confirmCard, { backgroundColor: colors.card, borderColor: colors.border }]}
+            >
               <View style={[styles.dot, { backgroundColor: course.color }]} />
               <View style={{ flex: 1 }}>
-                <Text style={styles.confirmSubject}>{course.name}</Text>
-                <Text style={styles.confirmCount}>
+                <Text style={[styles.confirmSubject, { color: colors.primaryText }]}>{course.name}</Text>
+                <Text style={[styles.confirmCount, { color: colors.mutedText }]}>
                   {count} task{count !== 1 ? "s" : ""}
                 </Text>
               </View>
@@ -1171,24 +1190,25 @@ export default function OnboardingScreen() {
           );
         })}
         {taskCount === 0 ? (
-          <Text style={styles.emptyText}>
+          <Text style={[styles.emptyText, { color: colors.mutedText }]}>
             No tasks found. Try pasting your list in a different format.
           </Text>
         ) : null}
         <View style={styles.row}>
           <TouchableOpacity
-            style={styles.secondaryButton}
+            style={[styles.secondaryButton, { backgroundColor: colors.pressed, borderColor: colors.border }]}
             onPress={() => setView("review")}
             activeOpacity={0.8}
             accessibilityRole="button"
             accessibilityLabel="Edit tasks"
             testID="confirm-edit"
           >
-            <Text style={styles.secondaryButtonText}>Edit tasks</Text>
+            <Text style={[styles.secondaryButtonText, { color: colors.secondaryText }]}>Edit tasks</Text>
           </TouchableOpacity>
           <TouchableOpacity
             style={[
               styles.primaryButton,
+              { backgroundColor: colors.accent },
               (taskCount === 0 || submitting) && styles.disabled,
             ]}
             onPress={() => {
@@ -1200,7 +1220,7 @@ export default function OnboardingScreen() {
             accessibilityRole="button"
             accessibilityLabel="Looks correct"
           >
-            <Text style={styles.primaryButtonText}>Looks correct</Text>
+            <Text style={[styles.primaryButtonText, { color: colors.accentForeground }]}>Looks correct</Text>
           </TouchableOpacity>
         </View>
       </>
@@ -1211,7 +1231,7 @@ export default function OnboardingScreen() {
     if (step === 1) {
       return (
         <View style={styles.stepContent}>
-          <ActivityIndicator size="large" color="#2563EB" />
+          <ActivityIndicator size="large" color={colors.accent} />
           <Text style={[styles.stepTitle, { marginTop: 24 }]}>
             {loadingMsg}
           </Text>
@@ -1222,13 +1242,13 @@ export default function OnboardingScreen() {
     if (step === 2) {
       return (
         <View style={styles.stepContent} testID="onboarding-me-error">
-          <Text style={styles.stepTitle}>Almost there</Text>
-          <Text style={styles.stepSubtitle}>
+          <Text style={[styles.stepTitle, { color: colors.primaryText }]}>Almost there</Text>
+          <Text style={[styles.stepSubtitle, { color: colors.secondaryText }]}>
             {meError ??
               "Your plan was saved, but we couldn't load your account."}
           </Text>
           <TouchableOpacity
-            style={[styles.primaryButton, submitting && styles.disabled]}
+            style={[styles.primaryButton, { backgroundColor: colors.accent }, submitting && styles.disabled]}
             onPress={() => {
               if (submittingRef.current) return;
               handleRetryMe();
@@ -1237,9 +1257,9 @@ export default function OnboardingScreen() {
             activeOpacity={0.8}
           >
             {submitting ? (
-              <ActivityIndicator color="#fff" />
+              <ActivityIndicator color={colors.accentForeground} />
             ) : (
-              <Text style={styles.primaryButtonText}>Retry</Text>
+              <Text style={[styles.primaryButtonText, { color: colors.accentForeground }]}>Retry</Text>
             )}
           </TouchableOpacity>
         </View>
@@ -1268,7 +1288,7 @@ export default function OnboardingScreen() {
   }
 
   return (
-    <SafeAreaView style={styles.container}>
+    <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
       <View style={styles.flex}>{renderStep()}</View>
     </SafeAreaView>
   );

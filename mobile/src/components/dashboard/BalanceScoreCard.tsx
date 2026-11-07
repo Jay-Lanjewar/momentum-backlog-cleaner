@@ -1,5 +1,6 @@
 import { View, Text, StyleSheet } from "react-native";
 import type { BalanceScoreData } from "@/services/types";
+import { useTheme } from "@/theme/ThemeProvider";
 
 interface BalanceScoreCardProps {
   balance: BalanceScoreData;
@@ -18,12 +19,13 @@ function scoreLabel(score: number): string {
 }
 
 export function BalanceScoreCard({ balance }: BalanceScoreCardProps) {
+  const { colors } = useTheme();
   const color = scoreColor(balance.score);
 
   return (
-    <View style={styles.card}>
+    <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border }]}>
       <View style={styles.header}>
-        <Text style={styles.title}>Study Balance</Text>
+        <Text style={[styles.title, { color: colors.primaryText }]}>Study Balance</Text>
         <View style={[styles.badge, { backgroundColor: color + "20" }]}>
           <Text style={[styles.badgeText, { color }]}>
             {scoreLabel(balance.score)}
@@ -35,7 +37,7 @@ export function BalanceScoreCard({ balance }: BalanceScoreCardProps) {
       <View style={styles.scoreRow}>
         <Text style={[styles.scoreValue, { color }]}>{balance.score}</Text>
         <View style={styles.barContainer}>
-          <View style={styles.barTrack}>
+          <View style={[styles.barTrack, { backgroundColor: colors.border }]}>
             <View
               style={[
                 styles.barFill,
@@ -48,13 +50,13 @@ export function BalanceScoreCard({ balance }: BalanceScoreCardProps) {
 
       {/* Message */}
       {balance.message && (
-        <Text style={styles.message}>{balance.message}</Text>
+        <Text style={[styles.message, { color: colors.secondaryText }]}>{balance.message}</Text>
       )}
 
       {/* Neglected Subjects */}
       {balance.neglected_subjects.length > 0 && (
-        <View style={styles.neglectedSection}>
-          <Text style={styles.neglectedLabel}>Needs more focus:</Text>
+        <View style={[styles.neglectedSection, { borderTopColor: colors.divider }]}>
+          <Text style={[styles.neglectedLabel, { color: colors.mutedText }]}>Needs more focus:</Text>
           <View style={styles.neglectedList}>
             {balance.neglected_subjects.map((subject) => (
               <View key={subject} style={styles.neglectedTag}>

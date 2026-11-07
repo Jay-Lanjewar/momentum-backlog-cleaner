@@ -1,5 +1,6 @@
 import { View, Text, StyleSheet } from "react-native";
 import type { PlanSession } from "@/services/types";
+import { useTheme } from "@/theme/ThemeProvider";
 
 interface AdaptiveSessionLegendProps {
   sessions: PlanSession[];
@@ -16,16 +17,17 @@ export function AdaptiveSessionLegend({
   changedSessionIds,
   overflowIds,
 }: AdaptiveSessionLegendProps) {
+  const { colors } = useTheme();
   return (
     <View style={styles.container}>
       {sessions.map((session) => {
         const isChanged = changedSessionIds.has(session.session_id);
         const isOverflow = overflowIds?.has(session.backlog_item_id) ?? false;
         const dotColor = isChanged
-          ? "#2563EB"
+          ? colors.info
           : isOverflow
-            ? "#F0B429"
-            : "#64748B";
+            ? colors.warning
+            : colors.mutedText;
 
         return (
           <View key={session.session_id} style={styles.item}>
@@ -33,12 +35,16 @@ export function AdaptiveSessionLegend({
               style={[
                 styles.dot,
                 { backgroundColor: dotColor },
-                isChanged && styles.dotChanged,
+                isChanged && { borderColor: `${colors.info}80` },
                 !isChanged && styles.dotMuted,
               ]}
             />
             <Text
-              style={[styles.label, isChanged && styles.labelChanged]}
+            style={[
+              styles.label,
+              { color: isChanged ? colors.primaryText : colors.mutedText },
+              isChanged && styles.labelChanged,
+            ]}
               numberOfLines={1}
             >
               {topicFromSession(session)}

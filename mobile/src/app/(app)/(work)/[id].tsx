@@ -1,4 +1,4 @@
-import { useMemo, useState, useCallback } from "react";
+import { useMemo, useCallback } from "react";
 import {
   View,
   Text,
@@ -16,10 +16,11 @@ import {
   useUpdateBacklogItem,
   useDeleteBacklogItem,
 } from "@/services/hooks";
-import type { BacklogItem } from "@/services/types";
 import { BacklogForm } from "@/components/BacklogForm";
+import { useTheme } from "@/theme/ThemeProvider";
 
 export default function BacklogEditScreen() {
+  const { colors } = useTheme();
   const router = useRouter();
   const { id } = useLocalSearchParams<{ id: string }>();
 
@@ -67,9 +68,9 @@ export default function BacklogEditScreen() {
 
   if (isLoading) {
     return (
-      <SafeAreaView style={styles.container}>
+      <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
         <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color="#3B82F6" />
+          <ActivityIndicator size="large" color={colors.accent} />
         </View>
       </SafeAreaView>
     );
@@ -77,17 +78,17 @@ export default function BacklogEditScreen() {
 
   if (!item) {
     return (
-      <SafeAreaView style={styles.container}>
+      <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
         <View style={styles.centerContent}>
-          <Text style={styles.emptyTitle}>Task not found</Text>
-          <Text style={styles.emptyBody}>
+          <Text style={[styles.emptyTitle, { color: colors.primaryText }]}>Task not found</Text>
+          <Text style={[styles.emptyBody, { color: colors.mutedText }]}>
             This task may have been deleted.
           </Text>
           <TouchableOpacity
-            style={styles.backButton}
+            style={[styles.backButton, { backgroundColor: colors.accent }]}
             onPress={() => router.back()}
           >
-            <Text style={styles.backButtonText}>Go Back</Text>
+            <Text style={[styles.backButtonText, { color: colors.accentForeground }]}>Go Back</Text>
           </TouchableOpacity>
         </View>
       </SafeAreaView>
@@ -95,22 +96,22 @@ export default function BacklogEditScreen() {
   }
 
   return (
-    <SafeAreaView style={styles.container}>
+    <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
       {/* Header */}
-      <View style={styles.header}>
+      <View style={[styles.header, { borderBottomColor: colors.divider }]}>
         <TouchableOpacity onPress={() => router.back()} style={styles.headerButton}>
-          <Text style={styles.headerBack}>{"\u2190"} Back</Text>
+          <Text style={[styles.headerBack, { color: colors.accentText }]}>{"\u2190"} Back</Text>
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>Edit Task</Text>
+        <Text style={[styles.headerTitle, { color: colors.primaryText }]}>Edit Task</Text>
         <TouchableOpacity
           onPress={handleDelete}
           style={styles.deleteButton}
           disabled={deleteItem.isPending}
         >
           {deleteItem.isPending ? (
-            <ActivityIndicator size="small" color="#EF4444" />
+            <ActivityIndicator size="small" color={colors.error} />
           ) : (
-            <Text style={styles.deleteText}>Delete</Text>
+            <Text style={[styles.deleteText, { color: colors.error }]}>Delete</Text>
           )}
         </TouchableOpacity>
       </View>
@@ -125,8 +126,8 @@ export default function BacklogEditScreen() {
 
       {/* Error display */}
       {(updateItem.isError || deleteItem.isError) && (
-        <View style={styles.errorBar}>
-          <Text style={styles.errorText}>
+        <View style={[styles.errorBar, { backgroundColor: `${colors.error}20` }]}>
+          <Text style={[styles.errorText, { color: colors.error }]}>
             {(updateItem.error ?? deleteItem.error)?.message ??
               "Something went wrong. Please try again."}
           </Text>

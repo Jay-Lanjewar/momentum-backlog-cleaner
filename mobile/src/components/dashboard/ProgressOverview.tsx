@@ -1,6 +1,7 @@
 import { View, Text, StyleSheet } from "react-native";
 import type { BacklogHealth, StudyStreakData } from "@/services/types";
 import { formatMinutes } from "@/lib/coaching";
+import { useTheme } from "@/theme/ThemeProvider";
 
 interface ProgressOverviewProps {
   totalTasks: number;
@@ -19,36 +20,37 @@ export function ProgressOverview({
   deadlineLabel,
   deadlineDate,
 }: ProgressOverviewProps) {
+  const { colors } = useTheme();
   const donePercent = totalTasks > 0
     ? Math.round((completedTasks / totalTasks) * 100)
     : 0;
 
   return (
-    <View style={styles.card}>
-      <Text style={styles.title}>Progress</Text>
+    <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border }]}>
+      <Text style={[styles.title, { color: colors.primaryText }]}>Progress</Text>
 
       {/* 2x2 Grid */}
       <View style={styles.grid}>
         <View style={styles.gridRow}>
-          <View style={styles.statBox}>
-            <Text style={styles.statValue}>{donePercent}%</Text>
-            <Text style={styles.statLabel}>Completed</Text>
+          <View style={[styles.statBox, { backgroundColor: colors.inputBackground }]}>
+            <Text style={[styles.statValue, { color: colors.primaryText }]}>{donePercent}%</Text>
+            <Text style={[styles.statLabel, { color: colors.mutedText }]}>Completed</Text>
           </View>
-          <View style={styles.statBox}>
-            <Text style={styles.statValue}>{formatMinutes(studyMinutes)}</Text>
-            <Text style={styles.statLabel}>Study Time</Text>
+          <View style={[styles.statBox, { backgroundColor: colors.inputBackground }]}>
+            <Text style={[styles.statValue, { color: colors.primaryText }]}>{formatMinutes(studyMinutes)}</Text>
+            <Text style={[styles.statLabel, { color: colors.mutedText }]}>Study Time</Text>
           </View>
         </View>
         <View style={styles.gridRow}>
-          <View style={styles.statBox}>
-            <Text style={styles.statValue}>🔥 {streak.current_streak}</Text>
-            <Text style={styles.statLabel}>Day Streak</Text>
+          <View style={[styles.statBox, { backgroundColor: colors.inputBackground }]}>
+            <Text style={[styles.statValue, { color: colors.primaryText }]}>🔥 {streak.current_streak}</Text>
+            <Text style={[styles.statLabel, { color: colors.mutedText }]}>Day Streak</Text>
           </View>
-          <View style={styles.statBox}>
-            <Text style={styles.statValue}>
+          <View style={[styles.statBox, { backgroundColor: colors.inputBackground }]}>
+            <Text style={[styles.statValue, { color: colors.primaryText }]}>
               {deadlineLabel ?? "None"}
             </Text>
-            <Text style={styles.statLabel}>Next Deadline</Text>
+            <Text style={[styles.statLabel, { color: colors.mutedText }]}>Next Deadline</Text>
           </View>
         </View>
       </View>

@@ -1,5 +1,6 @@
 import { StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import { useRouter } from "expo-router";
+import { useTheme } from "@/theme/ThemeProvider";
 
 interface MeHeaderProps {
   /** Screen name used for the back button testID, e.g. "settings". */
@@ -9,6 +10,7 @@ interface MeHeaderProps {
 
 export function MeHeader({ screen, title }: MeHeaderProps) {
   const router = useRouter();
+  const { colors } = useTheme();
 
   return (
     <View style={styles.headerRow}>
@@ -20,9 +22,9 @@ export function MeHeader({ screen, title }: MeHeaderProps) {
         accessibilityLabel="Go back"
         testID={`${screen}-back`}
       >
-        <Text style={styles.backArrow}>{"\u2190"}</Text>
+        <Text style={[styles.backArrow, { color: colors.accentText }]}>{"\u2190"}</Text>
       </TouchableOpacity>
-      <Text style={styles.header} numberOfLines={1}>
+      <Text style={[styles.header, { color: colors.primaryText }]} numberOfLines={1}>
         {title}
       </Text>
       <View style={styles.side} />

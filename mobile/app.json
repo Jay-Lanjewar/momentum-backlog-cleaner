@@ -2,7 +2,7 @@
   "expo": {
     "name": "Momentum",
     "slug": "mobile",
-    "version": "1.1.0",
+    "version": "1.1.1",
     "orientation": "portrait",
     "icon": "./assets/branding/generated/momentum-icon.png",
     "scheme": "momentum",
@@ -29,9 +29,19 @@
       [
         "expo-splash-screen",
         {
-          "backgroundColor": "#07142F",
+          "backgroundColor": "#F8FAFC",
           "image": "./assets/branding/generated/momentum-splash.png",
-          "imageWidth": 220
+          "imageWidth": 220,
+          "dark": {
+            "backgroundColor": "#07142F",
+            "image": "./assets/branding/generated/momentum-monochrome.png"
+          }
+        }
+      ],
+      [
+        "expo-navigation-bar",
+        {
+          "enforceContrast": false
         }
       ],
       "expo-sqlite",
