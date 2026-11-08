@@ -81,11 +81,15 @@ export default function TodayMissionPage() {
     !isFetching &&
     !error;
   const isRefetching = isFetching && !!freshDashboard;
-  const data = !logoutInProgress && dashboardIsFresh
-    ? freshDashboard
-    : !logoutInProgress
-      ? previewDashboard
+  const freshDashboardForUser =
+    !logoutInProgress &&
+    freshDashboard &&
+    dashboardScope.userId === (user?.id ?? "")
+      ? freshDashboard
       : null;
+  const data = !logoutInProgress
+    ? freshDashboardForUser ?? previewDashboard
+    : null;
 
   useEffect(() => {
     if (dashboardIsFresh && freshDashboard && user?.id) {
@@ -237,15 +241,6 @@ export default function TodayMissionPage() {
   // Study time: actual completed minutes from SessionCompletion (authoritative source)
   const studyMinutes = data.today_completed_minutes ?? 0;
 
-  // Brand-new student: no study days yet and no minutes completed today.
-  // Same DashboardData / fetch path — only secondary zero-state cards are deferred.
-  const isFirstRun =
-    data.streaks.momentum.total_study_days === 0 && studyMinutes === 0;
-
-  const firstRunUpcoming = isFirstRun
-    ? upcomingSessions.slice(0, 2)
-    : upcomingSessions;
-
   const taskLabel = (count: number) =>
     `${count} task${count === 1 ? "" : "s"}`;
 
@@ -396,7 +391,7 @@ export default function TodayMissionPage() {
             {dailyMessage ? (
               <Text
                 style={
-                  [isFirstRun ? styles.dailyMessageFirstRun : styles.dailyMessage, { color: colors.mutedText }]
+                  [styles.dailyMessage, { color: colors.mutedText }]
                 }
               >
                 {dailyMessage}
@@ -405,8 +400,8 @@ export default function TodayMissionPage() {
           </View>
         ) : null}
 
-        {/* 2. Insight — deferred on first-run (zero-state noise) */}
-        {!isFirstRun && data.insight && (
+        {/* 2. Insight */}
+        {data.insight ? (
           <View
             testID="today-insight-card"
             style={[
@@ -417,35 +412,41 @@ export default function TodayMissionPage() {
             <Text style={[styles.insightTitle, { color: colors.primaryText }]}>{data.insight.title}</Text>
             <Text style={[styles.insightMessage, { color: colors.secondaryText }]}>{data.insight.message}</Text>
           </View>
-        )}
-
-        {/* 3. Progress Overview — deferred on first-run */}
-        {!isFirstRun && (
-          <ProgressOverview
-            totalTasks={data.planning.backlog_health.total_items}
-            completedTasks={data.planning.backlog_health.completed_items}
-            studyMinutes={studyMinutes}
-            streak={data.streaks.momentum}
-            deadlineLabel={nextDeadline ?? undefined}
-          />
-        )}
-
-        {/* 4. Upcoming Sessions — kept on first-run but visually subordinate */}
-        {firstRunUpcoming.length > 0 && (
+        ) : (
           <View
-            style={
-              isFirstRun ? styles.upcomingSectionFirstRun : styles.upcomingSection
-            }
+            testID="today-insight-empty"
+            style={[
+              styles.insightCard,
+              { backgroundColor: colors.card, borderColor: colors.border },
+            ]}
           >
+            <Text style={[styles.insightTitle, { color: colors.primaryText }]}>
+              Your study insight will appear here
+            </Text>
+            <Text style={[styles.insightMessage, { color: colors.secondaryText }]}>
+              Complete a study session to start building personalized insights.
+            </Text>
+          </View>
+        )}
+
+        {/* 3. Progress Overview */}
+        <ProgressOverview
+          totalTasks={data.planning.backlog_health.total_items}
+          completedTasks={data.planning.backlog_health.completed_items}
+          studyMinutes={studyMinutes}
+          streak={data.streaks.momentum}
+          deadlineLabel={nextDeadline ?? undefined}
+        />
+
+        {/* 4. Upcoming Sessions */}
+        {upcomingSessions.length > 0 && (
+          <View style={styles.upcomingSection}>
             <Text
-              style={[
-                isFirstRun ? styles.sectionTitleFirstRun : styles.sectionTitle,
-                { color: isFirstRun ? colors.mutedText : colors.primaryText },
-              ]}
+              style={[styles.sectionTitle, { color: colors.primaryText }]}
             >
               Upcoming Today
             </Text>
-            {firstRunUpcoming.map((s) => {
+            {upcomingSessions.map((s) => {
               const item = backlogItemMap.get(String(s.backlog_item_id));
               const title = item?.title ?? topicFromSession(s);
               const subject = item?.course_name ?? "Study session";
@@ -455,9 +456,7 @@ export default function TodayMissionPage() {
                   key={s.session_id}
                   testID={`today-upcoming-${s.session_id}`}
                   style={
-                    isFirstRun
-                      ? styles.sessionRowFirstRun
-                      : [styles.sessionRow, { backgroundColor: colors.card, borderColor: colors.border }]
+                    [styles.sessionRow, { backgroundColor: colors.card, borderColor: colors.border }]
                   }
                   accessible
                   accessibilityRole="text"
@@ -489,14 +488,10 @@ export default function TodayMissionPage() {
           </View>
         )}
 
-        {/* 5–7. Secondary analytics — deferred until student has activity */}
-        {!isFirstRun && (
-          <>
-            <BacklogHealthCard health={data.planning.backlog_health} />
-            <StreakCard streaks={data.streaks} />
-            <BalanceScoreCard balance={data.balance} />
-          </>
-        )}
+        {/* 5–7. Secondary analytics */}
+        <BacklogHealthCard health={data.planning.backlog_health} />
+        <StreakCard streaks={data.streaks} />
+        <BalanceScoreCard balance={data.balance} />
 
         {/* Dev-only Focus Preview */}
         {__DEV__ && (

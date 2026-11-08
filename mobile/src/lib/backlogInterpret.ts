@@ -6,6 +6,7 @@ export interface TaskDraft {
   priority: number;
   estimated_minutes: number | null;
   due_date: string | null;
+  due_selection?: "today" | "tomorrow" | "week" | "custom" | "none";
   description: string | null;
 }
 
@@ -111,6 +112,7 @@ export function createTaskDraft(title = ""): TaskDraft {
     priority: DEFAULT_PRIORITY,
     estimated_minutes: null,
     due_date: null,
+    due_selection: "none",
     description: null,
   };
 }

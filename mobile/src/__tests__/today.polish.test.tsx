@@ -722,7 +722,7 @@ describe("Today notification scheduler", () => {
 // ─── K14. First-run simplified mode ───
 
 describe("Today first-run mode", () => {
-  it("keeps the recommendation and defers secondary analytics", async () => {
+  it("keeps the recommendation and renders truthful secondary analytics", async () => {
     setDashboard({
       data: makeDashboard({
         sessions: [makeSession("item-1", "15:20", "16:00", 0)],
@@ -735,10 +735,10 @@ describe("Today first-run mode", () => {
 
     expect(screen.getByText("Chapter item-1 questions")).toBeTruthy();
     expect(screen.getByText(/Start (Focus|Next) Session/)).toBeTruthy();
-    expect(screen.queryByText("Progress")).toBeNull();
-    expect(screen.queryByText("Momentum")).toBeNull();
-    expect(screen.queryByText("Backlog Health")).toBeNull();
-    expect(screen.queryByText("Study Balance")).toBeNull();
+    expect(screen.getByText("Progress")).toBeTruthy();
+    expect(screen.getByText("Momentum")).toBeTruthy();
+    expect(screen.getByText("Backlog Health")).toBeTruthy();
+    expect(screen.getByText("Study Balance")).toBeTruthy();
   });
 
   it("still shows secondary analytics for an established student", async () => {
