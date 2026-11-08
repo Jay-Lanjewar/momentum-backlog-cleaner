@@ -845,7 +845,8 @@ export default function OnboardingScreen() {
                       <Text
                         style={[
                           styles.typeLabel,
-                          active && { color: bt.color, fontWeight: "600" },
+                          { color: active ? bt.color : colors.secondaryText },
+                          active && { fontWeight: "600" },
                         ]}
                         numberOfLines={1}
                       >
@@ -856,7 +857,7 @@ export default function OnboardingScreen() {
                 })}
               </View>
 
-              <Text style={styles.fieldLabel}>Name (optional)</Text>
+              <Text style={[styles.fieldLabel, { color: colors.secondaryText }]}>Name (optional)</Text>
               <TextInput
                 style={[styles.input, { backgroundColor: colors.inputBackground, borderColor: colors.border, color: colors.primaryText }]}
                 value={form.title}
@@ -889,7 +890,7 @@ export default function OnboardingScreen() {
                 )}
               </View>
 
-              <Text style={styles.fieldLabel}>Days</Text>
+              <Text style={[styles.fieldLabel, { color: colors.secondaryText }]}>Days</Text>
               {renderDayChips(
                 form.days,
                 (day) =>
@@ -1232,7 +1233,7 @@ export default function OnboardingScreen() {
       return (
         <View style={styles.stepContent}>
           <ActivityIndicator size="large" color={colors.accent} />
-          <Text style={[styles.stepTitle, { marginTop: 24 }]}>
+          <Text style={[styles.stepTitle, { color: colors.primaryText, marginTop: 24 }]}>
             {loadingMsg}
           </Text>
         </View>

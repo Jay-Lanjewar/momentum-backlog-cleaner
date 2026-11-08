@@ -1,5 +1,15 @@
 import { useState } from "react";
-import { View, Text, TextInput, TouchableOpacity, StyleSheet } from "react-native";
+import {
+  View,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  StyleSheet,
+  Platform,
+} from "react-native";
+import DateTimePicker, {
+  type DateTimePickerEvent,
+} from "@react-native-community/datetimepicker";
 
 import {
   DIFFICULTIES,
@@ -15,12 +25,20 @@ import { DEFAULT_SUBJECT, type TaskDraft } from "@/lib/backlogInterpret";
 import { useTheme } from "@/theme/ThemeProvider";
 
 const ESTIMATE_CHIPS = [15, 30, 45, 60, 90];
-type SimpleDueChip = "today" | "tomorrow" | "week";
-const DUE_CHIP_VALUES: { value: SimpleDueChip; label: string }[] =
-  DUE_CHIPS.filter(
-    (chip): chip is { value: SimpleDueChip; label: string } =>
-      chip.value === "today" || chip.value === "tomorrow" || chip.value === "week",
-  );
+type DueSelection = "today" | "tomorrow" | "week" | "custom" | "none";
+const DUE_CHIP_VALUES: {
+  value: Exclude<DueSelection, "none" | "custom">;
+  label: string;
+}[] = DUE_CHIPS.filter(
+  (chip): chip is {
+    value: Exclude<DueSelection, "none" | "custom">;
+    label: string;
+  } => chip.value === "today" || chip.value === "tomorrow" || chip.value === "week",
+);
+
+function dateKey(date: Date): string {
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
+}
 
 interface TaskReviewCardProps {
   task: TaskDraft;
@@ -49,11 +67,15 @@ export function TaskReviewCard({
 }: TaskReviewCardProps) {
   const { colors } = useTheme();
   const [detailsOpen, setDetailsOpen] = useState(false);
+  const [customPickerOpen, setCustomPickerOpen] = useState(false);
   const ownName = subject.trim() || DEFAULT_SUBJECT;
   const otherCourses = courseNames.filter(
     (name) => name.trim().toLowerCase() !== ownName.toLowerCase(),
   );
-  const dueChip = chipForDate(task.due_date);
+  const inferredDueSelection: DueSelection = task.due_date
+    ? chipForDate(task.due_date) ?? "custom"
+    : "none";
+  const dueSelection = task.due_selection ?? inferredDueSelection;
   const difficulty = difficultyFromPriority(task.priority);
   const estimateValues =
     task.estimated_minutes === null ||
@@ -138,37 +160,78 @@ export function TaskReviewCard({
         {DUE_CHIP_VALUES.map((chip) => (
           <TouchableOpacity
             key={chip.value}
-            style={[styles.chip, { backgroundColor: colors.inputBackground, borderColor: colors.border }, dueChip === chip.value && { backgroundColor: colors.accentSoft, borderColor: colors.accent }]}
-            onPress={() =>
-              onUpdate({ due_date: dueDateForChip(chip.value, new Date()) })
-            }
+            style={[styles.chip, { backgroundColor: colors.inputBackground, borderColor: colors.border }, dueSelection === chip.value && { backgroundColor: colors.accentSoft, borderColor: colors.accent }]}
+            onPress={() => {
+              onUpdate({
+                due_date: dueDateForChip(chip.value, new Date()),
+                due_selection: chip.value,
+              });
+              setCustomPickerOpen(false);
+            }}
             activeOpacity={0.7}
             accessibilityRole="button"
             accessibilityLabel={label(`${chip.label} due date`)}
-            accessibilityState={{ selected: dueChip === chip.value }}
+            accessibilityState={{ selected: dueSelection === chip.value }}
             testID={`task-due-${index}-${chip.value}`}
           >
             <Text
-              style={[styles.chipText, { color: dueChip === chip.value ? colors.accentSoftForeground : colors.secondaryText }, dueChip === chip.value && styles.chipTextActive]}
+              style={[styles.chipText, { color: dueSelection === chip.value ? colors.accentSoftForeground : colors.secondaryText }, dueSelection === chip.value && styles.chipTextActive]}
             >
               {chip.label}
             </Text>
           </TouchableOpacity>
         ))}
         <TouchableOpacity
-          style={[styles.chip, { backgroundColor: colors.inputBackground, borderColor: colors.border }, !task.due_date && { backgroundColor: colors.accentSoft, borderColor: colors.accent }]}
-          onPress={() => onUpdate({ due_date: null })}
+          style={[styles.chip, { backgroundColor: colors.inputBackground, borderColor: colors.border }, dueSelection === "none" && { backgroundColor: colors.accentSoft, borderColor: colors.accent }]}
+          onPress={() => {
+            onUpdate({ due_date: null, due_selection: "none" });
+            setCustomPickerOpen(false);
+          }}
           activeOpacity={0.7}
           accessibilityRole="button"
           accessibilityLabel={label("No due date")}
-          accessibilityState={{ selected: !task.due_date }}
+          accessibilityState={{ selected: dueSelection === "none" }}
           testID={`task-due-${index}-none`}
         >
-          <Text style={[styles.chipText, { color: !task.due_date ? colors.accentSoftForeground : colors.secondaryText }, !task.due_date && styles.chipTextActive]}>
+          <Text style={[styles.chipText, { color: dueSelection === "none" ? colors.accentSoftForeground : colors.secondaryText }, dueSelection === "none" && styles.chipTextActive]}>
             None
           </Text>
         </TouchableOpacity>
-        {task.due_date && dueChip === "custom" ? (
+        <TouchableOpacity
+          style={[styles.chip, { backgroundColor: colors.inputBackground, borderColor: colors.border }, dueSelection === "custom" && { backgroundColor: colors.accentSoft, borderColor: colors.accent }]}
+          onPress={() => setCustomPickerOpen(true)}
+          activeOpacity={0.7}
+          accessibilityRole="button"
+          accessibilityLabel={label("Custom date")}
+          accessibilityState={{ selected: dueSelection === "custom" }}
+          testID={`task-due-${index}-custom`}
+        >
+          <Text style={[styles.chipText, { color: dueSelection === "custom" ? colors.accentSoftForeground : colors.secondaryText }, dueSelection === "custom" && styles.chipTextActive]}>
+            Custom date
+          </Text>
+        </TouchableOpacity>
+        {customPickerOpen ? (
+          <DateTimePicker
+            testID={`task-due-${index}-custom-picker`}
+            value={task.due_date ? new Date(`${task.due_date}T12:00:00`) : new Date()}
+            mode="date"
+            display={Platform.OS === "ios" ? "spinner" : "default"}
+            onChange={(event: DateTimePickerEvent, selectedDate?: Date) => {
+              if (event.type === "dismissed") {
+                setCustomPickerOpen(false);
+                return;
+              }
+              if (selectedDate) {
+                onUpdate({
+                  due_date: dateKey(selectedDate),
+                  due_selection: "custom",
+                });
+              }
+              if (Platform.OS !== "ios") setCustomPickerOpen(false);
+            }}
+          />
+        ) : null}
+        {task.due_date && dueSelection === "custom" ? (
           <Text style={[styles.dueCustomLabel, { color: colors.mutedText }]}>{formatDueDate(task.due_date)}</Text>
         ) : null}
       </View>
@@ -184,7 +247,10 @@ export function TaskReviewCard({
 
       <View style={styles.detailsRow}>
         <TouchableOpacity
-          style={styles.detailsToggle}
+          style={[
+            styles.detailsToggle,
+            { backgroundColor: colors.inputBackground, borderColor: colors.border },
+          ]}
           onPress={() => setDetailsOpen((open) => !open)}
           activeOpacity={0.7}
           accessibilityRole="button"
@@ -200,7 +266,10 @@ export function TaskReviewCard({
           </Text>
         </TouchableOpacity>
         <TouchableOpacity
-          style={styles.deleteBtn}
+          style={[
+            styles.deleteBtn,
+            { backgroundColor: colors.inputBackground, borderColor: colors.border },
+          ]}
           onPress={onDelete}
           activeOpacity={0.7}
           accessibilityRole="button"
@@ -338,7 +407,6 @@ const styles = StyleSheet.create({
     marginBottom: 6,
   },
   subjectPlaceholder: {
-    color: "#94A3B8",
     fontWeight: "500",
   },
   subjectBadge: {

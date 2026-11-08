@@ -447,11 +447,11 @@ describe("Today first-run focus mode", () => {
     await render(<Today />);
 
     expect(screen.getByText("Motion 1")).toBeTruthy();
-    expect(screen.queryByText("Progress")).toBeNull();
-    expect(screen.queryByText("Momentum")).toBeNull();
-    expect(screen.queryByText("Study Balance")).toBeNull();
-    expect(screen.queryByText("Backlog Health")).toBeNull();
-    expect(screen.queryByText("Keep Going")).toBeNull();
+    expect(screen.getByText("Progress")).toBeTruthy();
+    expect(screen.getByText("Momentum")).toBeTruthy();
+    expect(screen.getByText("Study Balance")).toBeTruthy();
+    expect(screen.getByText("Backlog Health")).toBeTruthy();
+    expect(screen.getByText("Keep Going")).toBeTruthy();
   });
 
   it("first-run shows RecommendedNextCard and Start Focus", async () => {
@@ -486,13 +486,13 @@ describe("Today first-run focus mode", () => {
     expect(screen.getByText(/Start (Focus|Next) Session/)).toBeTruthy();
   });
 
-  it("first-run → active transition makes secondary cards appear", async () => {
+  it("first-run keeps secondary cards visible as truthful zero states", async () => {
     const firstRun = makeDashboard();
     setDashboard({ data: firstRun, isLoading: false });
 
     const { rerender } = await render(<Today />);
-    expect(screen.queryByText("Progress")).toBeNull();
-    expect(screen.queryByText("Momentum")).toBeNull();
+    expect(screen.getByText("Progress")).toBeTruthy();
+    expect(screen.getByText("Momentum")).toBeTruthy();
 
     const active = makeDashboard({
       streaks: {
@@ -511,7 +511,7 @@ describe("Today first-run focus mode", () => {
     expect(screen.getByText("Backlog Health")).toBeTruthy();
   });
 
-  it("first-run defers Upcoming but keeps it subordinate and present", async () => {
+  it("first-run keeps Upcoming and secondary cards present", async () => {
     const now = new Date();
     const nowMin = now.getHours() * 60 + now.getMinutes();
     const fmt = (m: number) =>
@@ -553,8 +553,8 @@ describe("Today first-run focus mode", () => {
     await render(<Today />);
 
     expect(screen.getByText("Upcoming Today")).toBeTruthy();
-    expect(screen.queryByText("Progress")).toBeNull();
-    expect(screen.queryByText("Momentum")).toBeNull();
+    expect(screen.getByText("Progress")).toBeTruthy();
+    expect(screen.getByText("Momentum")).toBeTruthy();
   });
 });
 
@@ -580,7 +580,7 @@ describe("Today empty states", () => {
     expect(screen.getByText("Add Work")).toBeTruthy();
     expect(screen.queryByText("No more sessions today")).toBeNull();
     expect(screen.queryByText("No study time left today")).toBeNull();
-    expect(screen.queryByText("Progress")).toBeNull();
+    expect(screen.getByText("Progress")).toBeTruthy();
 
     await fireEvent.press(screen.getByText("Add Work"));
     expect(mockPush).toHaveBeenCalledWith("/(app)/(work)");
@@ -629,9 +629,9 @@ describe("Today empty states", () => {
 
     expect(screen.getByText("No study time left today")).toBeTruthy();
     expect(screen.queryByText("Add your first task")).toBeNull();
-    expect(screen.queryByText("Progress")).toBeNull();
-    expect(screen.queryByText("Momentum")).toBeNull();
-    expect(screen.queryByText("Backlog Health")).toBeNull();
+    expect(screen.getByText("Progress")).toBeTruthy();
+    expect(screen.getByText("Momentum")).toBeTruthy();
+    expect(screen.getByText("Backlog Health")).toBeTruthy();
   });
 
   it("pending tasks + positive available minutes + no scheduled sessions does not show No study time left today", async () => {
@@ -658,8 +658,8 @@ describe("Today empty states", () => {
     expect(screen.queryByText("Add your first task")).toBeNull();
     // Should render truthful empty-plan state indicating tasks remain to be scheduled
     expect(screen.getByText(/Good (morning|afternoon|evening), Ada/)).toBeTruthy();
-    expect(screen.queryByText("Progress")).toBeNull();
-    expect(screen.queryByText("Momentum")).toBeNull();
+    expect(screen.getByText("Progress")).toBeTruthy();
+    expect(screen.getByText("Momentum")).toBeTruthy();
   });
 
   it("when sessions exist, current Today behavior remains unchanged", async () => {
@@ -707,7 +707,7 @@ describe("Today empty states", () => {
 
     expect(screen.getByText(/Add your first task/)).toBeTruthy();
     expect(screen.queryByText("No study time left today")).toBeNull();
-    expect(screen.queryByText("Progress")).toBeNull();
+    expect(screen.getByText("Progress")).toBeTruthy();
   });
 });
 

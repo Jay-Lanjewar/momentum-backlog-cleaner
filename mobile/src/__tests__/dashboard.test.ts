@@ -346,14 +346,12 @@ describe("Today screen integration", () => {
     expect(backlogIdx).toBeGreaterThan(cardIdx);
   });
 
-  it("hides secondary analytics on first-run via isFirstRun flag", () => {
-    expect(content).toContain("isFirstRun");
-    expect(content).toContain(
-      "data.streaks.momentum.total_study_days === 0 && studyMinutes === 0",
-    );
-    expect(content).toContain("{!isFirstRun && (");
-    expect(content).toContain("{!isFirstRun && (");
-    expect(content).toContain("{!isFirstRun && (");
+  it("keeps secondary analytics visible with truthful first-run states", () => {
+    expect(content).toContain("<ProgressOverview");
+    expect(content).toContain("<BacklogHealthCard");
+    expect(content).toContain("<StreakCard");
+    expect(content).toContain("<BalanceScoreCard");
+    expect(content).toContain("today-insight-empty");
   });
 
   it("keeps greeting, daily_message, and RecommendedNextCard on first-run", () => {

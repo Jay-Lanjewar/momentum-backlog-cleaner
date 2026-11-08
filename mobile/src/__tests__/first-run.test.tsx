@@ -1398,6 +1398,37 @@ describe("Task review step", () => {
     return mockPost.mock.calls[0][1];
   }
 
+  it.each(["light", "dark"] as const)(
+    "renders review controls with %s theme tokens",
+    async (appearance) => {
+      usePreferencesStore.setState({
+        appearance,
+        accent: "violet",
+        hydrationStatus: "ready",
+      });
+      await openReview("Physics\nMotion");
+      await expandDetails(0);
+
+      const card = StyleSheet.flatten(
+        screen.getByTestId("review-card-0").props.style,
+      );
+      const title = StyleSheet.flatten(
+        screen.getByTestId("task-title-0").props.style,
+      );
+      expect(card).toEqual(
+        expect.objectContaining({
+          backgroundColor: appearance === "light" ? "#FFFFFF" : "#1E293B",
+          borderColor: appearance === "light" ? "#E2E8F0" : "#334155",
+        }),
+      );
+      expect(title).toEqual(
+        expect.objectContaining({
+          color: appearance === "light" ? "#0F172A" : "#F8FAFC",
+        }),
+      );
+    },
+  );
+
   it("shows one card per task with the interpreted values", async () => {
     await openReview("Physics\nMotion\nGravitation");
 
@@ -1621,6 +1652,44 @@ describe("Task review step", () => {
     expect(payload.backlog[0].due_date).toBe(`${tomorrowKey()}T00:00:00`);
     expect(payload.backlog[0].priority).toBe(1);
     expect(payload.backlog[0].estimated_minutes).toBe(45);
+  });
+
+  it("keeps This Week selected on Sunday when it resolves to today's date", async () => {
+    jest.useFakeTimers();
+    jest.setSystemTime(new Date(2026, 10, 8, 12, 0, 0));
+    try {
+      await openReview("Physics\nMotion");
+      await expandDetails(0);
+      await fireEvent.press(screen.getByTestId("task-due-0-week"));
+
+      expect(
+        screen.getByTestId("task-due-0-week").props.accessibilityState?.selected,
+      ).toBe(true);
+      expect(
+        screen.getByTestId("task-due-0-today").props.accessibilityState?.selected,
+      ).toBe(false);
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+
+  it("supports selecting an exact custom local calendar date", async () => {
+    await openReview("Physics\nMotion");
+    await expandDetails(0);
+    await fireEvent.press(screen.getByTestId("task-due-0-custom"));
+
+    await fireEvent(
+      screen.getByTestId("task-due-0-custom-picker"),
+      "onChange",
+      { type: "set" },
+      new Date(2026, 11, 25, 23, 30, 0),
+    );
+
+    expect(
+      screen.getByTestId("task-due-0-custom").props.accessibilityState?.selected,
+    ).toBe(true);
+    const payload = await finishFromReview();
+    expect(payload.backlog[0].due_date).toBe("2026-12-25T00:00:00");
   });
 
   it("keeps the estimate empty when no duration was given", async () => {
