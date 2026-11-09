@@ -110,6 +110,9 @@ export default function TodayMissionPage() {
 
   const handleStartStudy = useCallback(
     (session: PlanSession, dashboard: DashboardData) => {
+      const task = dashboard.planning.prioritized_backlog.find(
+        (item) => item.id === session.backlog_item_id,
+      );
       router.push({
         pathname: "/(app)/(today)/focus",
         params: {
@@ -123,6 +126,10 @@ export default function TodayMissionPage() {
           snapshotId: dashboard.plan.snapshot_id ?? "",
           dailyMessage: dashboard.plan.plan.daily_message,
           userName: user?.name ?? "",
+          taskTitle: task?.title ?? session.reason,
+          courseName: task?.course_name ?? "",
+          className: dashboard.profile?.class_name ?? "",
+          boardName: dashboard.profile?.board ?? "",
         },
       });
     },

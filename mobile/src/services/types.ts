@@ -272,7 +272,8 @@ export type FocusSessionAction =
   | "pause"
   | "resume"
   | "heartbeat"
-  | "cancel";
+  | "cancel"
+  | "recover";
 
 export interface FocusSessionLifecyclePayload {
   action: FocusSessionAction;

@@ -1,4 +1,5 @@
 import { renderHook, act } from "@testing-library/react-native";
+import { AppState, type AppStateStatus } from "react-native";
 import { useFocusLock } from "../hooks/useFocusLock";
 
 // Mock Date.now for deterministic tests
@@ -7,10 +8,12 @@ const originalDateNow = Date.now;
 
 beforeAll(() => {
   Date.now = () => mockNow;
+  jest.spyOn(performance, "now").mockImplementation(() => mockNow);
 });
 
 afterAll(() => {
   Date.now = originalDateNow;
+  jest.restoreAllMocks();
 });
 
 beforeEach(() => {
@@ -85,6 +88,19 @@ describe("useFocusLock", () => {
     expect(hookResult.result.current.phase).toBe("focusing");
   });
 
+  it("does not count time spent in a paused challenge interval", async () => {
+    const hookResult = await renderHook(() => useFocusLock(totalMs));
+    await act(async () => {});
+    mockNow += 2 * 60 * 1000;
+    await act(async () => hookResult.result.current.pause());
+    mockNow += 45_000;
+    expect(hookResult.result.current.focusedElapsedMs).toBe(2 * 60 * 1000);
+    await act(async () => hookResult.result.current.resume());
+    mockNow += 30_000;
+    await act(async () => hookResult.result.current.pause());
+    expect(hookResult.result.current.focusedElapsedMs).toBe(2 * 60 * 1000 + 30_000);
+  });
+
   it("excludes background time from elapsed calculation", async () => {
     const hookResult = await renderHook(() => useFocusLock(totalMs));
     await act(async () => {});
@@ -135,5 +151,62 @@ describe("useFocusLock", () => {
     expect(hookResult.result.current.phase).toBe("focusing");
     expect(hookResult.result.current.focusedElapsedMs).toBe(0);
     expect(hookResult.result.current.remainingMs).toBe(totalMs);
+  });
+
+  it("recovers running and challenge sessions paused without counting process downtime", async () => {
+    const identity = { userId: "student-a", sessionId: "session-a", snapshotId: "snapshot-a", generation: "generation-00000001" };
+    const record = {
+      version: 1 as const, ...identity, totalDurationMs: totalMs,
+      accumulatedMs: 120_000, state: "challenge_active" as const,
+      updatedAt: new Date().toISOString(),
+    };
+    const hook = await renderHook(() => useFocusLock(totalMs, true, { identity, record }));
+    await act(async () => {});
+    expect(hook.result.current.phase).toBe("recovery_pending");
+    expect(hook.result.current.focusedElapsedMs).toBe(120_000);
+    mockNow += 60 * 60 * 1000;
+    expect(hook.result.current.focusedElapsedMs).toBe(120_000);
+    await act(async () => hook.result.current.resume());
+    mockNow += 30_000;
+    await act(async () => hook.result.current.pause());
+    expect(hook.result.current.focusedElapsedMs).toBe(150_000);
+  });
+
+  it("persists completion intent and restores the same completion minutes", async () => {
+    const identity = { userId: "student-a", sessionId: "session-b", snapshotId: "snapshot-a", generation: "generation-00000002" };
+    const hook = await renderHook(() => useFocusLock(totalMs, true, { identity, record: null }));
+    await act(async () => {});
+    mockNow += 121_000;
+    await act(async () => hook.result.current.markCompletionPending(3));
+    expect(hook.result.current.phase).toBe("completion_pending");
+    expect(hook.result.current.completionMinutes).toBe(3);
+  });
+
+  it("uses monotonic time even when wall clock changes", async () => {
+    const hook = await renderHook(() => useFocusLock(totalMs));
+    await act(async () => {});
+    mockNow += 75_000;
+    Date.now = () => mockNow - 24 * 60 * 60 * 1000;
+    await act(async () => hook.result.current.pause());
+    expect(hook.result.current.focusedElapsedMs).toBe(75_000);
+  });
+
+  it("checkpoints on background and requires explicit foreground resume", async () => {
+    let listener: ((state: AppStateStatus) => void) | undefined;
+    const spy = jest.spyOn(AppState, "addEventListener").mockImplementation(((_event, callback) => {
+      listener = callback;
+      return { remove: jest.fn() };
+    }) as typeof AppState.addEventListener);
+    const hook = await renderHook(() => useFocusLock(totalMs));
+    await act(async () => {});
+    mockNow += 45_000;
+    await act(async () => listener?.("background"));
+    expect(hook.result.current.phase).toBe("paused_lost_focus");
+    expect(hook.result.current.focusedElapsedMs).toBe(45_000);
+    mockNow += 90_000;
+    await act(async () => listener?.("active"));
+    expect(hook.result.current.phase).toBe("focus_returned");
+    expect(hook.result.current.focusedElapsedMs).toBe(45_000);
+    spy.mockRestore();
   });
 });

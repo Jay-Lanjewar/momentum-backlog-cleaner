@@ -235,7 +235,7 @@ class SessionCompletionRequest(BaseModel):
 
 
 class FocusSessionLifecycleRequest(BaseModel):
-    action: str = Field(..., pattern=r"^(start|pause|resume|heartbeat|cancel)$")
+    action: str = Field(..., pattern=r"^(start|pause|resume|heartbeat|cancel|recover)$")
     session_id: str = Field(..., min_length=3, max_length=255)
     snapshot_id: uuid.UUID
     generation: str = Field(..., min_length=16, max_length=80)

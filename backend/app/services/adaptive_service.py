@@ -480,6 +480,48 @@ async def _has_valid_focus_lease(
     )
 
 
+async def _completed_focus_recovery_response(
+    db: AsyncSession,
+    user_id: uuid.UUID,
+    request: FocusSessionLifecycleRequest,
+    now: datetime,
+) -> FocusSessionLifecycleResponse | None:
+    """Recognize a committed completion after its plan snapshot was rotated."""
+    lease = await _get_focus_lease(db, user_id, lock=True)
+    if (
+        lease is None
+        or lease.user_id != user_id
+        or lease.plan_snapshot_id != request.snapshot_id
+        or lease.session_id != request.session_id
+        or lease.generation != request.generation
+        or lease.state != "completed"
+    ):
+        return None
+    result = await db.execute(
+    select(SessionCompletion.id)
+    .join(
+        PlanSnapshot,
+        SessionCompletion.plan_snapshot_id == PlanSnapshot.id,
+    )
+    .where(
+        PlanSnapshot.user_id == user_id,
+        SessionCompletion.plan_snapshot_id == request.snapshot_id,
+        SessionCompletion.session_id == request.session_id,
+        SessionCompletion.status == "completed",
+    )
+    .limit(1)
+    )
+    if result.scalar_one_or_none() is None:
+        return None
+    return FocusSessionLifecycleResponse(
+        session_id=request.session_id,
+        snapshot_id=request.snapshot_id,
+        generation=request.generation,
+        state="completed",
+        lease_expires_at=now,
+    )
+
+
 async def run_focus_session_lifecycle(
     db: AsyncSession,
     user_id: uuid.UUID,
@@ -501,15 +543,27 @@ async def run_focus_session_lifecycle(
     )
     snapshot = result.scalar_one_or_none()
     if snapshot is None:
+        if request.action in {"resume", "recover"}:
+            completed = await _completed_focus_recovery_response(
+                db, user_id, request, now
+            )
+            if completed is not None:
+                return completed
         raise ValueError("Plan snapshot is no longer active")
     if not any(
         session.get("session_id") == request.session_id
         for session in (snapshot.sessions or [])
     ):
+        if request.action in {"resume", "recover"}:
+            completed = await _completed_focus_recovery_response(
+                db, user_id, request, now
+            )
+            if completed is not None:
+                return completed
         raise ValueError("Session is not in the active plan")
 
     lease = await _get_focus_lease(db, user_id, lock=True)
-    if request.action in {"start", "resume"}:
+    if request.action in {"start", "resume", "recover"}:
         completion_result = await db.execute(
             select(SessionCompletion.id).where(
                 SessionCompletion.plan_snapshot_id == snapshot.id,
@@ -518,6 +572,14 @@ async def run_focus_session_lifecycle(
             ).limit(1)
         )
         if completion_result.scalar_one_or_none() is not None:
+            if request.action in {"resume", "recover"}:
+                return FocusSessionLifecycleResponse(
+                    session_id=request.session_id,
+                    snapshot_id=snapshot.id,
+                    generation=request.generation,
+                    state="completed",
+                    lease_expires_at=now,
+                )
             raise ValueError("Session is already completed")
 
     if request.action == "start":
@@ -581,7 +643,20 @@ async def run_focus_session_lifecycle(
                 seconds=FOCUS_SESSION_LEASE_SECONDS
             )
     else:
-        if (
+        if request.action == "recover" and lease is None:
+            # An explicit recovery can re-establish the lease for the same
+            # authenticated user/session/generation after its row is absent.
+            # It starts paused and never represents a new plan session.
+            lease = ActiveFocusSession(
+                user_id=user_id,
+                plan_snapshot_id=snapshot.id,
+                session_id=request.session_id,
+                generation=request.generation,
+                state="paused",
+                lease_expires_at=now,
+            )
+            db.add(lease)
+        elif (
             lease is None
             or lease.plan_snapshot_id != snapshot.id
             or lease.session_id != request.session_id
@@ -589,7 +664,15 @@ async def run_focus_session_lifecycle(
         ):
             raise FocusSessionConflict("Focus session lease is no longer current")
 
-        if request.action == "heartbeat":
+        if request.action == "recover":
+            if lease.state in {"cancelled", "completed"}:
+                raise FocusSessionConflict("Focus session has already ended")
+            # This explicit, authenticated recovery transition never changes
+            # the owner, plan session, or generation. The caller must still
+            # resume separately after the student confirms recovery.
+            lease.state = "paused"
+            lease.lease_expires_at = now
+        elif request.action == "heartbeat":
             if lease.state != "running" or lease.lease_expires_at <= now:
                 raise FocusSessionConflict("Focus session lease has expired")
             lease.lease_expires_at = now + timedelta(
@@ -602,6 +685,8 @@ async def run_focus_session_lifecycle(
         elif request.action == "resume":
             if lease.state in {"cancelled", "completed"}:
                 raise FocusSessionConflict("Focus session has already ended")
+            if lease.state == "running" and lease.lease_expires_at <= now:
+                raise FocusSessionConflict("Focus session lease has expired")
             lease.state = "running"
             lease.lease_expires_at = now + timedelta(
                 seconds=FOCUS_SESSION_LEASE_SECONDS

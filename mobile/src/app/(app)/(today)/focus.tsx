@@ -13,7 +13,7 @@ import {
   type AppStateStatus,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
+import { useLocalSearchParams, useRouter } from "expo-router";
 import { useKeepAwake } from "expo-keep-awake";
 import Svg, { Circle } from "react-native-svg";
 import * as Haptics from "expo-haptics";
@@ -50,7 +50,10 @@ import {
 import { AdaptiveSessionLegend } from "@/components/adaptive/AdaptiveSessionLegend";
 import { AdaptiveChangeGroup } from "@/components/adaptive/AdaptiveChangeGroup";
 import { StudyBuddyPanel } from "@/components/focus/StudyBuddyPanel";
+import { FocusShieldChallenge } from "@/components/focus/FocusShieldChallenge";
 import { useTheme } from "@/theme/ThemeProvider";
+import { useAuthStore } from "@/store/useAuthStore";
+import { clearFocusSession, loadFocusSession } from "@/focus/focusSessionPersistence";
 
 function parseDurationMs(start: string | undefined, end: string | undefined): number {
   if (!start || !end) return 0;
@@ -92,6 +95,10 @@ export default function FocusModeScreen() {
     snapshotId: string;
     dailyMessage: string;
     userName: string;
+    taskTitle: string;
+    courseName: string;
+    className: string;
+    boardName: string;
   }>();
 
   const hasDirectSession = Boolean(
@@ -121,6 +128,13 @@ export default function FocusModeScreen() {
   const sessionId = params.sessionId ?? resolvedSession?.session_id ?? "";
   const snapshotId = params.snapshotId || dashboard?.plan.snapshot_id || "";
   const userName = params.userName ?? "";
+  const authUserId = useAuthStore((state) => state.user?.id ?? "");
+  const profile = useAuthStore((state) => state.user?.profile ?? null);
+  const activeTask = dashboard?.planning?.prioritized_backlog?.find((item) => item.id === params.backlogItemId);
+  const taskTitle = params.taskTitle || activeTask?.title || reason;
+  const courseName = params.courseName || activeTask?.course_name || "";
+  const className = params.className || profile?.class_name || dashboard?.profile?.class_name || null;
+  const boardName = params.boardName || profile?.board || dashboard?.profile?.board || null;
 
   // Redirect back if we can't identify the session at all
   const isMissingSession =
@@ -132,17 +146,35 @@ export default function FocusModeScreen() {
   const identityReady = Boolean(
     sessionId && snapshotId && startTime && endTime && reason,
   );
-  const { phase, focusedElapsedMs, remainingMs, pause, resume, complete } =
-    useFocusLock(totalDurationMs, identityReady);
+  const recoveredFocusSession = useMemo(
+    () => identityReady && authUserId
+      ? loadFocusSession(authUserId, sessionId, snapshotId, totalDurationMs)
+      : null,
+    [authUserId, identityReady, sessionId, snapshotId, totalDurationMs],
+  );
+  const generation = useMemo(
+    () => recoveredFocusSession?.generation ?? createFocusGeneration(),
+    [recoveredFocusSession?.generation],
+  );
+  const durableFocusRecovery = useMemo(() => identityReady && authUserId
+    ? {
+      identity: { userId: authUserId, sessionId, snapshotId, generation },
+      record: recoveredFocusSession,
+    }
+    : undefined,
+  [authUserId, generation, identityReady, recoveredFocusSession, sessionId, snapshotId]);
+  const { phase, focusedElapsedMs, remainingMs, pause, pauseForChallenge, resume, markCompletionPending, complete, recovered, persistenceError: focusPersistenceError, completionMinutes } =
+    useFocusLock(totalDurationMs, identityReady, durableFocusRecovery);
 
   const completeSession = useCompleteSession();
   const studyBuddy = useStudyBuddyChat();
   const focusLifecycle = useFocusSessionLifecycle();
   const mutateFocusLifecycle = focusLifecycle.mutateAsync;
-  const generationRef = useRef<string>(createFocusGeneration());
   const lifecycleQueueRef = useRef<Promise<unknown>>(Promise.resolve());
-  const leaseStartedRef = useRef(false);
+  const leaseStartedRef = useRef(Boolean(recoveredFocusSession));
   const leaseAcceptedRef = useRef(false);
+  const recoveredLeaseValidatedRef = useRef(!recoveredFocusSession);
+  const recoveryRequiredRef = useRef(Boolean(recoveredFocusSession));
   const completionSavedRef = useRef(false);
   const [leaseReady, setLeaseReady] = useState(false);
   const [focusLeaseError, setFocusLeaseError] = useState<string | null>(null);
@@ -152,6 +184,8 @@ export default function FocusModeScreen() {
   const [completedMinutes, setCompletedMinutes] = useState<number | null>(null);
   const [completionError, setCompletionError] = useState<string | null>(null);
   const [studyBuddyOpen, setStudyBuddyOpen] = useState(false);
+  const [focusShieldOpen, setFocusShieldOpen] = useState(false);
+  const focusShieldPausedSession = useRef(false);
   const [studyBuddyMessages, setStudyBuddyMessages] = useState<StudyBuddyMessage[]>([]);
   const [studyBuddyDraft, setStudyBuddyDraft] = useState("");
   const [studyBuddyError, setStudyBuddyError] = useState<string | null>(null);
@@ -166,13 +200,13 @@ export default function FocusModeScreen() {
           action,
           session_id: sessionId,
           snapshot_id: snapshotId,
-          generation: generationRef.current,
+          generation,
         }),
       );
       lifecycleQueueRef.current = operation.catch(() => undefined);
       return operation;
     },
-    [mutateFocusLifecycle, sessionId, snapshotId],
+    [generation, mutateFocusLifecycle, sessionId, snapshotId],
   );
 
   useEffect(() => {
@@ -196,12 +230,14 @@ export default function FocusModeScreen() {
         () => {
           if (!cancelled) {
             leaseAcceptedRef.current = true;
+            recoveryRequiredRef.current = false;
             setLeaseReady(true);
           }
         },
         (error: Error) => {
           if (cancelled) return;
           leaseAcceptedRef.current = false;
+          recoveryRequiredRef.current = true;
           setLeaseReady(false);
           setFocusLeaseError(error?.message || "This session is no longer available.");
           pause();
@@ -213,6 +249,7 @@ export default function FocusModeScreen() {
     }
     if (
       leaseStartedRef.current &&
+      recoveredLeaseValidatedRef.current &&
       (phase === "paused_by_user" ||
         phase === "paused_lost_focus" ||
         phase === "focus_returned")
@@ -256,6 +293,7 @@ export default function FocusModeScreen() {
           if (cancelled) return;
           setLeaseReady(false);
           leaseAcceptedRef.current = false;
+          recoveryRequiredRef.current = true;
           setFocusLeaseError(error?.message || "This session is no longer available.");
           pause();
         },
@@ -268,14 +306,9 @@ export default function FocusModeScreen() {
   }, [appState, focusLeaseError, leaseReady, pause, phase, sendLifecycle]);
 
   const cancelAndLeave = useCallback(() => {
-    if (leaseStartedRef.current && !completionSavedRef.current) {
-      leaseAcceptedRef.current = false;
-      void sendLifecycle("cancel").catch(() => {
-        // The server-side lease expires if cancellation cannot reach the API.
-      });
-    }
+    if (phase === "focusing") pause();
     router.back();
-  }, [router, sendLifecycle]);
+  }, [pause, phase, router]);
 
   const sendStudyBuddyQuestion = useCallback(async () => {
     const question = studyBuddyDraft.trim();
@@ -310,19 +343,32 @@ export default function FocusModeScreen() {
     }
   }, [sessionId, studyBuddy, studyBuddyDraft, studyBuddyMessages]);
 
-  useFocusEffect(
-    useCallback(
-      () => () => {
-        if (leaseStartedRef.current && !completionSavedRef.current) {
-          leaseAcceptedRef.current = false;
-          void sendLifecycle("cancel").catch(() => undefined);
-        }
-      },
-      [sendLifecycle],
-    ),
-  );
-
   useKeepAwake("focus-session");
+
+  const ensureLeaseRunning = useCallback(async (): Promise<"running" | "completed"> => {
+    if (recoveryRequiredRef.current) {
+      const recoveryResult = await sendLifecycle("recover");
+      if (recoveryResult.state === "completed") {
+        recoveryRequiredRef.current = false;
+        recoveredLeaseValidatedRef.current = true;
+        return "completed";
+      }
+      if (recoveryResult.state !== "paused") throw new Error("This Focus session cannot be recovered.");
+      leaseStartedRef.current = true;
+      recoveredLeaseValidatedRef.current = true;
+      const resumed = await sendLifecycle("resume");
+      if (resumed.state !== "running") throw new Error("This Focus session could not be resumed.");
+    } else {
+      const action: FocusSessionAction = leaseStartedRef.current ? "resume" : "start";
+      const result = await sendLifecycle(action);
+      if (result.state !== "running") throw new Error("This Focus session is no longer available.");
+    }
+    leaseStartedRef.current = true;
+    leaseAcceptedRef.current = true;
+    recoveryRequiredRef.current = false;
+    recoveredLeaseValidatedRef.current = true;
+    return "running";
+  }, [sendLifecycle]);
 
   const handleComplete = useCallback(() => {
     if (completingRef.current || completeSession.isPending) return;
@@ -330,20 +376,20 @@ export default function FocusModeScreen() {
     setCompletionError(null);
     // The backend validates reported minutes against the planned duration.
     // A delayed JS timer tick must not round an automatic completion above it.
-    const actualMinutes = Math.max(
+    const actualMinutes = completionMinutes ?? Math.max(
       1,
       Math.ceil(Math.min(focusedElapsedMs, totalDurationMs) / 60000),
     );
+    markCompletionPending(actualMinutes);
     void lifecycleQueueRef.current.then(() => {
-      if (!leaseAcceptedRef.current) {
-        completingRef.current = false;
-        return;
-      }
-      completeSession.mutate(
+      const validateLease = leaseAcceptedRef.current
+        ? Promise.resolve("running" as const)
+        : ensureLeaseRunning();
+      void validateLease.then(() => completeSession.mutate(
         {
           session_id: sessionId,
           actual_minutes: actualMinutes,
-          focus_generation: generationRef.current,
+          focus_generation: generation,
         },
         {
           onSuccess: (data) => {
@@ -362,6 +408,9 @@ export default function FocusModeScreen() {
           },
           onError: (error) => {
             completingRef.current = false;
+            leaseAcceptedRef.current = false;
+            recoveryRequiredRef.current = true;
+            setLeaseReady(false);
             setCompletionError(
               error?.message ||
                 "Could not save your progress. Please try again.",
@@ -369,9 +418,13 @@ export default function FocusModeScreen() {
             pause();
           },
         },
-      );
+      )).catch((error: Error) => {
+        completingRef.current = false;
+        recoveryRequiredRef.current = true;
+        setCompletionError(error.message || "This session is no longer available.");
+      });
     });
-  }, [complete, pause, focusedElapsedMs, totalDurationMs, sessionId, completeSession]);
+  }, [complete, ensureLeaseRunning, generation, markCompletionPending, pause, focusedElapsedMs, totalDurationMs, sessionId, completeSession, completionMinutes]);
 
   // Auto-complete when timer reaches zero (skip if already saving or failed)
   useEffect(() => {
@@ -400,10 +453,10 @@ export default function FocusModeScreen() {
         setStudyBuddyOpen(false);
         return true;
       }
-      if (phase === "focusing" || phase === "paused_by_user" || phase === "paused_lost_focus" || phase === "focus_returned") {
+      if (phase === "focusing" || phase === "paused_by_user" || phase === "paused_lost_focus" || phase === "focus_returned" || phase === "recovery_pending" || phase === "completion_pending") {
         Alert.alert(
           "Leave Focus Session?",
-          "Your progress will not be saved. Finish the session to record your focused time.",
+          "Your focused time is saved on this device. You can return to this session later to recover or finish syncing it.",
           [
             { text: "Stay", style: "cancel" },
             {
@@ -432,18 +485,38 @@ export default function FocusModeScreen() {
     pause();
   }, [pause]);
 
-  const handleResume = useCallback(() => {
+  const handleResume = useCallback(async () => {
     Haptics.selectionAsync();
-    resume();
-  }, [resume]);
+    try {
+      const state = await ensureLeaseRunning();
+      if (state === "completed") {
+        const minutes = completionMinutes ?? Math.max(1, Math.ceil(Math.min(focusedElapsedMs, totalDurationMs) / 60000));
+        markCompletionPending(minutes);
+        recoveryRequiredRef.current = true;
+        handleComplete();
+        return;
+      }
+      setFocusLeaseError(null);
+      setLeaseReady(true);
+      resume();
+    } catch (error) {
+      recoveryRequiredRef.current = true;
+      setFocusLeaseError(error instanceof Error ? error.message : "This session is no longer available.");
+    }
+  }, [completionMinutes, ensureLeaseRunning, focusedElapsedMs, handleComplete, markCompletionPending, resume, totalDurationMs]);
 
   const handleBackToMission = useCallback(() => {
+    router.replace("/(app)");
+  }, [router]);
+
+  const discardAndBackToMission = useCallback(() => {
+    clearFocusSession(authUserId, sessionId);
     if (leaseStartedRef.current && !completionSavedRef.current) {
       leaseAcceptedRef.current = false;
       void sendLifecycle("cancel").catch(() => undefined);
     }
     router.replace("/(app)");
-  }, [router, sendLifecycle]);
+  }, [authUserId, router, sendLifecycle, sessionId]);
 
   // ─── Derived adaptive values (declared before any early returns) ───
   const changedSessionIds = useMemo(
@@ -524,13 +597,19 @@ export default function FocusModeScreen() {
     return (
       <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
         <View style={styles.center}>
-          <Text style={[styles.errorTitle, { color: colors.primaryText }]}>This session is no longer available</Text>
+          <Text style={[styles.errorTitle, { color: colors.primaryText }]}>Focus session paused</Text>
           <Text style={[styles.errorBody, { color: colors.error }]}>{focusLeaseError}</Text>
           <TouchableOpacity
             style={[styles.primaryButton, { backgroundColor: colors.accent }]}
+            onPress={() => void handleResume()}
+          >
+            <Text style={[styles.primaryButtonText, { color: colors.accentForeground }]}>Retry recovery</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.secondaryButton, { borderColor: colors.border }]}
             onPress={handleBackToMission}
           >
-            <Text style={[styles.primaryButtonText, { color: colors.accentForeground }]}>Back to Today</Text>
+            <Text style={[styles.secondaryButtonText, { color: colors.mutedText }]}>Return to Today with session saved</Text>
           </TouchableOpacity>
         </View>
       </SafeAreaView>
@@ -559,7 +638,7 @@ export default function FocusModeScreen() {
           </TouchableOpacity>
           <TouchableOpacity
             style={styles.errorLeaveButton}
-            onPress={handleBackToMission}
+            onPress={discardAndBackToMission}
             activeOpacity={0.8}
           >
             <Text style={[styles.errorLeaveText, { color: colors.mutedText }]}>Leave without saving</Text>
@@ -871,6 +950,22 @@ export default function FocusModeScreen() {
         </TouchableOpacity>
       )}
 
+      {identityReady && !!(params.backlogItemId || resolvedSession?.backlog_item_id) && (
+        <TouchableOpacity
+          accessibilityRole="button"
+          accessibilityLabel="Try a Focus Shield knowledge challenge"
+          onPress={() => {
+            focusShieldPausedSession.current = phase === "focusing";
+            if (focusShieldPausedSession.current) pauseForChallenge();
+            setFocusShieldOpen(true);
+          }}
+          style={[styles.shieldEntry, { backgroundColor: colors.accentSoft, borderColor: colors.border }]}
+          activeOpacity={0.8}
+        >
+          <Text style={[styles.shieldEntryText, { color: colors.accentSoftForeground }]}>Try a Focus Shield challenge</Text>
+        </TouchableOpacity>
+      )}
+
       {/* Focus status messages */}
       {phase === "paused_lost_focus" && (
         <View style={[styles.statusBanner, { backgroundColor: colors.pressed }]}>
@@ -880,6 +975,23 @@ export default function FocusModeScreen() {
           <Text style={[styles.statusFocused, { color: colors.mutedText }]}>
             {formatCountdown(focusedElapsedMs)} focused
           </Text>
+        </View>
+      )}
+      {recovered && phase === "paused_by_user" && (
+        <View style={[styles.statusBanner, { backgroundColor: colors.pressed }]}>
+          <Text style={[styles.statusText, { color: colors.secondaryText }]}>Your Focus session was recovered. It is paused until you resume.</Text>
+          <Text style={[styles.statusFocused, { color: colors.mutedText }]}>{formatCountdown(focusedElapsedMs)} focused before reopening</Text>
+        </View>
+      )}
+      {phase === "recovery_pending" && (
+        <View style={[styles.statusBanner, { backgroundColor: colors.accentSoft }]}>
+          <Text style={[styles.statusText, { color: colors.secondaryText }]}>Your saved Focus time is safe. Recover the session when you’re ready.</Text>
+          <Text style={[styles.statusFocused, { color: colors.mutedText }]}>{formatCountdown(focusedElapsedMs)} focused before reopening</Text>
+        </View>
+      )}
+      {focusPersistenceError && (
+        <View style={[styles.statusBanner, { backgroundColor: colors.pressed }]}>
+          <Text style={[styles.statusText, { color: colors.warning }]}>Session recovery could not be saved. Keep MOMENTUM open while studying.</Text>
         </View>
       )}
       {phase === "focus_returned" && (
@@ -900,13 +1012,32 @@ export default function FocusModeScreen() {
 
       {/* Controls — fixed at bottom */}
       <View style={styles.controls}>
-        {phase === "focusing" ? (
+        {phase === "completion_pending" ? (
+          <TouchableOpacity
+            style={[styles.controlButton, styles.controlButtonPrimary, { backgroundColor: colors.accent }]}
+            onPress={handleComplete}
+            disabled={completeSession.isPending}
+            activeOpacity={0.7}
+          >
+            <Text style={[styles.controlButtonText, { color: colors.accentForeground }]}>
+              {completeSession.isPending ? "Saving…" : "Retry saving session"}
+            </Text>
+          </TouchableOpacity>
+        ) : phase === "focusing" ? (
           <TouchableOpacity
             style={[styles.controlButton, { backgroundColor: colors.pressed }]}
             onPress={handlePause}
             activeOpacity={0.7}
           >
             <Text style={[styles.controlButtonText, { color: colors.primaryText }]}>Pause</Text>
+          </TouchableOpacity>
+        ) : phase === "recovery_pending" ? (
+          <TouchableOpacity
+            style={[styles.controlButton, styles.controlButtonPrimary, { backgroundColor: colors.accent }]}
+            onPress={() => void handleResume()}
+            activeOpacity={0.7}
+          >
+            <Text style={[styles.controlButtonText, { color: colors.accentForeground }]}>Recover and resume</Text>
           </TouchableOpacity>
         ) : phase === "paused_by_user" || phase === "focus_returned" ? (
           <TouchableOpacity
@@ -920,7 +1051,7 @@ export default function FocusModeScreen() {
           </TouchableOpacity>
         ) : null}
 
-        {(phase === "focusing" || phase === "paused_by_user") && (
+        {(phase === "focusing" || phase === "paused_by_user" || phase === "recovery_pending") && (
           <TouchableOpacity
             style={styles.finishButton}
             onPress={handleFinishEarly}
@@ -952,6 +1083,22 @@ export default function FocusModeScreen() {
           />
         )}
       </Modal>
+      {focusShieldOpen ? <FocusShieldChallenge
+        key={`${authUserId}:${sessionId}:${params.backlogItemId || resolvedSession?.backlog_item_id || ""}:${className || ""}:${boardName || ""}`}
+        visible={focusShieldOpen}
+        onClose={() => {
+          setFocusShieldOpen(false);
+          const shouldResume = focusShieldPausedSession.current;
+          focusShieldPausedSession.current = false;
+          if (shouldResume && phase === "paused_by_user" && appState === "active" && identityReady && !focusLeaseError && !completionSavedRef.current) void handleResume();
+        }}
+        userId={authUserId}
+        backlogItemId={params.backlogItemId || resolvedSession?.backlog_item_id || ""}
+        taskTitle={taskTitle}
+        courseName={courseName}
+        className={className}
+        boardName={boardName}
+      /> : null}
     </View>
   );
 }
@@ -1358,6 +1505,18 @@ const styles = StyleSheet.create({
     color: "#93C5FD",
     fontSize: 13,
     fontWeight: "600",
+  },
+  shieldEntry: {
+    alignSelf: "center",
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    marginBottom: 4,
+    borderWidth: 1,
+    borderRadius: 999,
+  },
+  shieldEntryText: {
+    fontSize: 13,
+    fontWeight: "700",
   },
   controlButton: {
     backgroundColor: "#334155",

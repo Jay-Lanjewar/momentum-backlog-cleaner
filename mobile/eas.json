@@ -19,7 +19,8 @@
     "preview": {
       "environment": "preview",
       "env": {
-        "MOMENTUM_BUILD_PROFILE": "preview"
+        "MOMENTUM_BUILD_PROFILE": "preview",
+        "MOMENTUM_QA_ENVIRONMENT": "qa"
       },
       "distribution": "internal",
       "android": {

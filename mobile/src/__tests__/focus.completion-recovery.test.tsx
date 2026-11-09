@@ -13,7 +13,7 @@
  */
 
 import React from "react";
-import { render, screen, fireEvent, act } from "@testing-library/react-native";
+import { render, screen, fireEvent, act, waitFor } from "@testing-library/react-native";
 import { Alert, Animated, BackHandler } from "react-native";
 
 const mockReplace = jest.fn();
@@ -76,9 +76,14 @@ jest.mock("@/hooks/useFocusLock", () => {
         focusedElapsedMs,
         remainingMs,
         pause: ReactModule.useCallback(() => setPhase("paused_by_user"), []),
+        pauseForChallenge: ReactModule.useCallback(() => setPhase("paused_by_user"), []),
         resume: ReactModule.useCallback(() => setPhase("focusing"), []),
+        markCompletionPending: ReactModule.useCallback(() => setPhase("completion_pending"), []),
         complete: ReactModule.useCallback(() => setPhase("complete"), []),
         reset: ReactModule.useCallback(() => setPhase("entering"), []),
+        recovered: false,
+        persistenceError: false,
+        completionMinutes: undefined,
       };
     },
   };
@@ -238,7 +243,9 @@ beforeEach(() => {
   mockPush.mockClear();
   mockBack.mockClear();
   mockMutate.mockClear();
-  mockFocusLifecycleMutateAsync.mockReset().mockResolvedValue({ state: "running" });
+  mockFocusLifecycleMutateAsync.mockReset().mockImplementation(async ({ action }: { action: string }) => ({
+    state: action === "recover" ? "paused" : "running",
+  }));
   mockSetIsPending = () => {};
   completeCallbacks = {};
   backHandler = null;
@@ -259,14 +266,14 @@ beforeEach(() => {
 });
 
 describe("C1 - Leave is truthful", () => {
-  it("leave text says progress is not saved", async () => {
+  it("leave text explains local focused-time recovery", async () => {
     await renderFocus();
     await triggerBackHandler();
 
     const call = getAlertCall("Leave Focus Session?");
     expect(call).toBeTruthy();
-    expect((call as any[])[1]).toMatch(/will not be saved/i);
-    expect((call as any[])[1]).not.toMatch(/will be saved/i);
+    expect((call as any[])[1]).toMatch(/saved on this device/i);
+    expect((call as any[])[1]).toMatch(/recover/i);
   });
 
   it("leaving does not call completeSession()", async () => {
@@ -376,7 +383,7 @@ describe("C2 - Completion failure is recoverable", () => {
     expect(mockMutate).toHaveBeenCalledTimes(1);
 
     await fireEvent.press(screen.getByText("Try Again"));
-    expect(mockMutate).toHaveBeenCalledTimes(2);
+    await waitFor(() => expect(mockMutate).toHaveBeenCalledTimes(2));
   });
 
   it("Back/Leave from completion error is possible", async () => {
@@ -410,7 +417,7 @@ describe("C2 - Completion failure is recoverable", () => {
   it("double-tap/duplicate completion remains guarded", async () => {
     await renderFocus();
 
-    // Keep UI on timer (do not flip isPending) so Finish can fire twice
+    // Keep the first completion request pending to exercise the retry guard.
     mockMutate.mockImplementation(
       (_payload: unknown, callbacks?: CompleteCallbacks) => {
         completeCallbacks = callbacks ?? {};
@@ -420,15 +427,7 @@ describe("C2 - Completion failure is recoverable", () => {
     await pressFinishEarlyAndConfirm();
     expect(mockMutate).toHaveBeenCalledTimes(1);
 
-    await fireEvent.press(screen.getByText("Finish Early"));
-    const finishAlerts = alertSpy.mock.calls.filter(
-      (c) => c[0] === "Finish Early?",
-    );
-    await act(async () => {
-      finishAlerts.forEach((call) => {
-        (call as any[])[2][1].onPress();
-      });
-    });
+    await fireEvent.press(screen.getByText("Retry saving session"));
 
     expect(mockMutate).toHaveBeenCalledTimes(1);
   });
@@ -444,7 +443,7 @@ describe("C2 - Completion failure is recoverable", () => {
     });
     // After error, completingRef reset - retry allowed
     await fireEvent.press(screen.getByText("Try Again"));
-    expect(mockMutate).toHaveBeenCalledTimes(2);
+    await waitFor(() => expect(mockMutate).toHaveBeenCalledTimes(2));
   });
 });
 

@@ -142,7 +142,6 @@ async def test_start_creates_a_fenced_lease_and_retries_idempotently(monkeypatch
     with pytest.raises(adaptive_service.FocusSessionConflict, match="no longer current"):
         await adaptive_service.run_focus_session_lifecycle(db, USER_ID, request)
 
-
 def _start_request():
     return FocusSessionLifecycleRequest(
         action="start",
@@ -334,6 +333,127 @@ async def test_expired_heartbeat_and_stale_generation_cannot_renew_lease():
     db.execute.side_effect = [MagicMock(), _scalar(snapshot), _scalar(lease)]
     with pytest.raises(adaptive_service.FocusSessionConflict, match="expired"):
         await adaptive_service.run_focus_session_lifecycle(db, USER_ID, request)
+
+
+@pytest.mark.asyncio
+async def test_expired_running_lease_cannot_be_resumed_after_process_recovery():
+    lease = _lease(expiry=NOW - timedelta(seconds=1))
+    db = AsyncMock()
+    db.execute.side_effect = [MagicMock(), _scalar(_snapshot()), _scalar(lease), _scalar(None)]
+    request = FocusSessionLifecycleRequest(
+        action="resume", session_id=SESSION_ID, snapshot_id=SNAPSHOT_ID,
+        generation=lease.generation,
+    )
+    with pytest.raises(adaptive_service.FocusSessionConflict, match="expired"):
+        await adaptive_service.run_focus_session_lifecycle(db, USER_ID, request)
+
+
+@pytest.mark.asyncio
+async def test_explicit_recovery_moves_expired_exact_lease_to_paused():
+    lease = _lease(expiry=NOW - timedelta(minutes=10))
+    db = AsyncMock()
+    db.execute.side_effect = [
+        MagicMock(), _scalar(_snapshot()), _scalar(lease), _scalar(None)
+    ]
+    request = FocusSessionLifecycleRequest(
+        action="recover", session_id=SESSION_ID, snapshot_id=SNAPSHOT_ID,
+        generation=lease.generation,
+    )
+    response = await adaptive_service.run_focus_session_lifecycle(db, USER_ID, request)
+    assert response.state == "paused"
+    assert lease.state == "paused"
+    assert lease.lease_expires_at == NOW
+    assert lease.generation == request.generation
+
+
+@pytest.mark.asyncio
+async def test_explicit_recovery_does_not_create_or_revive_a_different_lease():
+    lease = _lease(
+        generation="another-generation-0001",
+        expiry=NOW - timedelta(minutes=10),
+    )
+    db = AsyncMock()
+    db.execute.side_effect = [
+        MagicMock(), _scalar(_snapshot()), _scalar(lease), _scalar(None)
+    ]
+    request = FocusSessionLifecycleRequest(
+        action="recover", session_id=SESSION_ID, snapshot_id=SNAPSHOT_ID,
+        generation="current-generation-0001",
+    )
+    with pytest.raises(adaptive_service.FocusSessionConflict, match="no longer current"):
+        await adaptive_service.run_focus_session_lifecycle(db, USER_ID, request)
+    assert lease.state == "running"
+    assert db.add.call_count == 0
+
+
+@pytest.mark.asyncio
+async def test_explicit_recovery_reestablishes_only_the_same_plan_session_paused():
+    db = AsyncMock()
+    db.add = MagicMock()
+    db.execute.side_effect = [
+        MagicMock(), _scalar(_snapshot()), _scalar(None), _scalar(None)
+    ]
+    request = FocusSessionLifecycleRequest(
+        action="recover", session_id=SESSION_ID, snapshot_id=SNAPSHOT_ID,
+        generation="recovery-generation-0001",
+    )
+    response = await adaptive_service.run_focus_session_lifecycle(db, USER_ID, request)
+    lease = db.add.call_args.args[0]
+    assert response.state == "paused"
+    assert lease.user_id == USER_ID
+    assert lease.session_id == SESSION_ID
+    assert lease.plan_snapshot_id == SNAPSHOT_ID
+    assert lease.generation == request.generation
+    assert lease.lease_expires_at == NOW
+
+
+@pytest.mark.asyncio
+async def test_explicit_recovery_never_revives_a_cancelled_lease():
+    lease = _lease(state="cancelled", expiry=NOW)
+    db = AsyncMock()
+    db.execute.side_effect = [
+        MagicMock(), _scalar(_snapshot()), _scalar(lease), _scalar(None)
+    ]
+    request = FocusSessionLifecycleRequest(
+        action="recover", session_id=SESSION_ID, snapshot_id=SNAPSHOT_ID,
+        generation=lease.generation,
+    )
+    with pytest.raises(adaptive_service.FocusSessionConflict, match="already ended"):
+        await adaptive_service.run_focus_session_lifecycle(db, USER_ID, request)
+    assert lease.state == "cancelled"
+
+
+@pytest.mark.asyncio
+async def test_recovery_recognizes_committed_completion_after_snapshot_rotation():
+    lease = _lease(state="completed", expiry=NOW)
+    db = AsyncMock()
+    db.execute.side_effect = [
+        MagicMock(), _scalar(None), _scalar(lease), _scalar(uuid.uuid4())
+    ]
+    request = FocusSessionLifecycleRequest(
+        action="recover", session_id=SESSION_ID, snapshot_id=SNAPSHOT_ID,
+        generation=lease.generation,
+    )
+
+    response = await adaptive_service.run_focus_session_lifecycle(db, USER_ID, request)
+
+    assert response.state == "completed"
+    assert response.session_id == SESSION_ID
+    assert response.generation == lease.generation
+
+
+@pytest.mark.asyncio
+async def test_completed_session_resume_is_safe_for_idempotent_completion_retry():
+    lease = _lease(state="completed", expiry=NOW)
+    db = AsyncMock()
+    db.execute.side_effect = [MagicMock(), _scalar(_snapshot()), _scalar(lease), _scalar(uuid.uuid4())]
+    request = FocusSessionLifecycleRequest(
+        action="resume", session_id=SESSION_ID, snapshot_id=SNAPSHOT_ID,
+        generation=lease.generation,
+    )
+    response = await adaptive_service.run_focus_session_lifecycle(db, USER_ID, request)
+    assert response.state == "completed"
+    assert lease.state == "completed"
 
 
 @pytest.mark.asyncio
